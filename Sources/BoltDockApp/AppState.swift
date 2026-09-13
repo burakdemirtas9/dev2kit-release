@@ -151,9 +151,10 @@ final class AppState {
 
     func reloadHistory() {
         history = historyStore.entries()
-        engine.tlsProfiles = workspace.tlsProfiles
-        reloadTrustStore()
     }
+
+    /// Geçmiş dosyasının diskteki boyutu.
+    var historyFileSize: Int { historyStore.fileSizeBytes() }
 
     func clearHistory() {
         historyStore.deleteAll()
@@ -235,7 +236,10 @@ final class AppState {
             method: request.method,
             url: HistoryRedactor.maskURL(request.url),
             outcome: outcome,
-            snapshot: HistoryRedactor.redact(request),
+            snapshot: HistoryTrimmer.trim(
+                HistoryRedactor.redact(request),
+                maxBodyBytes: historySettings.maxSnapshotBodyBytes
+            ),
             responsePreview: preview
         )
         history = historyStore.append(entry, settings: historySettings)
@@ -283,6 +287,8 @@ final class AppState {
             persist()
         }
         history = historyStore.entries()
+        engine.tlsProfiles = workspace.tlsProfiles
+        reloadTrustStore()
     }
 
     var activeEnvironment: EnvironmentModel? {

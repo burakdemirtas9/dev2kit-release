@@ -6,6 +6,7 @@ import Foundation
 /// yanıtın izini taşıdığı için vault kadar hassastır.
 public final class HistoryStore: @unchecked Sendable {
     private let file: EncryptedJSONFile<[HistoryEntry]>
+    private let fileURL: URL
     private let lock = NSLock()
     /// Diskteki kayıtlar bellekte tutulur; her gönderimde dosyayı baştan
     /// okumak gereksiz I/O olurdu.
@@ -13,8 +14,10 @@ public final class HistoryStore: @unchecked Sendable {
 
     public init(directory: URL? = nil) {
         let dir = directory ?? AppPaths.supportDirectory
+        let url = dir.appendingPathComponent("history.enc")
+        self.fileURL = url
         self.file = EncryptedJSONFile(
-            fileURL: dir.appendingPathComponent("history.enc"),
+            fileURL: url,
             keyURL: dir.appendingPathComponent(".history.key")
         )
     }
@@ -56,14 +59,21 @@ public final class HistoryStore: @unchecked Sendable {
         persistLocked(loadLocked().filter { $0.id != id })
     }
 
-    /// Saklama kuralları: adet sınırı ve yaş sınırı; hangisi önce dolarsa.
+    /// Saklama kuralları: yaş, adet ve toplam boyut; hangisi önce dolarsa.
     static func prune(_ entries: [HistoryEntry], settings: HistorySettings, now: Date) -> [HistoryEntry] {
         let cutoff = now.addingTimeInterval(-Double(settings.retentionDays) * 86_400)
-        return entries
+        let byAgeAndCount = entries
             .sorted { $0.date > $1.date }
             .filter { $0.date >= cutoff }
             .prefix(settings.retentionCount)
             .map { $0 }
+        return HistoryTrimmer.fitToBudget(byAgeAndCount, maxTotalBytes: settings.maxTotalBytes)
+    }
+
+    /// Diskteki geçmiş dosyasının boyutu (arayüzde göstermek için).
+    public func fileSizeBytes() -> Int {
+        let attributes = try? FileManager.default.attributesOfItem(atPath: fileURL.path)
+        return (attributes?[.size] as? NSNumber)?.intValue ?? 0
     }
 
     // MARK: - Kilit altında çağrılır

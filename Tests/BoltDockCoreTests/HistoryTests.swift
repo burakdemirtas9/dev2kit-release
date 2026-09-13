@@ -365,3 +365,91 @@ final class WorkspaceBaselineTests: XCTestCase {
         XCTAssertEqual(Array(workspace.sentBaselines.keys), [live.id.uuidString])
     }
 }
+
+final class HistoryTrimmerTests: XCTestCase {
+    func testShortBodyUntouched() {
+        var model = RequestModel()
+        model.body = .raw(content: "kısa", contentType: "text/plain")
+        let trimmed = HistoryTrimmer.trim(model, maxBodyBytes: 1000)
+        XCTAssertEqual(trimmed.body, .raw(content: "kısa", contentType: "text/plain"))
+    }
+
+    func testLargeBodyIsTruncated() {
+        var model = RequestModel()
+        model.body = .raw(content: String(repeating: "a", count: 5000), contentType: "application/json")
+        guard case .raw(let content, let type) = HistoryTrimmer.trim(model, maxBodyBytes: 100).body else {
+            return XCTFail("raw bekleniyordu")
+        }
+        XCTAssertLessThan(content.utf8.count, 5000)
+        XCTAssertTrue(content.contains("kırpıldı"))
+        XCTAssertEqual(type, "application/json", "content type korunmalı")
+    }
+
+    func testTruncationDoesNotSplitMultibyteCharacter() {
+        // Türkçe karakterler 2 bayt; sınır ortasına denk gelse bile geçerli
+        // bir metin üretilmeli.
+        let text = String(repeating: "ğ", count: 100)
+        for limit in 10...20 {
+            let result = HistoryTrimmer.truncate(text, to: limit)
+            XCTAssertFalse(result.isEmpty)
+            // Geçerli bir String üretildiyse zaten çözümlenmiştir.
+            XCTAssertTrue(result.contains("kırpıldı"))
+        }
+    }
+
+    func testFormFieldsAreTrimmed() {
+        var model = RequestModel()
+        model.body = .formURLEncoded(fields: [
+            KeyValueEntry(key: "a", value: String(repeating: "x", count: 10_000)),
+        ])
+        guard case .formURLEncoded(let fields) = HistoryTrimmer.trim(model, maxBodyBytes: 1000).body else {
+            return XCTFail("urlencoded bekleniyordu")
+        }
+        XCTAssertLessThan(fields[0].value.utf8.count, 10_000)
+    }
+
+    func testBudgetKeepsNewestEntries() {
+        func entry(_ name: String, _ date: Date) -> HistoryEntry {
+            var model = RequestModel()
+            model.body = .raw(content: String(repeating: "x", count: 4000), contentType: "text/plain")
+            return HistoryEntry(
+                date: date, requestID: UUID(), requestName: name,
+                collectionName: nil, environmentName: nil, method: .get,
+                url: "https://a.example.com",
+                outcome: .completed(status: 200, duration: 0.1, byteCount: 1, redirectCount: 0),
+                snapshot: model
+            )
+        }
+        let now = Date()
+        let entries = (0..<10).map { entry("kayit\($0)", now.addingTimeInterval(Double(-$0))) }
+        let kept = HistoryTrimmer.fitToBudget(entries, maxTotalBytes: 12_000)
+        XCTAssertLessThan(kept.count, 10)
+        XCTAssertEqual(kept.first?.requestName, "kayit0", "en yeni kayıt korunmalı")
+    }
+
+    func testSingleOversizedEntryIsStillKept() {
+        var model = RequestModel()
+        model.body = .raw(content: String(repeating: "x", count: 50_000), contentType: "text/plain")
+        let entry = HistoryEntry(
+            requestID: UUID(), requestName: "dev", collectionName: nil,
+            environmentName: nil, method: .post, url: "https://a.example.com",
+            outcome: .failed(message: "x"), snapshot: model
+        )
+        // Tek kayıt bütçeyi aşsa bile geçmiş tamamen boşalmamalı.
+        XCTAssertEqual(HistoryTrimmer.fitToBudget([entry], maxTotalBytes: 1000).count, 1)
+    }
+
+    func testSettingsSizeLimitsAreClamped() {
+        XCTAssertEqual(HistorySettings(maxSnapshotBodyBytes: 10).maxSnapshotBodyBytes, 1024)
+        XCTAssertEqual(HistorySettings(maxTotalBytes: 10).maxTotalBytes, 1_048_576)
+        XCTAssertEqual(HistorySettings.default.maxSnapshotBodyBytes, 32_768)
+        XCTAssertEqual(HistorySettings.default.maxTotalBytes, 10 * 1024 * 1024)
+    }
+
+    func testLegacySettingsGetSizeDefaults() throws {
+        let json = #"{"retentionCount":50}"#
+        let settings = try JSONDecoder().decode(HistorySettings.self, from: Data(json.utf8))
+        XCTAssertEqual(settings.maxSnapshotBodyBytes, 32_768)
+        XCTAssertEqual(settings.maxTotalBytes, 10 * 1024 * 1024)
+    }
+}

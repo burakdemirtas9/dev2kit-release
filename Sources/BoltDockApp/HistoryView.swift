@@ -71,7 +71,7 @@ struct HistoryView: View {
         HStack {
             Text("Geçmiş")
                 .font(.title2).bold()
-            Text("\(appState.history.count) kayıt")
+            Text("\(appState.history.count) kayıt · \(ByteCountFormatter.string(fromByteCount: Int64(appState.historyFileSize), countStyle: .file))")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Spacer()
@@ -328,7 +328,7 @@ struct HistorySettingsView: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
 
-                Section("Saklama") {
+                Section {
                     Stepper(
                         "En fazla \(appState.historySettings.retentionCount) kayıt",
                         value: $state.historySettings.retentionCount,
@@ -340,6 +340,23 @@ struct HistorySettingsView: View {
                         value: $state.historySettings.retentionDays,
                         in: 1...365
                     )
+                    Stepper(
+                        "Dosya en fazla \(appState.historySettings.maxTotalBytes / 1_048_576) MB",
+                        value: $state.historySettings.maxTotalBytes,
+                        in: 1_048_576...(512 * 1_048_576),
+                        step: 1_048_576
+                    )
+                    Stepper(
+                        "İstek gövdesi en fazla \(appState.historySettings.maxSnapshotBodyBytes / 1024) KB",
+                        value: $state.historySettings.maxSnapshotBodyBytes,
+                        in: 1024...1_048_576,
+                        step: 8192
+                    )
+                } header: {
+                    Text("Saklama")
+                } footer: {
+                    Text("Üç sınır birlikte çalışır; hangisi önce dolarsa en eski kayıtlar düşer. Gövde sınırı tek bir büyük isteğin dosyayı şişirmesini engeller — kırpılan gövdenin başı saklanır.")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
 
                 Section {

@@ -75,6 +75,11 @@ public struct HistorySettings: Codable, Hashable, Sendable {
     public var storeResponseBodies: Bool
     /// Saklanırsa önizleme karakter sınırı.
     public var responsePreviewLimit: Int
+    /// Anlık görüntüdeki istek gövdesi bu bayt sınırına kırpılır.
+    /// Adet/yaş sınırı tek başına yetmez: tek bir büyük gövde dosyayı şişirir.
+    public var maxSnapshotBodyBytes: Int
+    /// Geçmiş dosyasının toplam bayt bütçesi; aşılırsa en eski kayıtlar düşer.
+    public var maxTotalBytes: Int
 
     public static let `default` = HistorySettings()
 
@@ -83,13 +88,17 @@ public struct HistorySettings: Codable, Hashable, Sendable {
         retentionCount: Int = 200,
         retentionDays: Int = 30,
         storeResponseBodies: Bool = false,
-        responsePreviewLimit: Int = 20_000
+        responsePreviewLimit: Int = 20_000,
+        maxSnapshotBodyBytes: Int = 32_768,
+        maxTotalBytes: Int = 10 * 1024 * 1024
     ) {
         self.isEnabled = isEnabled
         self.retentionCount = max(1, min(retentionCount, 5_000))
         self.retentionDays = max(1, min(retentionDays, 365))
         self.storeResponseBodies = storeResponseBodies
         self.responsePreviewLimit = max(500, min(responsePreviewLimit, 200_000))
+        self.maxSnapshotBodyBytes = max(1_024, min(maxSnapshotBodyBytes, 1_048_576))
+        self.maxTotalBytes = max(1_048_576, min(maxTotalBytes, 512 * 1024 * 1024))
     }
 
     public init(from decoder: Decoder) throws {
@@ -99,7 +108,9 @@ public struct HistorySettings: Codable, Hashable, Sendable {
             retentionCount: try container.decodeIfPresent(Int.self, forKey: .retentionCount) ?? 200,
             retentionDays: try container.decodeIfPresent(Int.self, forKey: .retentionDays) ?? 30,
             storeResponseBodies: try container.decodeIfPresent(Bool.self, forKey: .storeResponseBodies) ?? false,
-            responsePreviewLimit: try container.decodeIfPresent(Int.self, forKey: .responsePreviewLimit) ?? 20_000
+            responsePreviewLimit: try container.decodeIfPresent(Int.self, forKey: .responsePreviewLimit) ?? 20_000,
+            maxSnapshotBodyBytes: try container.decodeIfPresent(Int.self, forKey: .maxSnapshotBodyBytes) ?? 32_768,
+            maxTotalBytes: try container.decodeIfPresent(Int.self, forKey: .maxTotalBytes) ?? 10 * 1024 * 1024
         )
     }
 }
