@@ -163,6 +163,7 @@ struct SidebarView: View {
     @State private var showingImporter = false
     @State private var pendingImportSource: AppState.ImportSource = .boltdock
     @State private var showingPostmanImport = false
+    @State private var showingCurlImport = false
     @State private var renameTargetID: UUID?
     @State private var renameText = ""
     @State private var deleteTarget: CollectionModel?
@@ -323,6 +324,10 @@ struct SidebarView: View {
                         pendingImportSource = .postman
                         showingImporter = true
                     }
+                    Divider()
+                    Button("cURL'den İstek…") {
+                        showingCurlImport = true
+                    }
                     } label: {
                         Label("İçe Aktar", systemImage: "square.and.arrow.down")
                     }
@@ -344,6 +349,9 @@ struct SidebarView: View {
         }
         .sheet(isPresented: $showingPostmanImport) {
             PostmanImportView()
+        }
+        .sheet(isPresented: $showingCurlImport) {
+            CurlImportView()
         }
         .alert(
             "Koleksiyonu Yeniden Adlandır",

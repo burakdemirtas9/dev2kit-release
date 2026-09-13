@@ -231,6 +231,20 @@ final class AppState {
         persist()
     }
 
+    /// Dışarıdan gelen (curl vb.) isteği koleksiyona ekler ve seçer.
+    /// Ad çakışması koleksiyon import'uyla aynı kurala göre çözülür.
+    func addImportedRequest(_ request: RequestModel, to collectionID: UUID) {
+        guard let index = workspace.collections.firstIndex(where: { $0.id == collectionID }) else { return }
+        var copy = request
+        copy.id = UUID()
+        let existing = workspace.collections[index].requests.map(\.name)
+        copy.name = (try? CollectionPorting.resolveName(copy.name, suffix: "2", existingNames: existing).0)
+            ?? copy.name
+        workspace.collections[index].requests.append(copy)
+        selectedRequestID = copy.id
+        persist()
+    }
+
     func deleteRequest(_ id: UUID) {
         for index in workspace.collections.indices {
             workspace.collections[index].requests.removeAll { $0.id == id }
