@@ -98,6 +98,9 @@ public final class RequestEngine: @unchecked Sendable {
     /// Host bazlı TLS profilleri. Gönderimden önce çözülür ki dosya/parola
     /// hataları anlaşılır mesajla dönsün, TLS el sıkışma hatası olarak değil.
     public var tlsProfiles: [TLSProfile] = []
+    /// Kurum güven deposundaki CA'lar (cacerts dizini). Her istekte dosya
+    /// okumamak için burada tutulur; değişince AppState yeniler.
+    public var trustStoreCertificates: [SecCertificate] = []
 
     public func send(
         _ model: RequestModel,
@@ -257,24 +260,36 @@ public final class RequestEngine: @unchecked Sendable {
         for url: URL?,
         resolver: VariableResolver
     ) throws -> ResolvedTLSProfile? {
-        guard let host = url?.host,
-              let profile = TLSProfile.profile(for: host, in: tlsProfiles) else { return nil }
+        guard let host = url?.host else { return nil }
+        let profile = TLSProfile.profile(for: host, in: tlsProfiles)
 
         var certificates: [SecCertificate] = []
-        if profile.hasCA {
-            certificates = try CertificateLoader.loadCertificates(atPath: profile.caCertificatePath)
-        }
         var identity: SecIdentity?
-        if profile.hasClientCertificate {
-            let password = try resolver.resolve(profile.clientCertificatePassword)
-            identity = try CertificateLoader.loadIdentity(
-                atPath: profile.clientCertificatePath,
-                password: password
-            )
+        let pin = profile?.pinToCA ?? false
+
+        if let profile {
+            if profile.hasCA {
+                certificates = try CertificateLoader.loadCertificates(atPath: profile.caCertificatePath)
+            }
+            if profile.hasClientCertificate {
+                let password = try resolver.resolve(profile.clientCertificatePassword)
+                identity = try CertificateLoader.loadIdentity(
+                    atPath: profile.clientCertificatePath,
+                    password: password
+                )
+            }
         }
+
+        // Kurum güven deposu TÜM host'lara ek çıpa olarak uygulanır.
+        // Sabitleme açıkken dahil edilmez: sabitleme, sabitleme demektir —
+        // yoksa depoya bırakılan herhangi bir CA sabitlemeyi delerdi.
+        if !pin {
+            certificates.append(contentsOf: trustStoreCertificates)
+        }
+
         let resolved = ResolvedTLSProfile(
             caCertificates: certificates,
-            pinToCA: profile.pinToCA,
+            pinToCA: pin,
             identity: identity
         )
         return resolved.isEmpty ? nil : resolved

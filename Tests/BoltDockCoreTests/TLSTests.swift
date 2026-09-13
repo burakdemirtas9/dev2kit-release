@@ -176,3 +176,55 @@ final class CertificateLoaderTests: XCTestCase {
         XCTAssertThrowsError(try CertificateLoader.loadIdentity(atPath: path.path, password: "x"))
     }
 }
+
+final class TrustStoreTests: XCTestCase {
+    private var directory: URL!
+
+    override func setUpWithError() throws {
+        directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("boltdock-truststore-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    }
+
+    override func tearDownWithError() throws {
+        try? FileManager.default.removeItem(at: directory)
+    }
+
+    func testSearchPathsAreStable() {
+        XCTAssertTrue(TrustStore.machineDirectory.path.hasPrefix("/Library/Application Support/BoltDock"))
+        XCTAssertTrue(TrustStore.userDirectory.path.contains("BoltDock"))
+        XCTAssertEqual(TrustStore.userDirectory.lastPathComponent, "cacerts")
+        XCTAssertEqual(TrustStore.machineDirectory.lastPathComponent, "cacerts")
+    }
+
+    func testInstallRejectsInvalidCertificate() throws {
+        let bogus = directory.appendingPathComponent("bozuk.pem")
+        try Data("sertifika değil".utf8).write(to: bogus)
+        // Bozuk dosyayı depoya koymak, her açılışta hata üretmek demek olurdu.
+        XCTAssertThrowsError(try TrustStore.install(from: bogus))
+    }
+
+    func testRemoveRefusesOutsideUserDirectory() {
+        XCTAssertThrowsError(try TrustStore.remove(path: "/Library/Application Support/BoltDock/cacerts/x.pem")) { error in
+            XCTAssertTrue(error.localizedDescription.contains("yönetici"))
+        }
+    }
+
+    func testEnvironmentDirectoriesParsing() {
+        // Ortam değişkeni ayarlı değilken boş dönmeli.
+        if ProcessInfo.processInfo.environment[TrustStore.environmentVariable] == nil {
+            XCTAssertTrue(TrustStore.environmentDirectories().isEmpty)
+        }
+    }
+
+    func testLoadReportsUnreadableFilesInsteadOfFailing() throws {
+        // Yükleme bozuk dosyada çökmemeli, sorunu raporlamalı.
+        let store = try TrustStore.prepareUserDirectory()
+        let bogus = store.appendingPathComponent("gecici-test-bozuk.pem")
+        try Data("sertifika değil".utf8).write(to: bogus)
+        defer { try? FileManager.default.removeItem(at: bogus) }
+
+        let result = TrustStore.load()
+        XCTAssertTrue(result.problems.contains { $0.contains("gecici-test-bozuk.pem") })
+    }
+}

@@ -8,12 +8,52 @@ struct TLSProfilesView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
     @State private var selectedID: UUID?
+    @State private var tab: Tab = .trustStore
+
+    enum Tab: String, CaseIterable {
+        case trustStore = "Güven Deposu"
+        case profiles = "Host Profilleri"
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("TLS Profilleri")
+            Text("TLS")
                 .font(.title2).bold()
-            Text("Kurum içi CA ile imzalı API'ler ve istemci sertifikası (mTLS) isteyen sunucular için. Ayarlar yalnızca eşleşen host'lara uygulanır.")
+            Picker("", selection: $tab) {
+                ForEach(Tab.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+
+            if tab == .trustStore {
+                TrustStoreSection()
+            } else {
+                profilesSection
+            }
+
+            HStack {
+                Label(
+                    "Sertifika doğrulaması hiçbir durumda atlanmaz. CA yalnızca EK güven çıpası olarak eklenir; \"doğrulamayı kapat\" seçeneği bilinçli olarak yoktur.",
+                    systemImage: "lock.shield"
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                Spacer()
+                Button("Kapat") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+            }
+        }
+        .padding(20)
+        .frame(width: 760, height: 580)
+        .onAppear {
+            selectedID = appState.workspace.tlsProfiles.first?.id
+            appState.reloadTrustStore()
+        }
+    }
+
+    private var profilesSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Belirli host'lar için ek CA veya istemci sertifikası (mTLS). Ayarlar yalnızca eşleşen host'lara uygulanır.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -74,23 +114,6 @@ struct TLSProfilesView: View {
             }
             .frame(minHeight: 360)
             .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.quaternary))
-
-            HStack {
-                Label(
-                    "Sertifika doğrulaması hiçbir durumda atlanmaz. CA yalnızca EK güven çıpası olarak eklenir; \"doğrulamayı kapat\" seçeneği bilinçli olarak yoktur.",
-                    systemImage: "lock.shield"
-                )
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                Spacer()
-                Button("Kapat") { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-            }
-        }
-        .padding(20)
-        .frame(width: 720, height: 540)
-        .onAppear {
-            selectedID = appState.workspace.tlsProfiles.first?.id
         }
     }
 }
@@ -215,6 +238,136 @@ private struct KeyValueFreeList: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
+        }
+    }
+}
+
+/// Kurum güven deposu: cacerts dizinine bırakılan CA'lar.
+/// Buraya dosya bırakmak güven genişletmektir, bu yüzden her sertifika
+/// burada listelenir — kullanıcı neye güvendiğini görebilmeli.
+struct TrustStoreSection: View {
+    @Environment(AppState.self) private var appState
+    @State private var notice: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Buradaki CA'lar tüm host'lara ek güven çıpası olarak uygulanır — Java'daki cacerts gibi. Güvenlik ekibi dosyaları doğrudan dizine bırakabilir.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            pathRow("Makine geneli", TrustStore.machineDirectory.path,
+                    hint: "yönetici hakkı gerekir · MDM ile dağıtıma uygun")
+            pathRow("Kullanıcı", TrustStore.userDirectory.path,
+                    hint: "aşağıdaki düğmeyle eklenen sertifikalar buraya kopyalanır")
+            if !TrustStore.environmentDirectories().isEmpty {
+                pathRow(TrustStore.environmentVariable,
+                        TrustStore.environmentDirectories().map(\.path).joined(separator: ", "),
+                        hint: "ortam değişkeniyle tanımlı")
+            }
+
+            if appState.trustStore.entries.isEmpty {
+                ContentUnavailableView(
+                    "Güven deposu boş",
+                    systemImage: "shield",
+                    description: Text("Kurum CA'sı ekleyince buraya listelenir.")
+                )
+                .frame(maxWidth: .infinity, minHeight: 180)
+            } else {
+                List(appState.trustStore.entries) { entry in
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: entry.isExpired ? "xmark.seal.fill" : "checkmark.seal.fill")
+                            .foregroundStyle(entry.isExpired ? Theme.down : Theme.up)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(entry.subject)
+                                .font(.system(.body, design: .monospaced))
+                                .lineLimit(1)
+                            HStack(spacing: 8) {
+                                Text(entry.source.rawValue)
+                                    .font(.caption2)
+                                    .padding(.horizontal, 5).padding(.vertical, 1)
+                                    .background(Theme.purple.opacity(0.18))
+                                    .clipShape(Capsule())
+                                Text(entry.fileName).font(.caption2).foregroundStyle(.secondary)
+                                if let expiry = entry.expiresAt {
+                                    Text(entry.isExpired
+                                         ? "SÜRESİ DOLDU \(expiry.formatted(date: .abbreviated, time: .omitted))"
+                                         : "→ \(expiry.formatted(date: .abbreviated, time: .omitted))")
+                                        .font(.caption2)
+                                        .foregroundStyle(entry.isExpired ? AnyShapeStyle(Theme.down) : AnyShapeStyle(.tertiary))
+                                }
+                                if entry.isCertificateAuthority == false {
+                                    Label("CA değil", systemImage: "exclamationmark.triangle.fill")
+                                        .font(.caption2).foregroundStyle(Theme.warning)
+                                        .help("Bu sertifika CA olmadığı için güven çıpası olarak kullanılamaz.")
+                                }
+                            }
+                        }
+                        Spacer()
+                        if entry.source == .user {
+                            Button {
+                                notice = appState.removeCertificate(path: entry.path)
+                            } label: {
+                                Image(systemName: "trash")
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
+                .listStyle(.inset)
+                .frame(minHeight: 180)
+            }
+
+            ForEach(appState.trustStore.problems, id: \.self) { problem in
+                Label(problem, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption).foregroundStyle(Theme.down)
+            }
+            if let notice {
+                Text(notice).font(.caption).foregroundStyle(.secondary)
+            }
+
+            HStack {
+                Button {
+                    let panel = NSOpenPanel()
+                    panel.allowsMultipleSelection = false
+                    panel.canChooseDirectories = false
+                    panel.allowedContentTypes = ["pem", "crt", "cer", "der"]
+                        .compactMap { UTType(filenameExtension: $0) }
+                    if panel.runModal() == .OK, let url = panel.url {
+                        notice = appState.installCertificate(from: url)
+                    }
+                } label: {
+                    Label("Sertifika Ekle…", systemImage: "plus")
+                }
+                Button {
+                    try? TrustStore.prepareUserDirectory()
+                    NSWorkspace.shared.open(TrustStore.userDirectory)
+                } label: {
+                    Label("Dizini Aç", systemImage: "folder")
+                }
+                Button {
+                    appState.reloadTrustStore()
+                    notice = "\(appState.trustStore.entries.count) sertifika yüklendi."
+                } label: {
+                    Label("Yenile", systemImage: "arrow.clockwise")
+                }
+                Spacer()
+            }
+        }
+    }
+
+    private func pathRow(_ title: String, _ path: String, hint: String) -> some View {
+        HStack(alignment: .top, spacing: 6) {
+            Text(title)
+                .font(.caption).bold()
+                .frame(width: 110, alignment: .leading)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(path)
+                    .font(.system(.caption, design: .monospaced))
+                    .textSelection(.enabled)
+                Text(hint).font(.caption2).foregroundStyle(.tertiary)
+            }
         }
     }
 }

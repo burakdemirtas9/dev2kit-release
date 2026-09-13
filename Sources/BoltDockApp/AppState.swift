@@ -152,6 +152,7 @@ final class AppState {
     func reloadHistory() {
         history = historyStore.entries()
         engine.tlsProfiles = workspace.tlsProfiles
+        reloadTrustStore()
     }
 
     func clearHistory() {
@@ -610,6 +611,36 @@ final class AppState {
             // Yenileme başarısızsa istek eski token'la gider ve 401 alır;
             // kullanıcı Auth sekmesinden yeniden yetkilendirir.
             authMessage = "Token yenilenemedi: \(error.localizedDescription)"
+        }
+    }
+
+    // MARK: - Kurum güven deposu (cacerts)
+
+    private(set) var trustStore: TrustStore.LoadResult = .init(entries: [], problems: [])
+
+    func reloadTrustStore() {
+        let result = TrustStore.load()
+        trustStore = result
+        engine.trustStoreCertificates = result.certificates
+    }
+
+    func installCertificate(from url: URL) -> String {
+        do {
+            let destination = try TrustStore.install(from: url)
+            reloadTrustStore()
+            return "\(destination.lastPathComponent) güven deposuna eklendi."
+        } catch {
+            return "Eklenemedi: \(error.localizedDescription)"
+        }
+    }
+
+    func removeCertificate(path: String) -> String {
+        do {
+            try TrustStore.remove(path: path)
+            reloadTrustStore()
+            return "Sertifika kaldırıldı."
+        } catch {
+            return error.localizedDescription
         }
     }
 
