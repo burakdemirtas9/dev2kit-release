@@ -10,13 +10,39 @@ final class RedirectTracker: NSObject, URLSessionTaskDelegate, @unchecked Sendab
     private let policy: RedirectPolicy
     /// Bu isteğe özgü kimlik taşıyan başlıklar (API key başlığı, secret referanslı başlıklar).
     private let credentialHeaders: [String]
+    /// Bu isteğe uygulanacak TLS malzemesi (kurum CA'sı, istemci kimliği).
+    private let tlsProfile: ResolvedTLSProfile?
     private let lock = NSLock()
     private var recorded: [RedirectStep] = []
     private var stop: RedirectGuard.Decision.StopReason?
 
-    init(policy: RedirectPolicy, credentialHeaders: [String]) {
+    init(policy: RedirectPolicy, credentialHeaders: [String], tlsProfile: ResolvedTLSProfile? = nil) {
         self.policy = policy
         self.credentialHeaders = credentialHeaders
+        self.tlsProfile = tlsProfile
+    }
+
+    /// TLS challenge'ları. Doğrulamayı atlayan bir yol yoktur; ayrıntı için
+    /// TLSChallengeHandler.
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        didReceive challenge: URLAuthenticationChallenge,
+        completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
+    ) {
+        switch challenge.protectionSpace.authenticationMethod {
+        case NSURLAuthenticationMethodServerTrust:
+            let (disposition, credential) = TLSChallengeHandler.serverTrust(
+                challenge: challenge,
+                profile: tlsProfile
+            )
+            completionHandler(disposition, credential)
+        case NSURLAuthenticationMethodClientCertificate:
+            let (disposition, credential) = TLSChallengeHandler.clientCertificate(profile: tlsProfile)
+            completionHandler(disposition, credential)
+        default:
+            completionHandler(.performDefaultHandling, nil)
+        }
     }
 
     var steps: [RedirectStep] {

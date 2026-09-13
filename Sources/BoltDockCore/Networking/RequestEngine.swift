@@ -1,4 +1,5 @@
 import Foundation
+import Security
 
 /// Gönderilmiş bir isteğin sonucu. Body ham byte olarak tutulur;
 /// metin/JSON yorumlama UI katmanına bırakılır.
@@ -94,6 +95,10 @@ public final class RequestEngine: @unchecked Sendable {
         storage.cookies?.forEach(storage.deleteCookie)
     }
 
+    /// Host bazlı TLS profilleri. Gönderimden önce çözülür ki dosya/parola
+    /// hataları anlaşılır mesajla dönsün, TLS el sıkışma hatası olarak değil.
+    public var tlsProfiles: [TLSProfile] = []
+
     public func send(
         _ model: RequestModel,
         environment: EnvironmentModel?,
@@ -106,9 +111,11 @@ public final class RequestEngine: @unchecked Sendable {
         urlRequest.httpShouldHandleCookies = model.options.sendCookies
 
         let scope = Scope(environmentID: environment?.id)
+        let tlsProfile = try resolveTLSProfile(for: urlRequest.url, resolver: resolver)
         let tracker = RedirectTracker(
             policy: model.options.redirect,
-            credentialHeaders: RedirectGuard.credentialHeaders(for: model)
+            credentialHeaders: RedirectGuard.credentialHeaders(for: model),
+            tlsProfile: tlsProfile
         )
         let start = ContinuousClock.now
         let (data, response) = try await session(for: scope).data(for: urlRequest, delegate: tracker)
@@ -243,6 +250,34 @@ public final class RequestEngine: @unchecked Sendable {
             setBody(data, contentType: "multipart/form-data; boundary=\(boundary)",
                     on: &request, method: model.method)
         }
+    }
+
+    /// Host'a uyan profili bulup sertifikalarını yükler.
+    private func resolveTLSProfile(
+        for url: URL?,
+        resolver: VariableResolver
+    ) throws -> ResolvedTLSProfile? {
+        guard let host = url?.host,
+              let profile = TLSProfile.profile(for: host, in: tlsProfiles) else { return nil }
+
+        var certificates: [SecCertificate] = []
+        if profile.hasCA {
+            certificates = try CertificateLoader.loadCertificates(atPath: profile.caCertificatePath)
+        }
+        var identity: SecIdentity?
+        if profile.hasClientCertificate {
+            let password = try resolver.resolve(profile.clientCertificatePassword)
+            identity = try CertificateLoader.loadIdentity(
+                atPath: profile.clientCertificatePath,
+                password: password
+            )
+        }
+        let resolved = ResolvedTLSProfile(
+            caCertificates: certificates,
+            pinToCA: profile.pinToCA,
+            identity: identity
+        )
+        return resolved.isEmpty ? nil : resolved
     }
 
     private func setBody(

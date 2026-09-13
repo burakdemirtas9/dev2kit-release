@@ -151,6 +151,7 @@ final class AppState {
 
     func reloadHistory() {
         history = historyStore.entries()
+        engine.tlsProfiles = workspace.tlsProfiles
     }
 
     func clearHistory() {
@@ -610,6 +611,41 @@ final class AppState {
             // kullanıcı Auth sekmesinden yeniden yetkilendirir.
             authMessage = "Token yenilenemedi: \(error.localizedDescription)"
         }
+    }
+
+    // MARK: - TLS profilleri
+
+    func addTLSProfile() -> UUID {
+        let profile = TLSProfile()
+        workspace.tlsProfiles.append(profile)
+        syncTLSProfiles()
+        persist()
+        return profile.id
+    }
+
+    func deleteTLSProfile(_ id: UUID) {
+        workspace.tlsProfiles.removeAll { $0.id == id }
+        syncTLSProfiles()
+        persist()
+    }
+
+    func tlsProfileBinding(_ id: UUID) -> Binding<TLSProfile>? {
+        guard workspace.tlsProfiles.contains(where: { $0.id == id }) else { return nil }
+        let fallback = workspace.tlsProfiles.first { $0.id == id }!
+        return Binding(
+            get: { self.workspace.tlsProfiles.first { $0.id == id } ?? fallback },
+            set: { newValue in
+                guard let index = self.workspace.tlsProfiles.firstIndex(where: { $0.id == id }) else { return }
+                self.workspace.tlsProfiles[index] = newValue
+                self.syncTLSProfiles()
+                self.persistSoon()
+            }
+        )
+    }
+
+    /// Motor kendi kopyasını tutar; profil değişince güncellenmeli.
+    private func syncTLSProfiles() {
+        engine.tlsProfiles = workspace.tlsProfiles
     }
 
     // MARK: - Çerezler

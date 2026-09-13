@@ -7,6 +7,7 @@ struct ContentView: View {
     @State private var showingEnvironments = false
     @State private var showingCookies = false
     @State private var showingHistory = false
+    @State private var showingTLS = false
 
     private static let sidebarWidthKey = "sidebarWidth"
     private static let minSidebarWidth: CGFloat = 220
@@ -96,6 +97,14 @@ struct ContentView: View {
             }
             ToolbarItem(placement: .automatic) {
                 Button {
+                    showingTLS = true
+                } label: {
+                    Label("TLS", systemImage: "lock.shield")
+                }
+                .help("Kurum CA'sı ve istemci sertifikası profilleri")
+            }
+            ToolbarItem(placement: .automatic) {
+                Button {
                     showingSecrets = true
                 } label: {
                     Label("Secrets", systemImage: "key.fill")
@@ -114,6 +123,9 @@ struct ContentView: View {
         }
         .sheet(isPresented: $showingHistory) {
             HistoryView()
+        }
+        .sheet(isPresented: $showingTLS) {
+            TLSProfilesView()
         }
         .alert("Hata", isPresented: .constant(state.saveError != nil)) {
             Button("Tamam") { state.saveError = nil }

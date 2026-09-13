@@ -40,19 +40,23 @@ public struct WorkspaceModel: Codable, Sendable {
     /// "son gönderilen hale dön" komutunun dayanağı. Sözlük anahtarı
     /// String tutulur ki dosya git diff'lerinde okunabilir kalsın.
     public var sentBaselines: [String: RequestModel]
+    /// Host bazlı TLS ayarları (kurum CA'sı, istemci sertifikası).
+    public var tlsProfiles: [TLSProfile]
 
     public init(
         schemaVersion: Int = 1,
         collections: [CollectionModel] = [],
         environments: [EnvironmentModel] = [],
         activeEnvironmentID: UUID? = nil,
-        sentBaselines: [String: RequestModel] = [:]
+        sentBaselines: [String: RequestModel] = [:],
+        tlsProfiles: [TLSProfile] = []
     ) {
         self.schemaVersion = schemaVersion
         self.collections = collections
         self.environments = environments
         self.activeEnvironmentID = activeEnvironmentID
         self.sentBaselines = sentBaselines
+        self.tlsProfiles = tlsProfiles
     }
 
     public init(from decoder: Decoder) throws {
@@ -63,7 +67,8 @@ public struct WorkspaceModel: Codable, Sendable {
             environments: try container.decodeIfPresent([EnvironmentModel].self, forKey: .environments) ?? [],
             activeEnvironmentID: try container.decodeIfPresent(UUID.self, forKey: .activeEnvironmentID),
             // Bu alan eklenmeden önce yazılmış dosyalarda yok.
-            sentBaselines: try container.decodeIfPresent([String: RequestModel].self, forKey: .sentBaselines) ?? [:]
+            sentBaselines: try container.decodeIfPresent([String: RequestModel].self, forKey: .sentBaselines) ?? [:],
+            tlsProfiles: try container.decodeIfPresent([TLSProfile].self, forKey: .tlsProfiles) ?? []
         )
     }
 
