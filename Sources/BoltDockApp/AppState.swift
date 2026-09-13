@@ -33,7 +33,7 @@ enum AppearanceMode: String, CaseIterable {
 final class AppState {
     var workspace: WorkspaceModel
     var selectedRequestID: UUID?
-    var lastResponse: ResponseState = .idle
+
     var saveError: String?
 
     /// Kapalı (collapse edilmiş) koleksiyonlar; UserDefaults'ta saklanır.
@@ -251,28 +251,83 @@ final class AppState {
         persist()
     }
 
-    func send(_ request: RequestModel) {
-        flushPendingWrites()
-        lastResponse = .loading
-        let environment = activeEnvironment
-        // Nesil sayacı: arka arkaya gönderilen isteklerde geç gelen eski yanıt
-        // yenisinin üzerine yazmasın.
-        sendGeneration &+= 1
-        let generation = sendGeneration
-        Task {
-            do {
-                let response = try await engine.send(request, environment: environment, secretStore: secretStore)
-                let display = await Task.detached { AppState.makeDisplay(response) }.value
-                guard generation == self.sendGeneration else { return }
-                lastResponse = .success(display)
-            } catch {
-                guard generation == self.sendGeneration else { return }
-                lastResponse = .failure(error.localizedDescription)
-            }
+    /// Yanıtlar istek KİMLİĞİNE göre tutulur: başka bir isteğe geçince eski
+    /// yanıt orada kalır, yenisinin yanıtıymış gibi görünmez.
+    /// Diske hiç yazılmaz — yanıt gövdeleri token/kişisel veri içerebilir.
+    private var responses: [UUID: ResponseState] = [:]
+    /// Bellek sınırı: en son bu kadar yanıt saklanır, eskisi düşer.
+    private static let retainedResponseLimit = 15
+    private var responseOrder: [UUID] = []
+
+    var lastResponse: ResponseState {
+        guard let id = selectedRequestID else { return .idle }
+        return responses[id] ?? .idle
+    }
+
+    var isSending: Bool {
+        if case .loading = lastResponse { return true }
+        return false
+    }
+
+    private func setResponse(_ state: ResponseState, for id: UUID) {
+        responses[id] = state
+        responseOrder.removeAll { $0 == id }
+        responseOrder.append(id)
+        while responseOrder.count > Self.retainedResponseLimit {
+            responses.removeValue(forKey: responseOrder.removeFirst())
         }
     }
 
-    @ObservationIgnored private var sendGeneration = 0
+    func send(_ request: RequestModel) {
+        flushPendingWrites()
+        let id = request.id
+        // Aynı isteğin önceki gönderimi hâlâ uçuyorsa iptal et.
+        inFlight[id]?.cancel()
+        setResponse(.loading, for: id)
+        let environment = activeEnvironment
+
+        inFlight[id] = Task { [weak self] in
+            guard let self else { return }
+            do {
+                let response = try await engine.send(request, environment: environment, secretStore: secretStore)
+                let display = await Task.detached { AppState.makeDisplay(response) }.value
+                try Task.checkCancellation()
+                self.setResponse(.success(display), for: id)
+            } catch is CancellationError {
+                self.setResponse(.idle, for: id)
+            } catch let error as URLError where error.code == .cancelled {
+                self.setResponse(.idle, for: id)
+            } catch {
+                self.setResponse(.failure(error.localizedDescription), for: id)
+            }
+            self.inFlight[id] = nil
+        }
+    }
+
+    /// Uçuştaki isteği iptal eder. Bağlantı kapanır, kimlik bilgisi taşıyan
+    /// istek yarıda kalmaz.
+    func cancelSend(_ id: UUID) {
+        inFlight[id]?.cancel()
+        inFlight[id] = nil
+        setResponse(.idle, for: id)
+    }
+
+    @ObservationIgnored private var inFlight: [UUID: Task<Void, Never>] = [:]
+
+    // MARK: - Çerezler
+
+    private var cookieScope: RequestEngine.Scope {
+        RequestEngine.Scope(environmentID: workspace.activeEnvironmentID)
+    }
+
+    /// Aktif environment'ın çerez kavanozu (yalnızca bellekte tutulur).
+    func activeCookies() -> [HTTPCookie] {
+        engine.cookies(in: cookieScope)
+    }
+
+    func clearActiveCookies() {
+        engine.clearCookies(in: cookieScope)
+    }
 
     /// Ana thread dışında çalışır: büyük gövdeleri biçimlendirmek pahalıdır.
     nonisolated static func makeDisplay(_ response: ResponseData) -> ResponseDisplay {

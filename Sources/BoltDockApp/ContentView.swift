@@ -5,6 +5,7 @@ struct ContentView: View {
     @Environment(AppState.self) private var appState
     @State private var showingSecrets = false
     @State private var showingEnvironments = false
+    @State private var showingCookies = false
 
     private static let sidebarWidthKey = "sidebarWidth"
     private static let minSidebarWidth: CGFloat = 220
@@ -77,6 +78,14 @@ struct ContentView: View {
             }
             ToolbarItem(placement: .automatic) {
                 Button {
+                    showingCookies = true
+                } label: {
+                    Label("Çerezler", systemImage: "birthday.cake")
+                }
+                .help("Oturum çerezlerini görüntüle ve temizle")
+            }
+            ToolbarItem(placement: .automatic) {
+                Button {
                     showingSecrets = true
                 } label: {
                     Label("Secrets", systemImage: "key.fill")
@@ -89,6 +98,9 @@ struct ContentView: View {
         }
         .sheet(isPresented: $showingEnvironments) {
             EnvironmentsView()
+        }
+        .sheet(isPresented: $showingCookies) {
+            CookiesView()
         }
         .alert("Hata", isPresented: .constant(state.saveError != nil)) {
             Button("Tamam") { state.saveError = nil }

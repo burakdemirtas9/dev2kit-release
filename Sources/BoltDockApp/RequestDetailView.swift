@@ -7,6 +7,7 @@ struct RequestDetailView: View {
     @Binding var request: RequestModel
     @State private var selectedTab: EditorTab = .headers
     @State private var showingCurl = false
+    @State private var showingOptions = false
 
     enum EditorTab: String, CaseIterable {
         case headers = "Headers"
@@ -45,17 +46,33 @@ struct RequestDetailView: View {
                 appState.send(request)
             }
 
-            Button {
-                appState.send(request)
-            } label: {
-                if case .loading = appState.lastResponse {
-                    ProgressView().controlSize(.small)
-                } else {
+            if appState.isSending {
+                Button {
+                    appState.cancelSend(request.id)
+                } label: {
+                    Label("Durdur", systemImage: "stop.fill")
+                }
+                .keyboardShortcut(".", modifiers: .command)
+                .help("İsteği iptal et (⌘.)")
+            } else {
+                Button {
+                    appState.send(request)
+                } label: {
                     Label("Gönder", systemImage: "paperplane.fill")
                 }
+                .keyboardShortcut(.return, modifiers: .command)
+                .disabled(request.url.isEmpty)
             }
-            .keyboardShortcut(.return, modifiers: .command)
-            .disabled(request.url.isEmpty)
+
+            Button {
+                showingOptions = true
+            } label: {
+                Image(systemName: "gearshape")
+            }
+            .help("İstek ayarları: zaman aşımı, yönlendirme, çerez")
+            .popover(isPresented: $showingOptions, arrowEdge: .bottom) {
+                RequestOptionsPopover(options: $request.options)
+            }
 
             Button {
                 showingCurl = true
@@ -661,5 +678,61 @@ struct CurlPopover: View {
         .onChange(of: includeSecrets) {
             copied = false
         }
+    }
+}
+
+/// İstek başına ağ ayarları: zaman aşımı, yönlendirme politikası, çerez.
+struct RequestOptionsPopover: View {
+    @Binding var options: RequestOptions
+
+    var body: some View {
+        Form {
+            Section("Zaman Aşımı") {
+                HStack {
+                    TextField("", value: $options.timeout, format: .number)
+                        .frame(width: 60)
+                    Stepper("saniye", value: $options.timeout, in: RequestOptions.timeoutRange, step: 5)
+                }
+            }
+
+            Section("Yönlendirme") {
+                Toggle("Yönlendirmeleri izle", isOn: $options.redirect.follow)
+                if options.redirect.follow {
+                    Stepper(
+                        "En fazla \(options.redirect.maxRedirects) yönlendirme",
+                        value: $options.redirect.maxRedirects,
+                        in: 1...20
+                    )
+                    Toggle("https → http düşüşüne izin ver", isOn: $options.redirect.allowInsecureDowngrade)
+                    if options.redirect.allowInsecureDowngrade {
+                        Label(
+                            "Trafik şifresiz hale gelebilir; yalnızca bilinçli test için aç.",
+                            systemImage: "exclamationmark.triangle.fill"
+                        )
+                        .font(.caption)
+                        .foregroundStyle(Theme.warning)
+                    }
+                    Label(
+                        "Farklı bir host'a yönlendirmede Authorization ve Cookie başlıkları otomatik düşürülür.",
+                        systemImage: "lock.shield"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+            }
+
+            Section("Çerezler") {
+                Toggle("Oturum çerezlerini kullan", isOn: $options.sendCookies)
+                Label(
+                    "Çerezler yalnızca bellekte ve environment başına ayrı tutulur; diske yazılmaz.",
+                    systemImage: "info.circle"
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+        .frame(width: 380)
+        .frame(maxHeight: 480)
     }
 }

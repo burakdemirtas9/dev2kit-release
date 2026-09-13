@@ -8,6 +8,28 @@ public struct ResponseData: Sendable {
     public let body: Data
     public let duration: TimeInterval
     public let finalURL: URL?
+    /// İzlenen yönlendirme zinciri (denetim izi).
+    public let redirects: [RedirectStep]
+    /// Zincir bir politika nedeniyle kesildiyse sebebi.
+    public let redirectStop: RedirectGuard.Decision.StopReason?
+
+    public init(
+        statusCode: Int,
+        headers: [(name: String, value: String)],
+        body: Data,
+        duration: TimeInterval,
+        finalURL: URL?,
+        redirects: [RedirectStep] = [],
+        redirectStop: RedirectGuard.Decision.StopReason? = nil
+    ) {
+        self.statusCode = statusCode
+        self.headers = headers
+        self.body = body
+        self.duration = duration
+        self.finalURL = finalURL
+        self.redirects = redirects
+        self.redirectStop = redirectStop
+    }
 
     public var bodyText: String? { String(data: body, encoding: .utf8) }
 
@@ -29,15 +51,44 @@ public enum RequestEngineError: Error, LocalizedError {
 /// URLSession tabanlı istek motoru.
 /// Şablon çözümü (değişken + secret) gönderim anında yapılır; çözülmüş
 /// değerler bu fonksiyonun dışına sızmaz ve loglanmaz.
-public struct RequestEngine: Sendable {
-    private let session: URLSession
+public final class RequestEngine: @unchecked Sendable {
+    /// Çerez kavanozu kapsamı. Her environment kendi izole oturumunu alır:
+    /// Dev ortamında alınan oturum çerezi Prod isteğine taşınamaz.
+    public struct Scope: Hashable, Sendable {
+        let key: String
+        public init(environmentID: UUID?) {
+            self.key = environmentID?.uuidString ?? "default"
+        }
+    }
 
-    public init(timeout: TimeInterval = 30) {
-        let config = URLSessionConfiguration.ephemeral // disk cache/cookie yazma: kapalı
-        config.timeoutIntervalForRequest = timeout
-        config.httpCookieAcceptPolicy = .never
-        config.httpShouldSetCookies = false
-        self.session = URLSession(configuration: config)
+    private let lock = NSLock()
+    private var sessions: [Scope: URLSession] = [:]
+
+    public init() {}
+
+    /// Kapsamın oturumu. `ephemeral` yapılandırma çerezleri YALNIZCA bellekte
+    /// tutar; oturum kimlik bilgileri diske hiç yazılmaz, uygulama kapanınca gider.
+    private func session(for scope: Scope) -> URLSession {
+        lock.lock(); defer { lock.unlock() }
+        if let existing = sessions[scope] { return existing }
+        let config = URLSessionConfiguration.ephemeral
+        config.httpCookieAcceptPolicy = .always
+        config.httpShouldSetCookies = true
+        config.urlCache = nil
+        let session = URLSession(configuration: config)
+        sessions[scope] = session
+        return session
+    }
+
+    /// Kapsamdaki çerezleri listeler (denetim ekranı için).
+    public func cookies(in scope: Scope) -> [HTTPCookie] {
+        session(for: scope).configuration.httpCookieStorage?.cookies ?? []
+    }
+
+    /// Kapsamdaki tüm çerezleri siler ("oturumu kapat").
+    public func clearCookies(in scope: Scope) {
+        guard let storage = session(for: scope).configuration.httpCookieStorage else { return }
+        storage.cookies?.forEach(storage.deleteCookie)
     }
 
     public func send(
@@ -46,10 +97,18 @@ public struct RequestEngine: Sendable {
         secretStore: SecretStore
     ) async throws -> ResponseData {
         let resolver = VariableResolver(environment: environment, secretStore: secretStore)
-        let urlRequest = try buildURLRequest(model, resolver: resolver)
+        var urlRequest = try buildURLRequest(model, resolver: resolver)
+        urlRequest.timeoutInterval = model.options.timeout
+        // Çerez gönderimi istek başına kapatılabilir.
+        urlRequest.httpShouldHandleCookies = model.options.sendCookies
 
+        let scope = Scope(environmentID: environment?.id)
+        let tracker = RedirectTracker(
+            policy: model.options.redirect,
+            credentialHeaders: RedirectGuard.credentialHeaders(for: model)
+        )
         let start = ContinuousClock.now
-        let (data, response) = try await session.data(for: urlRequest)
+        let (data, response) = try await session(for: scope).data(for: urlRequest, delegate: tracker)
         let elapsed = start.duration(to: .now)
 
         guard let http = response as? HTTPURLResponse else {
@@ -67,7 +126,9 @@ public struct RequestEngine: Sendable {
             headers: headers,
             body: data,
             duration: seconds,
-            finalURL: http.url
+            finalURL: http.url,
+            redirects: tracker.steps,
+            redirectStop: tracker.stopReason
         )
     }
 

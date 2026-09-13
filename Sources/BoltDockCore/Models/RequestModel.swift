@@ -36,6 +36,38 @@ public enum RequestBody: Codable, Hashable, Sendable {
     case multipartForm(fields: [KeyValueEntry])
 }
 
+/// İstek başına ağ davranışı. Eksik alanlar güvenli varsayılana düşer;
+/// eski workspace dosyaları (bu alan yokken yazılmış) sorunsuz okunur.
+public struct RequestOptions: Codable, Hashable, Sendable {
+    /// Saniye. Sunucu yanıt vermezse istek bu süre sonunda düşer.
+    public var timeout: TimeInterval
+    public var redirect: RedirectPolicy
+    /// Oturum çerezleri bu isteğe eklensin / yanıttakiler kavanoza alınsın mı.
+    public var sendCookies: Bool
+
+    public static let timeoutRange: ClosedRange<TimeInterval> = 1...300
+    public static let `default` = RequestOptions()
+
+    public init(
+        timeout: TimeInterval = 30,
+        redirect: RedirectPolicy = .default,
+        sendCookies: Bool = true
+    ) {
+        self.timeout = min(max(timeout, Self.timeoutRange.lowerBound), Self.timeoutRange.upperBound)
+        self.redirect = redirect
+        self.sendCookies = sendCookies
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            timeout: try container.decodeIfPresent(TimeInterval.self, forKey: .timeout) ?? 30,
+            redirect: try container.decodeIfPresent(RedirectPolicy.self, forKey: .redirect) ?? .default,
+            sendCookies: try container.decodeIfPresent(Bool.self, forKey: .sendCookies) ?? true
+        )
+    }
+}
+
 /// Tek bir HTTP isteğinin diske yazılan tanımı.
 /// DİKKAT: Bu model asla çözülmüş secret değeri içermez; secret'lar
 /// `{{secret:isim}}` referansı olarak durur ve gönderim anında Keychain'den çözülür.
@@ -48,6 +80,8 @@ public struct RequestModel: Codable, Identifiable, Hashable, Sendable {
     public var queryParams: [KeyValueEntry]
     public var body: RequestBody
     public var auth: AuthConfig
+    /// Eski dosyalarda yok; okunurken varsayılana düşer.
+    public var options: RequestOptions
 
     public init(
         id: UUID = UUID(),
@@ -57,7 +91,8 @@ public struct RequestModel: Codable, Identifiable, Hashable, Sendable {
         headers: [KeyValueEntry] = [],
         queryParams: [KeyValueEntry] = [],
         body: RequestBody = .none,
-        auth: AuthConfig = .none
+        auth: AuthConfig = .none,
+        options: RequestOptions = .default
     ) {
         self.id = id
         self.name = name
@@ -67,5 +102,21 @@ public struct RequestModel: Codable, Identifiable, Hashable, Sendable {
         self.queryParams = queryParams
         self.body = body
         self.auth = auth
+        self.options = options
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            id: try container.decode(UUID.self, forKey: .id),
+            name: try container.decode(String.self, forKey: .name),
+            method: try container.decode(HTTPMethod.self, forKey: .method),
+            url: try container.decode(String.self, forKey: .url),
+            headers: try container.decodeIfPresent([KeyValueEntry].self, forKey: .headers) ?? [],
+            queryParams: try container.decodeIfPresent([KeyValueEntry].self, forKey: .queryParams) ?? [],
+            body: try container.decodeIfPresent(RequestBody.self, forKey: .body) ?? .none,
+            auth: try container.decodeIfPresent(AuthConfig.self, forKey: .auth) ?? .none,
+            options: try container.decodeIfPresent(RequestOptions.self, forKey: .options) ?? .default
+        )
     }
 }
