@@ -23,7 +23,7 @@ struct CookiesView: View {
             if cookies.isEmpty {
                 ContentUnavailableView(
                     "Çerez yok",
-                    systemImage: "birthday.cake",
+                    systemImage: "circle.grid.3x3.fill",
                     description: Text("Sunucular Set-Cookie döndükçe burada görünür.")
                 )
                 .frame(maxWidth: .infinity, minHeight: 200)
