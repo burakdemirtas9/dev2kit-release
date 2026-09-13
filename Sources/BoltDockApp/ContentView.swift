@@ -202,6 +202,12 @@ struct SidebarView: View {
                                 .frame(width: 44, alignment: .leading)
                             Text(request.name)
                                 .lineLimit(1)
+                            if appState.isDirty(request.id) {
+                                Image(systemName: "circle.fill")
+                                    .font(.system(size: 6))
+                                    .foregroundStyle(Theme.warning)
+                                    .help("Son gönderildiği halden farklı")
+                            }
                         }
                         .tag(request.id)
                         .contextMenu {
@@ -269,6 +275,13 @@ struct SidebarView: View {
                         Text("\(collection.requests.count)")
                             .font(.caption2)
                             .foregroundStyle(.tertiary)
+                        if appState.isCollectionCollapsed(collection.id),
+                           appState.hasDirtyRequest(in: collection) {
+                            Image(systemName: "circle.fill")
+                                .font(.system(size: 6))
+                                .foregroundStyle(Theme.warning)
+                                .help("İçinde son gönderildiğinden farklı istek var")
+                        }
                         Spacer(minLength: 0)
                     }
                     .contentShape(Rectangle())

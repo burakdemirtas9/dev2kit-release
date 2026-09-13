@@ -105,6 +105,22 @@ public struct RequestModel: Codable, Identifiable, Hashable, Sendable {
         self.options = options
     }
 
+    /// İki isteğin TELE ÇIKAN kısmı aynı mı.
+    ///
+    /// `id` ve `name` dışarıda bırakılır: isteği yeniden adlandırmak
+    /// gönderilecek şeyi değiştirmez, dolayısıyla "değişti" işareti
+    /// çıkarmamalı. Karşılaştırma "şu an göndereceğim şey, en son test
+    /// ettiğimle aynı mı" sorusunu yanıtlar.
+    public func isFunctionallyEqual(to other: RequestModel) -> Bool {
+        method == other.method
+            && url == other.url
+            && headers == other.headers
+            && queryParams == other.queryParams
+            && body == other.body
+            && auth == other.auth
+            && options == other.options
+    }
+
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.init(

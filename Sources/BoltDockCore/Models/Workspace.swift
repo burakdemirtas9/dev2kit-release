@@ -34,16 +34,42 @@ public struct WorkspaceModel: Codable, Sendable {
     public var collections: [CollectionModel]
     public var environments: [EnvironmentModel]
     public var activeEnvironmentID: UUID?
+    /// İsteğin en son BAŞARIYLA GÖNDERİLDİĞİ hali; anahtar istek kimliğidir.
+    ///
+    /// "Şu an baktığın şey, en son test ettiğinden farklı" işaretinin ve
+    /// "son gönderilen hale dön" komutunun dayanağı. Sözlük anahtarı
+    /// String tutulur ki dosya git diff'lerinde okunabilir kalsın.
+    public var sentBaselines: [String: RequestModel]
 
     public init(
         schemaVersion: Int = 1,
         collections: [CollectionModel] = [],
         environments: [EnvironmentModel] = [],
-        activeEnvironmentID: UUID? = nil
+        activeEnvironmentID: UUID? = nil,
+        sentBaselines: [String: RequestModel] = [:]
     ) {
         self.schemaVersion = schemaVersion
         self.collections = collections
         self.environments = environments
         self.activeEnvironmentID = activeEnvironmentID
+        self.sentBaselines = sentBaselines
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            schemaVersion: try container.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 1,
+            collections: try container.decodeIfPresent([CollectionModel].self, forKey: .collections) ?? [],
+            environments: try container.decodeIfPresent([EnvironmentModel].self, forKey: .environments) ?? [],
+            activeEnvironmentID: try container.decodeIfPresent(UUID.self, forKey: .activeEnvironmentID),
+            // Bu alan eklenmeden önce yazılmış dosyalarda yok.
+            sentBaselines: try container.decodeIfPresent([String: RequestModel].self, forKey: .sentBaselines) ?? [:]
+        )
+    }
+
+    /// Silinmiş isteklerin referans noktalarını atar; dosya şişmesin.
+    public mutating func pruneBaselines() {
+        let liveIDs = Set(collections.flatMap { $0.requests.map(\.id.uuidString) })
+        sentBaselines = sentBaselines.filter { liveIDs.contains($0.key) }
     }
 }

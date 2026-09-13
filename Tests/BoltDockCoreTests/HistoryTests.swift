@@ -271,3 +271,97 @@ final class HistorySettingsTests: XCTestCase {
         XCTAssertEqual(settings.retentionDays, 30)
     }
 }
+
+final class DirtyTrackingTests: XCTestCase {
+    func testIdenticalRequestsAreFunctionallyEqual() {
+        let a = RequestModel(method: .post, url: "https://a.example.com")
+        var b = a
+        b.id = UUID()
+        XCTAssertTrue(a.isFunctionallyEqual(to: b))
+    }
+
+    func testRenameIsNotAFunctionalChange() {
+        let a = RequestModel(name: "Eski", url: "https://a.example.com")
+        var b = a
+        b.name = "Yeni"
+        // Yeniden adlandırmak gönderilecek şeyi değiştirmez.
+        XCTAssertTrue(a.isFunctionallyEqual(to: b))
+    }
+
+    func testMethodChangeIsDetected() {
+        let a = RequestModel(method: .get, url: "https://a.example.com")
+        var b = a
+        b.method = .post
+        XCTAssertFalse(a.isFunctionallyEqual(to: b))
+    }
+
+    func testHeaderChangeIsDetected() {
+        let a = RequestModel(url: "https://a.example.com")
+        var b = a
+        b.headers = [KeyValueEntry(key: "Accept", value: "application/json")]
+        XCTAssertFalse(a.isFunctionallyEqual(to: b))
+    }
+
+    func testDisablingHeaderIsDetected() {
+        var a = RequestModel(url: "https://a.example.com")
+        a.headers = [KeyValueEntry(key: "Accept", value: "x", enabled: true)]
+        var b = a
+        b.headers[0].enabled = false
+        XCTAssertFalse(a.isFunctionallyEqual(to: b))
+    }
+
+    func testCredentialChangeIsDetected() {
+        var a = RequestModel(url: "https://a.example.com")
+        a.auth = .bearer(token: "eski")
+        var b = a
+        b.auth = .bearer(token: "yeni")
+        // Token değişimi de "test ettiğimden farklı" sayılmalı.
+        XCTAssertFalse(a.isFunctionallyEqual(to: b))
+    }
+
+    func testOptionsChangeIsDetected() {
+        let a = RequestModel(url: "https://a.example.com")
+        var b = a
+        b.options.timeout = 99
+        XCTAssertFalse(a.isFunctionallyEqual(to: b))
+    }
+
+    func testBodyChangeIsDetected() {
+        let a = RequestModel(url: "https://a.example.com")
+        var b = a
+        b.body = .raw(content: "{}", contentType: "application/json")
+        XCTAssertFalse(a.isFunctionallyEqual(to: b))
+    }
+}
+
+final class WorkspaceBaselineTests: XCTestCase {
+    func testDecodingLegacyWorkspaceWithoutBaselines() throws {
+        let json = #"{"schemaVersion":1,"collections":[],"environments":[]}"#
+        let workspace = try JSONDecoder().decode(WorkspaceModel.self, from: Data(json.utf8))
+        XCTAssertTrue(workspace.sentBaselines.isEmpty)
+        XCTAssertEqual(workspace.schemaVersion, 1)
+    }
+
+    func testBaselineRoundtrip() throws {
+        var workspace = WorkspaceModel()
+        let request = RequestModel(url: "https://a.example.com")
+        workspace.collections = [CollectionModel(name: "K", requests: [request])]
+        workspace.sentBaselines[request.id.uuidString] = request
+
+        let data = try JSONEncoder().encode(workspace)
+        let decoded = try JSONDecoder().decode(WorkspaceModel.self, from: data)
+        XCTAssertEqual(decoded.sentBaselines[request.id.uuidString]?.url, "https://a.example.com")
+    }
+
+    func testPruneDropsBaselinesOfDeletedRequests() {
+        var workspace = WorkspaceModel()
+        let live = RequestModel(url: "https://a.example.com")
+        let deleted = RequestModel(url: "https://b.example.com")
+        workspace.collections = [CollectionModel(name: "K", requests: [live])]
+        workspace.sentBaselines[live.id.uuidString] = live
+        workspace.sentBaselines[deleted.id.uuidString] = deleted
+
+        workspace.pruneBaselines()
+        XCTAssertEqual(Array(workspace.sentBaselines.keys), [live.id.uuidString])
+    }
+}

@@ -36,6 +36,17 @@ final class AppState {
 
     var saveError: String?
 
+    /// Otomatik kaydın görünür hali. Görünmeyen kayıt, kaydetmemek kadar
+    /// güvensizlik yaratıyor — kullanıcı ne olduğunu bilmeli.
+    enum SaveState: Equatable {
+        case idle
+        case pending
+        case saved(Date)
+        case failed(String)
+    }
+
+    private(set) var saveState: SaveState = .idle
+
     /// Kapalı (collapse edilmiş) koleksiyonlar; UserDefaults'ta saklanır.
     var collapsedCollectionIDs: Set<UUID> = [] {
         didSet {
@@ -304,6 +315,51 @@ final class AppState {
         )
     }
 
+    // MARK: - "Son gönderilenden farklı" takibi
+
+    /// İstek en son gönderildiği halden farklı mı.
+    /// Hiç gönderilmemiş isteklerde işaret çıkmaz: karşılaştırılacak bir
+    /// "test edilmiş hal" yoktur.
+    func isDirty(_ id: UUID) -> Bool {
+        guard let baseline = workspace.sentBaselines[id.uuidString],
+              let location = locateRequest(id) else { return false }
+        return !workspace.collections[location.collection].requests[location.request]
+            .isFunctionallyEqual(to: baseline)
+    }
+
+    func hasDirtyRequest(in collection: CollectionModel) -> Bool {
+        collection.requests.contains { isDirty($0.id) }
+    }
+
+    var lastSentBaseline: RequestModel? {
+        guard let id = selectedRequestID else { return nil }
+        return workspace.sentBaselines[id.uuidString]
+    }
+
+    /// İsteği en son gönderildiği hale döndürür. Ad ve kimlik korunur.
+    /// Kaydedilmemiş düzenlemeleri geri alınamaz biçimde siler; çağıran
+    /// taraf onay almalı.
+    func revertToLastSent(_ id: UUID) {
+        guard let baseline = workspace.sentBaselines[id.uuidString],
+              let location = locateRequest(id) else { return }
+        var target = workspace.collections[location.collection].requests[location.request]
+        target.method = baseline.method
+        target.url = baseline.url
+        target.headers = baseline.headers
+        target.queryParams = baseline.queryParams
+        target.body = baseline.body
+        target.auth = baseline.auth
+        target.options = baseline.options
+        workspace.collections[location.collection].requests[location.request] = target
+        persist()
+    }
+
+    private func recordBaseline(_ request: RequestModel) {
+        workspace.sentBaselines[request.id.uuidString] = request
+        workspace.pruneBaselines()
+        persist()
+    }
+
     func addRequest(to collectionID: UUID) {
         guard let index = workspace.collections.firstIndex(where: { $0.id == collectionID }) else { return }
         let request = RequestModel()
@@ -444,6 +500,8 @@ final class AppState {
                 let display = await Task.detached { AppState.makeDisplay(response) }.value
                 try Task.checkCancellation()
                 self.setResponse(.success(display), for: id)
+                // Referans noktası: "en son bunu test ettim".
+                self.recordBaseline(request)
                 let data = display.data
                 self.recordHistory(
                     request,
@@ -652,6 +710,7 @@ final class AppState {
     /// encode edip main thread'de diske basmak demekti — yazarken takılmanın
     /// ana sebebi buydu. Yazım durduktan 400ms sonra tek sefer yazılır.
     func persistSoon() {
+        saveState = .pending
         persistTask?.cancel()
         persistTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(400))
@@ -674,8 +733,10 @@ final class AppState {
         do {
             try store.save(workspace)
             saveError = nil
+            saveState = .saved(Date())
         } catch {
             saveError = "Kaydedilemedi: \(error.localizedDescription)"
+            saveState = .failed(error.localizedDescription)
         }
     }
 }

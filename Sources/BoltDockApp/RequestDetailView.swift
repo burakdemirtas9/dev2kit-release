@@ -8,6 +8,7 @@ struct RequestDetailView: View {
     @State private var selectedTab: EditorTab = .headers
     @State private var showingCurl = false
     @State private var showingOptions = false
+    @State private var showingRevertConfirm = false
 
     enum EditorTab: String, CaseIterable {
         case headers = "Headers"
@@ -91,11 +92,63 @@ struct RequestDetailView: View {
             EmptyView()
         }
         .safeAreaInset(edge: .top, spacing: 0) {
-            TextField("İstek adı", text: $request.name)
-                .textFieldStyle(.plain)
-                .font(.headline)
-                .padding(.horizontal, 12)
-                .padding(.top, 8)
+            HStack(spacing: 8) {
+                TextField("İstek adı", text: $request.name)
+                    .textFieldStyle(.plain)
+                    .font(.headline)
+                    .fixedSize(horizontal: true, vertical: false)
+
+                if appState.isDirty(request.id) {
+                    Button {
+                        showingRevertConfirm = true
+                    } label: {
+                        Label("son gönderilenden farklı", systemImage: "circle.fill")
+                            .font(.caption)
+                            .labelStyle(DirtyLabelStyle())
+                    }
+                    .buttonStyle(.plain)
+                    .help("Bu istek en son gönderildiği halden farklı — tıklayıp o hale dönebilirsin")
+                }
+
+                Spacer()
+                saveStatus
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 8)
+        }
+        .confirmationDialog(
+            "Son gönderilen hale dönülsün mü?",
+            isPresented: $showingRevertConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Geri Dön", role: .destructive) {
+                appState.revertToLastSent(request.id)
+            }
+            Button("Vazgeç", role: .cancel) {}
+        } message: {
+            Text("Son gönderimden sonra yaptığın düzenlemeler silinecek. Bu işlem geri alınamaz.")
+        }
+    }
+
+    /// Otomatik kaydın görünür hali.
+    @ViewBuilder
+    private var saveStatus: some View {
+        switch appState.saveState {
+        case .idle:
+            EmptyView()
+        case .pending:
+            Label("Kaydediliyor…", systemImage: "arrow.triangle.2.circlepath")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+        case .saved(let date):
+            Label("Kaydedildi \(date.formatted(date: .omitted, time: .shortened))", systemImage: "checkmark.circle")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+        case .failed(let message):
+            Label(message, systemImage: "exclamationmark.triangle.fill")
+                .font(.caption2)
+                .foregroundStyle(Theme.down)
+                .lineLimit(1)
         }
     }
 
@@ -746,5 +799,19 @@ struct RequestOptionsPopover: View {
         .formStyle(.grouped)
         .frame(width: 380)
         .frame(maxHeight: 480)
+    }
+}
+
+
+/// Nokta + metin: "değişti" işaretini sade tutar.
+private struct DirtyLabelStyle: LabelStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: 4) {
+            configuration.icon
+                .font(.system(size: 7))
+                .foregroundStyle(Theme.warning)
+            configuration.title
+                .foregroundStyle(.secondary)
+        }
     }
 }
