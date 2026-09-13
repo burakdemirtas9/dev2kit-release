@@ -44,6 +44,11 @@ public struct VariableResolver: Sendable {
         self.secretStore = secretStore
     }
 
+    /// Vault'tan doğrudan okuma (OAuth2 token'ı gibi şablon olmayan değerler için).
+    public func secret(named name: String) throws -> String? {
+        try secretStore.secret(forName: name)
+    }
+
     /// Metindeki tüm şablonları çözer. Şablon içermeyen metin olduğu gibi döner.
     public func resolve(_ text: String) throws -> String {
         try resolve(text, depth: 0)

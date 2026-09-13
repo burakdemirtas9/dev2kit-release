@@ -9,6 +9,9 @@ public enum AuthConfig: Codable, Hashable, Sendable {
     case basic(username: String, password: String)
     case bearer(token: String)
     case apiKey(key: String, value: String, location: APIKeyLocation)
+    /// Token vault'ta `config.tokenSecretName` altında tutulur; istek
+    /// tanımında yalnızca yapılandırma durur, token hiç yazılmaz.
+    case oauth2(OAuth2Config)
 
     public enum APIKeyLocation: String, Codable, CaseIterable, Sendable {
         case header
@@ -21,6 +24,7 @@ public enum AuthConfig: Codable, Hashable, Sendable {
         case .basic: return "Basic"
         case .bearer: return "Bearer Token"
         case .apiKey: return "API Key"
+        case .oauth2: return "OAuth2"
         }
     }
 }

@@ -48,6 +48,10 @@ public enum HistoryRedactor {
             return .bearer(token: maskIfLiteral(token))
         case .apiKey(let key, let value, let location):
             return .apiKey(key: key, value: maskIfLiteral(value), location: location)
+        case .oauth2(var config):
+            // Token vault'ta; yapılandırmada yalnızca client secret gizli olabilir.
+            config.clientSecret = maskIfLiteral(config.clientSecret)
+            return .oauth2(config)
         }
     }
 

@@ -386,19 +386,23 @@ struct BodyEditor: View {
         }
     }
 
+    /// Seçili gövde tipi. Ayrı bir hesaplanan özellik: binding'in setter'ı
+    /// içinden getter'a erişmek özyineleme uyarısı üretiyordu.
+    private var currentKind: BodyKind {
+        switch body_ {
+        case .none: return .none
+        case .raw: return .raw
+        case .formURLEncoded: return .urlEncoded
+        case .multipartForm: return .formData
+        }
+    }
+
     private var kind: Binding<BodyKind> {
         Binding(
-            get: {
-                switch body_ {
-                case .none: return .none
-                case .raw: return .raw
-                case .formURLEncoded: return .urlEncoded
-                case .multipartForm: return .formData
-                }
-            },
+            get: { currentKind },
             set: { newKind in
                 formatError = nil
-                let current = kind.wrappedValue
+                let current = currentKind
                 guard newKind != current else { return }
                 // Ayrılan tipin içeriğini sakla; geri dönüldüğünde yazdığın
                 // JSON ya da doldurduğun alanlar kaybolmasın.
@@ -574,7 +578,7 @@ struct AuthEditor: View {
     @Binding var auth: AuthConfig
 
     private enum AuthKind: String, CaseIterable {
-        case none = "Yok", basic = "Basic", bearer = "Bearer", apiKey = "API Key"
+        case none = "Yok", basic = "Basic", bearer = "Bearer", apiKey = "API Key", oauth2 = "OAuth2"
     }
 
     private var kind: Binding<AuthKind> {
@@ -585,6 +589,7 @@ struct AuthEditor: View {
                 case .basic: return .basic
                 case .bearer: return .bearer
                 case .apiKey: return .apiKey
+                case .oauth2: return .oauth2
                 }
             },
             set: {
@@ -593,6 +598,7 @@ struct AuthEditor: View {
                 case .basic: auth = .basic(username: "", password: "")
                 case .bearer: auth = .bearer(token: "")
                 case .apiKey: auth = .apiKey(key: "X-Api-Key", value: "", location: .header)
+                case .oauth2: auth = .oauth2(OAuth2Config())
                 }
             }
         )
@@ -657,9 +663,14 @@ struct AuthEditor: View {
                         .labelsHidden()
                         .frame(width: 160, alignment: .leading)
                     }
+                case .oauth2(let oauthConfig):
+                    OAuth2Editor(config: Binding(
+                        get: { oauthConfig },
+                        set: { auth = .oauth2($0) }
+                    ))
                 }
 
-                if kind.wrappedValue != .none {
+                if kind.wrappedValue != .none, kind.wrappedValue != .oauth2 {
                     Label(
                         "Düz metin secret yazma: değeri Secrets'a ekleyip {{secret:isim}} olarak referans ver — {{ yazınca öneriler açılır.",
                         systemImage: "lock.shield"
@@ -812,6 +823,104 @@ private struct DirtyLabelStyle: LabelStyle {
                 .foregroundStyle(Theme.warning)
             configuration.title
                 .foregroundStyle(.secondary)
+        }
+    }
+}
+
+/// OAuth2 yapılandırması ve yetkilendirme akışı.
+struct OAuth2Editor: View {
+    @Environment(AppState.self) private var appState
+    @Binding var config: OAuth2Config
+
+    private var token: OAuth2Token? { appState.storedToken(for: config) }
+    private var isAuthorizing: Bool { appState.authorizingConfigID == config.id }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            tokenStatus
+
+            Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 6) {
+                row("Authorization URL", "https://idp.example.com/authorize", $config.authorizationURL)
+                row("Token URL", "https://idp.example.com/token", $config.tokenURL)
+                row("Client ID", "istemci kimliği", $config.clientID)
+                row("Client Secret", "boş bırak veya {{secret:isim}}", $config.clientSecret)
+                row("Scopes", "openid profile email", $config.scopes)
+            }
+
+            HStack {
+                Button {
+                    appState.authorize(config)
+                } label: {
+                    if isAuthorizing {
+                        HStack(spacing: 6) {
+                            ProgressView().controlSize(.small)
+                            Text("Tarayıcı bekleniyor…")
+                        }
+                    } else {
+                        Label(token == nil ? "Yetkilendir" : "Yeniden Yetkilendir", systemImage: "person.badge.key")
+                    }
+                }
+                .disabled(isAuthorizing || config.authorizationURL.isEmpty || config.clientID.isEmpty)
+
+                if token != nil {
+                    Button(role: .destructive) {
+                        appState.clearToken(for: config)
+                    } label: {
+                        Label("Token'ı Sil", systemImage: "trash")
+                    }
+                    .disabled(isAuthorizing)
+                }
+            }
+
+            if let message = appState.authMessage {
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(message.contains("tamamlandı") ? Theme.up : Theme.down)
+                    .lineLimit(3)
+            }
+
+            Label(
+                "Sistem tarayıcısı kullanılır; uygulama parolanı hiç görmez. Token şifreli vault'ta saklanır, koleksiyon dosyasına yazılmaz. Yönlendirme yalnızca 127.0.0.1'e bağlanır.",
+                systemImage: "lock.shield"
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    @ViewBuilder
+    private var tokenStatus: some View {
+        if let token {
+            HStack(spacing: 6) {
+                Image(systemName: token.isExpired() ? "exclamationmark.circle.fill" : "checkmark.circle.fill")
+                    .foregroundStyle(token.isExpired() ? Theme.warning : Theme.up)
+                if let expiry = token.expiresAt {
+                    Text(token.isExpired()
+                         ? "Token süresi doldu — gönderimde otomatik yenilenecek"
+                         : "Token geçerli · \(expiry.formatted(date: .omitted, time: .shortened))'a kadar")
+                } else {
+                    Text("Token var (süre bilgisi yok)")
+                }
+                if token.refreshToken != nil {
+                    Text("· yenilenebilir").foregroundStyle(.tertiary)
+                }
+            }
+            .font(.caption)
+        } else {
+            Label("Henüz token yok", systemImage: "circle.dashed")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func row(_ title: String, _ placeholder: String, _ text: Binding<String>) -> some View {
+        GridRow {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .gridColumnAlignment(.trailing)
+            TemplateTextField(placeholder: placeholder, text: text)
         }
     }
 }

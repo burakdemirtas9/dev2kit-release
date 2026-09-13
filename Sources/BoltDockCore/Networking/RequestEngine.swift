@@ -39,11 +39,14 @@ public struct ResponseData: Sendable {
 public enum RequestEngineError: Error, LocalizedError {
     case invalidURL(String)
     case notHTTPResponse
+    case notAuthorized(String)
 
     public var errorDescription: String? {
         switch self {
         case .invalidURL(let url): return "Geçersiz URL: \(url)"
         case .notHTTPResponse: return "Sunucudan HTTP yanıtı alınamadı."
+        case .notAuthorized(let name):
+            return "\"\(name)\" için henüz token yok. Auth sekmesinden \"Yetkilendir\" ile giriş yap."
         }
     }
 }
@@ -181,6 +184,17 @@ public final class RequestEngine: @unchecked Sendable {
             request.setValue("Bearer \(try resolver.resolve(token))", forHTTPHeaderField: "Authorization")
         case .apiKey(let key, let value, .header):
             request.setValue(try resolver.resolve(value), forHTTPHeaderField: try resolver.resolve(key))
+        case .oauth2(let config):
+            guard let stored = try resolver.secret(named: config.tokenSecretName), !stored.isEmpty else {
+                throw RequestEngineError.notAuthorized(config.name)
+            }
+            if let data = stored.data(using: .utf8),
+               let token = try? JSONDecoder().decode(OAuth2Token.self, from: data) {
+                request.setValue(token.authorizationHeaderValue, forHTTPHeaderField: "Authorization")
+            } else {
+                // cURL dışa aktarımında vault yerine placeholder gelir; aynen geçir.
+                request.setValue("Bearer \(stored)", forHTTPHeaderField: "Authorization")
+            }
         }
 
         try attachBody(to: &request, model: model, resolver: resolver)

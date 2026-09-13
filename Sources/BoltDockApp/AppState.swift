@@ -211,6 +211,7 @@ final class AppState {
         case .basic(_, let password): return password.contains(HistoryRedactor.mask)
         case .bearer(let token): return token.contains(HistoryRedactor.mask)
         case .apiKey(_, let value, _): return value.contains(HistoryRedactor.mask)
+        case .oauth2(let config): return config.clientSecret.contains(HistoryRedactor.mask)
         }
     }
 
@@ -496,6 +497,7 @@ final class AppState {
         inFlight[id] = Task { [weak self] in
             guard let self else { return }
             do {
+                await self.ensureValidToken(request)
                 let response = try await engine.send(request, environment: environment, secretStore: secretStore)
                 let display = await Task.detached { AppState.makeDisplay(response) }.value
                 try Task.checkCancellation()
@@ -534,6 +536,81 @@ final class AppState {
     }
 
     @ObservationIgnored private var inFlight: [UUID: Task<Void, Never>] = [:]
+
+    // MARK: - OAuth2
+
+    private let oauthService = OAuth2Service()
+    /// Yetkilendirme sürerken arayüzün beklemesi için.
+    var authorizingConfigID: UUID?
+    var authMessage: String?
+
+    func storedToken(for config: OAuth2Config) -> OAuth2Token? {
+        guard let raw = try? secretStore.secret(forName: config.tokenSecretName),
+              let data = raw.data(using: .utf8) else { return nil }
+        return try? JSONDecoder().decode(OAuth2Token.self, from: data)
+    }
+
+    /// Client secret `{{secret:isim}}` ile verilmiş olabilir; çözülür.
+    private func resolvedClientSecret(_ config: OAuth2Config) -> String? {
+        let raw = config.clientSecret.trimmingCharacters(in: .whitespaces)
+        guard !raw.isEmpty else { return nil }
+        let resolver = VariableResolver(environment: activeEnvironment, secretStore: secretStore)
+        return (try? resolver.resolve(raw)) ?? raw
+    }
+
+    private func store(_ token: OAuth2Token, for config: OAuth2Config) throws {
+        let data = try JSONEncoder().encode(token)
+        // Token vault'a yazılır; workspace dosyasına ASLA.
+        try secretStore.setSecret(String(decoding: data, as: UTF8.self), forName: config.tokenSecretName)
+        invalidateSecretNames()
+    }
+
+    /// Tarayıcıyı açıp yetkilendirme akışını yürütür.
+    func authorize(_ config: OAuth2Config) {
+        authorizingConfigID = config.id
+        authMessage = nil
+        Task {
+            do {
+                let token = try await oauthService.authorize(
+                    config: config,
+                    resolvedClientSecret: resolvedClientSecret(config),
+                    openURL: { url in NSWorkspace.shared.open(url) }
+                )
+                try store(token, for: config)
+                authMessage = "Yetkilendirme tamamlandı."
+            } catch {
+                authMessage = error.localizedDescription
+            }
+            authorizingConfigID = nil
+        }
+    }
+
+    func clearToken(for config: OAuth2Config) {
+        try? secretStore.deleteSecret(forName: config.tokenSecretName)
+        invalidateSecretNames()
+        authMessage = "Token silindi."
+    }
+
+    /// Gönderimden önce token'ın geçerli olduğundan emin olur; süresi dolmuşsa
+    /// refresh token ile sessizce yeniler.
+    private func ensureValidToken(_ request: RequestModel) async {
+        guard case .oauth2(let config) = request.auth,
+              let token = storedToken(for: config),
+              token.isExpired(),
+              let refreshToken = token.refreshToken else { return }
+        do {
+            let renewed = try await oauthService.refresh(
+                config: config,
+                refreshToken: refreshToken,
+                resolvedClientSecret: resolvedClientSecret(config)
+            )
+            try store(renewed, for: config)
+        } catch {
+            // Yenileme başarısızsa istek eski token'la gider ve 401 alır;
+            // kullanıcı Auth sekmesinden yeniden yetkilendirir.
+            authMessage = "Token yenilenemedi: \(error.localizedDescription)"
+        }
+    }
 
     // MARK: - Çerezler
 

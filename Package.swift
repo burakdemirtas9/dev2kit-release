@@ -18,8 +18,9 @@ let package = Package(
             name: "BoltDockApp",
             dependencies: ["BoltDockCore"],
             path: "Sources/BoltDockApp",
-            // Kaynak görsel yalnızca ikonu yeniden üretmek için repoda durur.
-            exclude: ["Resources/AppIcon.png"],
+            // Kaynak görsel ikonu yeniden üretmek, entitlements ise imzalama
+            // için repoda durur; ikisi de bundle'a gömülmez.
+            exclude: ["Resources/AppIcon.png", "Resources/BoltDock.entitlements"],
             // İkon: .app bundle'ına make-app.sh kopyalar; `swift run` ile
             // bundle olmadan çalışırken Dock ikonu Bundle.module'den yüklenir.
             resources: [.copy("Resources/AppIcon.icns")]
