@@ -46,39 +46,17 @@ public final class FileSecretStore: SecretStore, @unchecked Sendable {
 
     // MARK: - Şifreleme
 
-    private func loadKey() throws -> SymmetricKey {
-        if let data = try? Data(contentsOf: keyURL), data.count == 32 {
-            return SymmetricKey(data: data)
-        }
-        let key = SymmetricKey(size: .bits256)
-        let data = key.withUnsafeBytes { Data($0) }
-        try FileManager.default.createDirectory(
-            at: keyURL.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-        try data.write(to: keyURL, options: .atomic)
-        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: keyURL.path)
-        return key
+    /// Format değişmedi: aynı dosya, aynı anahtar, aynı AES-GCM sarmalama.
+    /// Yalnızca kod geçmiş kaydıyla paylaşılan yardımcıya taşındı.
+    private var file: EncryptedJSONFile<[String: String]> {
+        EncryptedJSONFile(fileURL: fileURL, keyURL: keyURL)
     }
 
     private func loadAll() throws -> [String: String] {
-        guard FileManager.default.fileExists(atPath: fileURL.path) else { return [:] }
-        let sealed = try AES.GCM.SealedBox(combined: Data(contentsOf: fileURL))
-        let plain = try AES.GCM.open(sealed, using: loadKey())
-        return try JSONDecoder().decode([String: String].self, from: plain)
+        try file.load(fallback: [:])
     }
 
     private func saveAll(_ secrets: [String: String]) throws {
-        let plain = try JSONEncoder().encode(secrets)
-        let sealed = try AES.GCM.seal(plain, using: loadKey())
-        guard let combined = sealed.combined else {
-            throw SecretStoreError.encodingFailed
-        }
-        try FileManager.default.createDirectory(
-            at: fileURL.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-        try combined.write(to: fileURL, options: .atomic)
-        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: fileURL.path)
+        try file.save(secrets)
     }
 }

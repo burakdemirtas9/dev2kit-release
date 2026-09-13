@@ -121,6 +121,111 @@ final class AppState {
     let secretStore: SecretStore
     private let store: WorkspaceStore
     private let engine = RequestEngine()
+    private let historyStore = HistoryStore()
+
+    // MARK: - Geçmiş
+
+    /// Geçmiş kayıtları, en yenisi başta.
+    private(set) var history: [HistoryEntry] = []
+
+    var historySettings: HistorySettings {
+        didSet {
+            if let data = try? JSONEncoder().encode(historySettings) {
+                UserDefaults.standard.set(data, forKey: Self.historySettingsKey)
+            }
+        }
+    }
+
+    private static let historySettingsKey = "historySettings"
+
+    func reloadHistory() {
+        history = historyStore.entries()
+    }
+
+    func clearHistory() {
+        historyStore.deleteAll()
+        reloadHistory()
+    }
+
+    func clearHistory(environmentName: String?) {
+        historyStore.deleteEntries(environmentName: environmentName)
+        reloadHistory()
+    }
+
+    func deleteHistoryEntry(_ id: UUID) {
+        historyStore.delete(id: id)
+        reloadHistory()
+    }
+
+    /// Geçmişteki hali mevcut isteğe geri yazar.
+    /// Maskelenmiş alanlar geri yüklenmez: "••••••" değerini isteğe yazmak
+    /// çalışan bir kimlik bilgisini sessizce bozardı.
+    func restore(_ entry: HistoryEntry) -> Bool {
+        guard let requestID = entry.requestID, let location = locateRequest(requestID) else { return false }
+        var target = workspace.collections[location.collection].requests[location.request]
+        let snapshot = entry.snapshot
+        target.method = snapshot.method
+        target.url = snapshot.url.contains(HistoryRedactor.mask) ? target.url : snapshot.url
+        target.queryParams = merge(snapshot.queryParams, into: target.queryParams)
+        target.headers = merge(snapshot.headers, into: target.headers)
+        target.body = snapshot.body
+        target.options = snapshot.options
+        if !containsMask(snapshot.auth) { target.auth = snapshot.auth }
+        workspace.collections[location.collection].requests[location.request] = target
+        selectedRequestID = target.id
+        persist()
+        return true
+    }
+
+    /// Geçmişteki isteği yeni bir istek olarak ekler (silinmiş isteği kurtarmak için).
+    func restoreAsNewRequest(_ entry: HistoryEntry, to collectionID: UUID) {
+        var snapshot = entry.snapshot
+        snapshot.name = entry.requestName
+        addImportedRequest(snapshot, to: collectionID)
+    }
+
+    /// Maskeli değerler eski hâliyle korunur; diğerleri anlık görüntüden gelir.
+    private func merge(_ snapshot: [KeyValueEntry], into current: [KeyValueEntry]) -> [KeyValueEntry] {
+        snapshot.map { entry in
+            guard entry.value.contains(HistoryRedactor.mask) else { return entry }
+            var restored = entry
+            restored.value = current.first { $0.key.lowercased() == entry.key.lowercased() }?.value ?? ""
+            return restored
+        }
+    }
+
+    private func containsMask(_ auth: AuthConfig) -> Bool {
+        switch auth {
+        case .none: return false
+        case .basic(_, let password): return password.contains(HistoryRedactor.mask)
+        case .bearer(let token): return token.contains(HistoryRedactor.mask)
+        case .apiKey(_, let value, _): return value.contains(HistoryRedactor.mask)
+        }
+    }
+
+    /// Gönderim sonucunu geçmişe yazar. Anlık görüntü ŞABLON halidir ve
+    /// ham kimlik bilgileri maskelenir.
+    private func recordHistory(_ request: RequestModel, outcome: HistoryEntry.Outcome, responseText: String?) {
+        guard historySettings.isEnabled else { return }
+        let collectionName = workspace.collections.first { collection in
+            collection.requests.contains { $0.id == request.id }
+        }?.name
+        let preview = historySettings.storeResponseBodies
+            ? responseText.map { HistoryRedactor.redactResponse($0, limit: historySettings.responsePreviewLimit) }
+            : nil
+        let entry = HistoryEntry(
+            requestID: request.id,
+            requestName: request.name,
+            collectionName: collectionName,
+            environmentName: activeEnvironment?.name,
+            method: request.method,
+            url: HistoryRedactor.maskURL(request.url),
+            outcome: outcome,
+            snapshot: HistoryRedactor.redact(request),
+            responsePreview: preview
+        )
+        history = historyStore.append(entry, settings: historySettings)
+    }
 
     enum ResponseState {
         case idle
@@ -145,6 +250,9 @@ final class AppState {
         self.secretStore = secretStore
         let collapsedStrings = UserDefaults.standard.stringArray(forKey: Self.collapsedKey) ?? []
         self.collapsedCollectionIDs = Set(collapsedStrings.compactMap(UUID.init(uuidString:)))
+        let savedSettings = UserDefaults.standard.data(forKey: Self.historySettingsKey)
+            .flatMap { try? JSONDecoder().decode(HistorySettings.self, from: $0) }
+        self.historySettings = savedSettings ?? .default
         let savedMode = UserDefaults.standard.string(forKey: Self.appearanceKey)
             .flatMap(AppearanceMode.init(rawValue:)) ?? .system
         self.appearanceMode = savedMode
@@ -160,6 +268,7 @@ final class AppState {
             workspace.collections = [CollectionModel(name: "İlk Koleksiyon", requests: [RequestModel()])]
             persist()
         }
+        history = historyStore.entries()
     }
 
     var activeEnvironment: EnvironmentModel? {
@@ -335,12 +444,24 @@ final class AppState {
                 let display = await Task.detached { AppState.makeDisplay(response) }.value
                 try Task.checkCancellation()
                 self.setResponse(.success(display), for: id)
+                let data = display.data
+                self.recordHistory(
+                    request,
+                    outcome: .completed(
+                        status: data.statusCode,
+                        duration: data.duration,
+                        byteCount: data.body.count,
+                        redirectCount: data.redirects.count
+                    ),
+                    responseText: display.prettyText
+                )
             } catch is CancellationError {
                 self.setResponse(.idle, for: id)
             } catch let error as URLError where error.code == .cancelled {
                 self.setResponse(.idle, for: id)
             } catch {
                 self.setResponse(.failure(error.localizedDescription), for: id)
+                self.recordHistory(request, outcome: .failed(message: error.localizedDescription), responseText: nil)
             }
             self.inFlight[id] = nil
         }

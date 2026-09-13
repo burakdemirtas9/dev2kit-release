@@ -6,6 +6,7 @@ struct ContentView: View {
     @State private var showingSecrets = false
     @State private var showingEnvironments = false
     @State private var showingCookies = false
+    @State private var showingHistory = false
 
     private static let sidebarWidthKey = "sidebarWidth"
     private static let minSidebarWidth: CGFloat = 220
@@ -78,6 +79,15 @@ struct ContentView: View {
             }
             ToolbarItem(placement: .automatic) {
                 Button {
+                    showingHistory = true
+                } label: {
+                    Label("Geçmiş", systemImage: "clock.arrow.circlepath")
+                }
+                .help("Gönderilen isteklerin kaydı (⌘Y)")
+                .keyboardShortcut("y", modifiers: .command)
+            }
+            ToolbarItem(placement: .automatic) {
+                Button {
                     showingCookies = true
                 } label: {
                     Label("Çerezler", systemImage: "birthday.cake")
@@ -101,6 +111,9 @@ struct ContentView: View {
         }
         .sheet(isPresented: $showingCookies) {
             CookiesView()
+        }
+        .sheet(isPresented: $showingHistory) {
+            HistoryView()
         }
         .alert("Hata", isPresented: .constant(state.saveError != nil)) {
             Button("Tamam") { state.saveError = nil }
