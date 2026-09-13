@@ -91,7 +91,11 @@ struct ContentView: View {
                 Button {
                     showingCookies = true
                 } label: {
-                    Label("Çerezler", systemImage: "circle.grid.3x3.fill")
+                    Label {
+                        Text("Çerezler")
+                    } icon: {
+                        CookieIcon().frame(width: 15, height: 15)
+                    }
                 }
                 .help("Oturum çerezlerini görüntüle ve temizle")
             }

@@ -21,11 +21,15 @@ struct CookiesView: View {
                 .foregroundStyle(.secondary)
 
             if cookies.isEmpty {
-                ContentUnavailableView(
-                    "Çerez yok",
-                    systemImage: "circle.grid.3x3.fill",
-                    description: Text("Sunucular Set-Cookie döndükçe burada görünür.")
-                )
+                ContentUnavailableView {
+                    Label {
+                        Text("Çerez yok")
+                    } icon: {
+                        CookieIcon().frame(width: 44, height: 44)
+                    }
+                } description: {
+                    Text("Sunucular Set-Cookie döndükçe burada görünür.")
+                }
                 .frame(maxWidth: .infinity, minHeight: 200)
             } else {
                 List(cookies, id: \.self) { cookie in
