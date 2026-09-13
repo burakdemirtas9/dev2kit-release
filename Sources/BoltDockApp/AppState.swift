@@ -203,6 +203,34 @@ final class AppState {
         persist()
     }
 
+    /// İsteği aynı koleksiyonda hemen altına kopyalar ve seçer.
+    /// Ad çakışmasında koleksiyon import'uyla aynı kural: "isim kopya", "isim kopya 2"…
+    func duplicateRequest(_ id: UUID) {
+        guard let location = locateRequest(id) else { return }
+        var copy = workspace.collections[location.collection].requests[location.request]
+        copy.id = UUID()
+        let existing = workspace.collections[location.collection].requests.map(\.name)
+        copy.name = (try? CollectionPorting.resolveName(copy.name, suffix: "kopya", existingNames: existing).0)
+            ?? "\(copy.name) kopya"
+        workspace.collections[location.collection].requests.insert(copy, at: location.request + 1)
+        selectedRequestID = copy.id
+        persist()
+    }
+
+    /// İsteği başka bir koleksiyona taşır (hedefin sonuna eklenir).
+    func moveRequest(_ id: UUID, toCollection targetID: UUID) {
+        guard let location = locateRequest(id),
+              let target = workspace.collections.firstIndex(where: { $0.id == targetID }),
+              target != location.collection else { return }
+        var request = workspace.collections[location.collection].requests.remove(at: location.request)
+        let existing = workspace.collections[target].requests.map(\.name)
+        request.name = (try? CollectionPorting.resolveName(request.name, suffix: "taşınan", existingNames: existing).0)
+            ?? request.name
+        workspace.collections[target].requests.append(request)
+        selectedRequestID = request.id
+        persist()
+    }
+
     func deleteRequest(_ id: UUID) {
         for index in workspace.collections.indices {
             workspace.collections[index].requests.removeAll { $0.id == id }

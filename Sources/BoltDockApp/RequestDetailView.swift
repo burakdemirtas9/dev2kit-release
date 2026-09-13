@@ -279,6 +279,9 @@ struct KeyValueEditor: View {
 struct BodyEditor: View {
     @Binding var body_: RequestBody
     @State private var formatError: String?
+    /// Tip başına son içerik. Yalnızca bu istek görünürken yaşar; diske
+    /// yazılmaz — kaydedilen gövde her zaman o an seçili olandır.
+    @State private var drafts: [BodyKind: RequestBody] = [:]
 
     init(body: Binding<RequestBody>) {
         self._body_ = body
@@ -342,6 +345,15 @@ struct BodyEditor: View {
             },
             set: { newKind in
                 formatError = nil
+                let current = kind.wrappedValue
+                guard newKind != current else { return }
+                // Ayrılan tipin içeriğini sakla; geri dönüldüğünde yazdığın
+                // JSON ya da doldurduğun alanlar kaybolmasın.
+                drafts[current] = body_
+                if let saved = drafts[newKind] {
+                    body_ = saved
+                    return
+                }
                 switch newKind {
                 case .none: body_ = .none
                 case .raw: body_ = .raw(content: "", contentType: RawType.json.contentType)

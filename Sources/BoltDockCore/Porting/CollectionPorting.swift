@@ -105,7 +105,7 @@ public enum CollectionPorting {
 
     /// İsim çakışmasını çözer: önce "isim <suffix>", o da doluysa "isim <suffix> 2..50".
     /// Hepsi doluysa hata — kullanıcıya bildirilmeli.
-    static func resolveName(_ base: String, suffix: String, existingNames: [String]) throws -> (String, Bool) {
+    public static func resolveName(_ base: String, suffix: String, existingNames: [String]) throws -> (String, Bool) {
         let existing = Set(existingNames)
         guard existing.contains(base) else { return (base, false) }
         let candidate = "\(base) \(suffix)"

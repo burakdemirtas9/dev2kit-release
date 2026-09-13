@@ -166,6 +166,7 @@ struct SidebarView: View {
     @State private var renameTargetID: UUID?
     @State private var renameText = ""
     @State private var deleteTarget: CollectionModel?
+    @State private var deleteRequestTarget: RequestModel?
     @State private var draggingCollectionID: UUID?
 
     /// Sürükleme sırasında diğer koleksiyonlar soluklaşır ve kilitlenir.
@@ -190,8 +191,29 @@ struct SidebarView: View {
                         }
                         .tag(request.id)
                         .contextMenu {
-                            Button("Sil", role: .destructive) {
-                                appState.deleteRequest(request.id)
+                            Button {
+                                appState.duplicateRequest(request.id)
+                            } label: {
+                                Label("Çoğalt", systemImage: "plus.square.on.square")
+                            }
+                            if appState.workspace.collections.count > 1 {
+                                Menu {
+                                    ForEach(appState.workspace.collections) { target in
+                                        if target.id != collection.id {
+                                            Button(target.name) {
+                                                appState.moveRequest(request.id, toCollection: target.id)
+                                            }
+                                        }
+                                    }
+                                } label: {
+                                    Label("Şuraya Taşı", systemImage: "folder")
+                                }
+                            }
+                            Divider()
+                            Button(role: .destructive) {
+                                deleteRequestTarget = request
+                            } label: {
+                                Label("Sil…", systemImage: "trash")
                             }
                         }
                         .opacity(isDimmed(collection.id) ? 0.35 : 1)
@@ -355,6 +377,23 @@ struct SidebarView: View {
             Button("Vazgeç", role: .cancel) { deleteTarget = nil }
         } message: {
             Text("\"\(deleteTarget?.name ?? "")\" ve içindeki \(deleteTarget?.requests.count ?? 0) istek kalıcı olarak silinecek.")
+        }
+        .alert(
+            "İsteği Sil",
+            isPresented: Binding(
+                get: { deleteRequestTarget != nil },
+                set: { if !$0 { deleteRequestTarget = nil } }
+            )
+        ) {
+            Button("Sil", role: .destructive) {
+                if let target = deleteRequestTarget {
+                    appState.deleteRequest(target.id)
+                }
+                deleteRequestTarget = nil
+            }
+            Button("Vazgeç", role: .cancel) { deleteRequestTarget = nil }
+        } message: {
+            Text("\"\(deleteRequestTarget?.name ?? "")\" kalıcı olarak silinecek.")
         }
         .frame(minWidth: 220)
     }
