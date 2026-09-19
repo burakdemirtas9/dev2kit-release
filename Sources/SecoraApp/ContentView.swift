@@ -199,6 +199,7 @@ struct SidebarView: View {
     @State private var showingCurlImport = false
     @State private var showingKibanaImport = false
     @State private var showingOpenAPIImport = false
+    @State private var showingSourceImport = false
     @State private var renameTargetID: UUID?
     @State private var renameText = ""
     @State private var deleteTarget: CollectionModel?
@@ -470,6 +471,9 @@ struct SidebarView: View {
                     Button("Swagger / OpenAPI Adresinden…") {
                         showingOpenAPIImport = true
                     }
+                    Button("Kaynak Koddan Giden İstekler…") {
+                        showingSourceImport = true
+                    }
                     } label: {
                         Label("İçe Aktar", systemImage: "square.and.arrow.down")
                     }
@@ -500,6 +504,9 @@ struct SidebarView: View {
         }
         .sheet(isPresented: $showingOpenAPIImport) {
             OpenAPIImportView()
+        }
+        .sheet(isPresented: $showingSourceImport) {
+            SourceImportView()
         }
         .sheet(item: Binding(
             get: { appState.pendingImport },

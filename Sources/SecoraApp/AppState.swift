@@ -703,6 +703,35 @@ final class AppState {
         }
     }
 
+    // MARK: - Kaynak koddan giden istekler
+
+    /// Proje klasörünü arka planda okur. Yalnızca okuma: derleme, çalıştırma
+    /// ya da ağ erişimi yoktur.
+    nonisolated func scanOutbound(_ directory: URL) async throws -> OutboundScanResult {
+        try await Task.detached(priority: .userInitiated) {
+            let accessing = directory.startAccessingSecurityScopedResource()
+            defer { if accessing { directory.stopAccessingSecurityScopedResource() } }
+            return try OutboundScanner.scan(directory: directory)
+        }.value
+    }
+
+    func prepareOutboundImport(
+        _ result: OutboundScanResult,
+        variables: [OutboundCollectionBuilder.Variable]
+    ) -> Result<PreparedImport, ImportFailure> {
+        do {
+            let outcome = try OutboundCollectionBuilder.makeCollection(
+                from: result,
+                variables: variables,
+                existingNames: workspace.collections.map(\.name)
+            )
+            let review = ImportReviewer.review(collection: outcome.collection, notes: outcome.warnings, context: importContext)
+            return .success(PreparedImport(review: review, wasRenamed: outcome.wasRenamed))
+        } catch {
+            return .failure(ImportFailure(message: "Koleksiyon oluşturulamadı: \(error.localizedDescription)"))
+        }
+    }
+
     enum KibanaImportTarget {
         case newRequest(CollectionDestination)
         case selectedRequest
