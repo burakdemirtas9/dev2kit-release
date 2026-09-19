@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import SecoraCore
 
 /// Kullanıcının entegre sistemindeki marka (gf-*) paleti.
 /// Ham değerler:
@@ -59,5 +60,18 @@ private extension NSColor {
             blue: CGFloat(value & 0xFF) / 255,
             alpha: 1
         )
+    }
+}
+
+extension Theme {
+    /// HTTP metodunun rengi; kenar çubuğu ve sekmeler aynı rengi kullanır.
+    static func color(for method: HTTPMethod) -> Color {
+        switch method {
+        case .get: return up
+        case .post: return warning
+        case .put, .patch: return purple
+        case .delete: return down
+        case .head, .options: return muted
+        }
     }
 }

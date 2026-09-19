@@ -46,7 +46,82 @@ enum EditorTab: String, CaseIterable, Identifiable {
 @MainActor
 final class AppState {
     var workspace: WorkspaceModel
-    var selectedRequestID: UUID?
+    /// Seçili istek. Açık değilse önizleme sekmesinde açılır (bkz. Sekmeler).
+    var selectedRequestID: UUID? {
+        didSet {
+            guard selectedRequestID != oldValue else { return }
+            if let id = selectedRequestID { openTab(id) }
+            saveTabs()
+        }
+    }
+
+    // MARK: - Sekmeler
+
+    /// Açık istek sekmeleri; kurallar `RequestTabs`'ta (Core, testli).
+    private(set) var tabs = RequestTabs()
+    var openTabs: [UUID] { tabs.tabs }
+    var previewTabID: UUID? { tabs.preview }
+
+    private static let openTabsKey = "openTabs"
+    private static let selectedTabKey = "selectedTab"
+
+    private func openTab(_ id: UUID) {
+        tabs.open(id)
+    }
+
+    /// Sekmeyi kalıcı yapar (açık değilse açar).
+    func pinTab(_ id: UUID) {
+        tabs.pin(id)
+        saveTabs()
+    }
+
+    /// Sekmeyi kapatır; seçiliyse sağındaki, yoksa solundaki seçilir.
+    func closeTab(_ id: UUID) {
+        selectedRequestID = tabs.close(id, selected: selectedRequestID)
+        saveTabs()
+    }
+
+    func closeOtherTabs(_ id: UUID) {
+        selectedRequestID = tabs.closeOthers(keeping: id)
+        saveTabs()
+    }
+
+    func closeTabsToRight(of id: UUID) {
+        selectedRequestID = tabs.closeToRight(of: id, selected: selectedRequestID)
+        saveTabs()
+    }
+
+    /// Sürükle-bırak: sekmeyi hedefin konumuna taşır.
+    func moveTab(_ id: UUID, before targetID: UUID) {
+        tabs.move(id, before: targetID)
+        saveTabs()
+    }
+
+    /// ⌥⌘→ / ⌥⌘←: sonraki / önceki sekme, uçlarda başa sarar.
+    func selectAdjacentTab(_ offset: Int) {
+        if let next = tabs.adjacent(to: selectedRequestID, offset: offset) { selectedRequestID = next }
+    }
+
+    func request(withID id: UUID) -> RequestModel? {
+        locateRequest(id).map { workspace.collections[$0.collection].requests[$0.request] }
+    }
+
+    /// Kalıcı sekmeler ve seçili sekme bir sonraki açılışa taşınır; önizleme
+    /// sekmesi geçici olduğu için taşınmaz.
+    private func saveTabs() {
+        let permanent = tabs.permanent.map(\.uuidString)
+        UserDefaults.standard.set(permanent, forKey: Self.openTabsKey)
+        let selected = selectedRequestID.flatMap { permanent.contains($0.uuidString) ? $0.uuidString : nil }
+        UserDefaults.standard.set(selected, forKey: Self.selectedTabKey)
+    }
+
+    /// Silinmiş isteklerin sekmeleri atılır.
+    private func pruneTabs() {
+        let live = Set(workspace.collections.flatMap { $0.requests.map(\.id) })
+        guard openTabs.contains(where: { !live.contains($0) }) else { return }
+        selectedRequestID = tabs.prune(keeping: live, selected: selectedRequestID)
+        saveTabs()
+    }
 
     var saveError: String?
 
@@ -245,6 +320,7 @@ final class AppState {
         if !containsMask(snapshot.auth) { target.auth = snapshot.auth }
         workspace.collections[location.collection].requests[location.request] = target
         selectedRequestID = target.id
+        pinTab(target.id)
         persist()
         return true
     }
@@ -351,6 +427,13 @@ final class AppState {
         history = historyStore.entries()
         engine.tlsProfiles = workspace.tlsProfiles
         reloadTrustStore()
+
+        let live = Set(workspace.collections.flatMap { $0.requests.map(\.id) })
+        tabs = RequestTabs(tabs: (UserDefaults.standard.stringArray(forKey: Self.openTabsKey) ?? [])
+            .compactMap(UUID.init(uuidString:))
+            .filter(live.contains))
+        let savedSelection = UserDefaults.standard.string(forKey: Self.selectedTabKey).flatMap(UUID.init(uuidString:))
+        selectedRequestID = savedSelection.flatMap { openTabs.contains($0) ? $0 : nil } ?? openTabs.first
     }
 
     var activeEnvironment: EnvironmentModel? {
@@ -380,6 +463,8 @@ final class AppState {
             set: { newValue in
                 guard let current = self.locateRequest(id) else { return }
                 self.workspace.collections[current.collection].requests[current.request] = newValue
+                // Düzenlenen istek artık "bakılan" değil "kullanılan" istektir.
+                if self.previewTabID == id { self.pinTab(id) }
                 // Metin düzenlemesi: her tuşta diske yazma, geciktir.
                 self.persistSoon()
             }
@@ -422,6 +507,7 @@ final class AppState {
         target.auth = baseline.auth
         target.options = baseline.options
         workspace.collections[location.collection].requests[location.request] = target
+        pinTab(target.id)
         persist()
     }
 
@@ -438,6 +524,7 @@ final class AppState {
         // Kapalı koleksiyona eklenen istek seçili ama görünmez kalırdı.
         collapsedCollectionIDs.remove(collectionID)
         selectedRequestID = request.id
+        pinTab(request.id)
         persist()
     }
 
@@ -473,6 +560,7 @@ final class AppState {
             ?? "\(copy.name) kopya"
         workspace.collections[location.collection].requests.insert(copy, at: location.request + 1)
         selectedRequestID = copy.id
+        pinTab(copy.id)
         persist()
     }
 
@@ -510,6 +598,7 @@ final class AppState {
             ?? copy.name
         workspace.collections[index].requests.append(copy)
         selectedRequestID = copy.id
+        pinTab(copy.id)
         persist()
     }
 
@@ -650,6 +739,7 @@ final class AppState {
         for index in workspace.collections.indices {
             workspace.collections[index].requests.removeAll { $0.id == id }
         }
+        closeTab(id)
         if selectedRequestID == id { selectedRequestID = nil }
         persist()
     }
@@ -674,11 +764,10 @@ final class AppState {
     func deleteCollection(_ id: UUID) {
         // Koleksiyonsuz kap silinmez; içindeki istekler tek tek silinir.
         guard workspace.collections.first(where: { $0.id == id })?.isUngrouped != true else { return }
-        if let collection = workspace.collections.first(where: { $0.id == id }),
-           collection.requests.contains(where: { $0.id == selectedRequestID }) {
-            selectedRequestID = nil
-        }
+        let removed = workspace.collections.first { $0.id == id }?.requests.map(\.id) ?? []
         workspace.collections.removeAll { $0.id == id }
+        removed.forEach(closeTab)
+        if let selected = selectedRequestID, removed.contains(selected) { selectedRequestID = nil }
         persist()
     }
 
@@ -732,6 +821,8 @@ final class AppState {
 
     func send(_ request: RequestModel) {
         flushPendingWrites()
+        // Gönderilen istek kullanılan istektir: önizleme sekmesi kalıcı olur.
+        pinTab(request.id)
         let id = request.id
         // Aynı isteğin önceki gönderimi hâlâ uçuyorsa iptal et.
         inFlight[id]?.cancel()
@@ -1301,6 +1392,7 @@ final class AppState {
 
     /// Yapısal değişiklikler (ekle/sil/sırala/içe aktar) için anında yazım.
     func persist() {
+        pruneTabs()
         persistTask?.cancel()
         persistTask = nil
         writeWorkspace()

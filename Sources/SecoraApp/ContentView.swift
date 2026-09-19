@@ -36,7 +36,11 @@ struct ContentView: View {
                 SidebarView()
                     .frame(width: effectiveSidebarWidth(totalWidth: geometry.size.width))
                 sidebarDivider(totalWidth: geometry.size.width)
-                Group {
+                VStack(spacing: 0) {
+                    if !appState.openTabs.isEmpty {
+                        RequestTabBar()
+                        Divider()
+                    }
                     if let requestBinding = appState.selectedRequest {
                         RequestDetailView(request: requestBinding)
                     } else {
@@ -252,7 +256,7 @@ struct SidebarView: View {
                         HStack {
                             Text(request.method.rawValue)
                                 .font(.system(size: 10, weight: .bold, design: .monospaced))
-                                .foregroundStyle(methodColor(request.method))
+                                .foregroundStyle(Theme.color(for: request.method))
                                 .frame(width: 44, alignment: .leading)
                             Text(request.name)
                                 .lineLimit(1)
@@ -264,6 +268,10 @@ struct SidebarView: View {
                             }
                         }
                         .tag(request.id)
+                        // Tek tıklama önizler (liste seçimi), çift tıklama sekmeyi kalıcı yapar.
+                        .simultaneousGesture(TapGesture(count: 2).onEnded {
+                            appState.pinTab(request.id)
+                        })
                         .contextMenu {
                             Button {
                                 appState.duplicateRequest(request.id)
@@ -608,16 +616,6 @@ struct SidebarView: View {
     private func selectFirstHit() {
         guard let hit = appState.firstSearchHit else { return }
         appState.selectedRequestID = hit.id
-    }
-
-    private func methodColor(_ method: HTTPMethod) -> Color {
-        switch method {
-        case .get: return Theme.up
-        case .post: return Theme.warning
-        case .put, .patch: return Theme.purple
-        case .delete: return Theme.down
-        case .head, .options: return Theme.muted
-        }
     }
 }
 

@@ -65,6 +65,22 @@ struct SecoraApp: App {
             }
             .keyboardShortcut("n", modifiers: [.command, .shift])
         }
+        // ⌘W önce sekmeyi kapatır (Postman/Safari gibi); sekme yoksa pencereyi.
+        // Standart "Kapat" bu grupta durduğu için grup değiştirilir.
+        CommandGroup(replacing: .saveItem) {
+            Button("Sekmeyi Kapat") {
+                if let id = appState.selectedRequestID, appState.openTabs.contains(id) {
+                    appState.closeTab(id)
+                } else {
+                    NSApp.keyWindow?.performClose(nil)
+                }
+            }
+            .keyboardShortcut("w", modifiers: .command)
+            Button("Pencereyi Kapat") {
+                NSApp.keyWindow?.performClose(nil)
+            }
+            .keyboardShortcut("w", modifiers: [.command, .shift])
+        }
         // Find, macOS'ta Düzen menüsünde yapıştırma grubundan sonra durur.
         CommandGroup(after: .pasteboard) {
             Divider()
@@ -82,6 +98,14 @@ struct SecoraApp: App {
                 .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
             }
             .disabled(appState.selectedRequestID == nil)
+            Divider()
+            // Ok tuşları klavye düzeninden bağımsız: ⇧⌘] Türkçe klavyede ⇧⌘Ü görünürdü.
+            Button("Sonraki Sekme") { appState.selectAdjacentTab(1) }
+                .keyboardShortcut(.rightArrow, modifiers: [.command, .option])
+                .disabled(appState.openTabs.count < 2)
+            Button("Önceki Sekme") { appState.selectAdjacentTab(-1) }
+                .keyboardShortcut(.leftArrow, modifiers: [.command, .option])
+                .disabled(appState.openTabs.count < 2)
             Divider()
             Button("Güvenlik Onaylarını Sıfırla…") {
                 confirmResetSecurityApprovals()
