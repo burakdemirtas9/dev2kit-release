@@ -946,20 +946,63 @@ final class AppState {
         case postman
     }
 
+    /// İncelemeden geçmiş, onay bekleyen içe aktarma.
+    struct PreparedImport: Identifiable {
+        let review: CollectionReview
+        let wasRenamed: Bool
+        var id: UUID { review.id }
+    }
+
+    /// Kullanıcının kararını bekleyen dosya içe aktarması; kenar çubuğu
+    /// inceleme ekranını bunun için açar.
+    struct PendingImport: Identifiable {
+        let id = UUID()
+        let items: [PreparedImport]
+    }
+
+    var pendingImport: PendingImport?
+
+    struct ImportFailure: Error {
+        let message: String
+    }
+
+    var importContext: ImportReviewer.Context {
+        ImportReviewer.Context(policy: hostPolicy, vaultSecretNames: Set(secretNames))
+    }
+
     func importCollection(from url: URL, source: ImportSource) {
+        let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+        guard size <= ImportReviewer.maxImportBytes else {
+            portingMessage = "Dosya çok büyük (\(ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file))); en fazla \(ImportReviewer.maxImportBytes / 1_048_576) MB içe aktarılır."
+            return
+        }
+        let data: Data
         do {
-            portingMessage = importCollectionData(try Data(contentsOf: url), source: source)
+            data = try Data(contentsOf: url)
         } catch {
             portingMessage = "Dosya okunamadı: \(error.localizedDescription)"
+            return
+        }
+        switch prepareImport(data, source: source) {
+        case .success(let prepared) where prepared.review.isClean:
+            // Bulgu yoksa ek bir onay adımı gereksiz sürtünme olurdu.
+            portingMessage = commitImport([prepared])
+        case .success(let prepared):
+            pendingImport = PendingImport(items: [prepared])
+        case .failure(let failure):
+            portingMessage = failure.message
         }
     }
 
-    /// Veriyi içe aktarır ve kullanıcıya gösterilecek özet metnini döner.
-    /// (Sheet içindeki akışlar mesajı yerinde gösterir, dosya akışı alert'e koyar.)
-    @discardableResult
-    func importCollectionData(_ data: Data, source: ImportSource) -> String {
+    /// Veriyi çözümler ve inceler; çalışma alanına HENÜZ eklemez.
+    /// - Parameter reservedNames: Aynı turda hazırlanan diğer koleksiyonların
+    ///   adları; birlikte onaylandıklarında ad çakışmasın.
+    func prepareImport(_ data: Data, source: ImportSource, reservedNames: [String] = []) -> Result<PreparedImport, ImportFailure> {
+        guard data.count <= ImportReviewer.maxImportBytes else {
+            return .failure(ImportFailure(message: "Koleksiyon çok büyük; en fazla \(ImportReviewer.maxImportBytes / 1_048_576) MB içe aktarılır."))
+        }
         do {
-            let existingNames = workspace.collections.map(\.name)
+            let existingNames = workspace.collections.map(\.name) + reservedNames
             let outcome: CollectionPorting.ImportOutcome
             switch source {
             case .secora:
@@ -967,18 +1010,37 @@ final class AppState {
             case .postman:
                 outcome = try CollectionPorting.importPostman(data, existingNames: existingNames)
             }
-            workspace.collections.append(outcome.collection)
-            persist()
-
-            var lines = ["\"\(outcome.collection.name)\" içe aktarıldı (\(outcome.collection.requests.count) istek)."]
-            if outcome.wasRenamed {
-                lines.append("İsim çakıştığı için \"\(outcome.collection.name)\" olarak eklendi.")
-            }
-            lines.append(contentsOf: outcome.warnings.map { "⚠︎ \($0)" })
-            return lines.joined(separator: "\n")
+            let review = ImportReviewer.review(collection: outcome.collection, notes: outcome.warnings, context: importContext)
+            return .success(PreparedImport(review: review, wasRenamed: outcome.wasRenamed))
         } catch {
-            return "İçe aktarma başarısız: \(error.localizedDescription)"
+            return .failure(ImportFailure(message: "İçe aktarma başarısız: \(error.localizedDescription)"))
         }
+    }
+
+    /// Onaylanan koleksiyonları ekler; kesin engelli istekler dışarıda kalır.
+    /// Kullanıcıya gösterilecek özet metnini döner.
+    @discardableResult
+    func commitImport(_ items: [PreparedImport]) -> String {
+        var lines: [String] = []
+        for item in items {
+            let collection = item.review.importableCollection
+            let skipped = item.review.blockedCount
+            if collection.requests.isEmpty, skipped > 0 {
+                lines.append("\"\(collection.name)\" aktarılmadı: tüm istekler güvenlik nedeniyle engellendi.")
+                continue
+            }
+            workspace.collections.append(collection)
+            lines.append("\"\(collection.name)\" içe aktarıldı (\(collection.requests.count) istek).")
+            if skipped > 0 {
+                lines.append("\(skipped) istek güvenlik nedeniyle aktarılmadı.")
+            }
+            if item.wasRenamed {
+                lines.append("İsim çakıştığı için \"\(collection.name)\" olarak eklendi.")
+            }
+            lines.append(contentsOf: item.review.notes.map { "⚠︎ \($0)" })
+        }
+        persist()
+        return lines.joined(separator: "\n")
     }
 
     func exportCollection(_ id: UUID) {

@@ -113,7 +113,9 @@ final class CurlImporterTests: XCTestCase {
         let result = try CurlImporter.parse("curl https://a.example.com -H 'Authorization: Bearer abc123'")
         XCTAssertEqual(result.request.auth, .bearer(token: "abc123"))
         XCTAssertFalse(result.request.headers.contains { $0.key.lowercased() == "authorization" })
-        XCTAssertTrue(result.warnings.contains { $0.contains("kimlik bilgisi") })
+        // Düz metin uyarısı içe aktarma incelemesinden gelir (tüm kaynaklarda ortak).
+        let findings = ImportReviewer.review(result.request, context: .init(policy: .notConfigured, vaultSecretNames: []))
+        XCTAssertTrue(findings.contains { $0.title == "Düz metin kimlik bilgisi" && $0.detail.contains("Bearer token") })
     }
 
     func testBasicAuthHeaderIsDecoded() throws {

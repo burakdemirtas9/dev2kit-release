@@ -218,9 +218,8 @@ public enum CurlImporter {
         model.headers = remainingHeaders
         model.method = explicitMethod ?? (hasBody(model) ? .post : .get)
 
-        if containsCredential(model) {
-            warnings.append("Komutta kimlik bilgisi var. Secrets'a ekleyip {{secret:isim}} ile referans vermen önerilir.")
-        }
+        // Düz metin kimlik bilgisi uyarısı ImportReviewer'dadır: hangi alanda
+        // olduğunu da söyler ve tüm içe aktarma yollarında aynıdır.
         return Result(request: model, warnings: warnings)
     }
 
@@ -277,14 +276,6 @@ public enum CurlImporter {
         case .none: return false
         case .raw(let content, _): return !content.isEmpty
         case .formURLEncoded(let fields), .multipartForm(let fields): return !fields.isEmpty
-        }
-    }
-
-    private static func containsCredential(_ model: RequestModel) -> Bool {
-        if model.auth != .none { return true }
-        let suspicious = ["authorization", "cookie", "x-api-key", "api-key", "apikey", "x-auth-token", "token"]
-        return model.headers.contains { header in
-            suspicious.contains(header.key.lowercased()) && !header.value.isEmpty
         }
     }
 }

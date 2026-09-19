@@ -18,6 +18,12 @@ struct PostmanImportView: View {
     @State private var collections: [PostmanAPIClient.CollectionSummary] = []
     @State private var selectedUIDs: Set<String> = []
     @State private var importingUID: String?
+    /// Bulgu çıkan içe aktarma: kullanıcının kararını bekler.
+    @State private var pendingReview: AppState.PendingImport?
+    /// İncelemedeki koleksiyonun Postman kimliği; onaylanınca "aktarıldı" işaretlenir.
+    @State private var pendingUIDs: [UUID: String] = [:]
+    /// İndirme ya da dönüştürme hataları; inceleme sonrası özete eklenir.
+    @State private var pendingFailures: [String] = []
     @State private var isImporting = false
     @State private var importedUIDs: Set<String> = []
     @State private var lastResultMessage: String?
@@ -72,6 +78,16 @@ struct PostmanImportView: View {
         .padding(20)
         .frame(width: 520, height: 440)
         .onAppear(perform: connectWithStoredKeyIfAvailable)
+        .sheet(item: $pendingReview) { pending in
+            ImportReviewView(
+                items: pending.items,
+                onConfirm: { finishImport(pending.items) },
+                onCancel: {
+                    pendingReview = nil
+                    lastResultMessage = (["İçe aktarmadan vazgeçildi."] + pendingFailures).joined(separator: "\n")
+                }
+            )
+        }
     }
 
     private var keySetup: some View {
@@ -227,8 +243,9 @@ struct PostmanImportView: View {
         connect(with: stored, saveKey: false)
     }
 
-    /// Seçilen koleksiyonları sırayla çekip içe aktarır; sonuçları tek özet
-    /// halinde gösterir. Bir tanesi başarısız olsa da kalanlarla devam edilir.
+    /// Seçilen koleksiyonları sırayla çeker ve inceler. Bulgu yoksa hemen
+    /// aktarır; varsa hepsini tek inceleme ekranında gösterir. Biri indirilemese
+    /// de kalanlarla devam edilir.
     private func importSelected() {
         guard let key = try? appState.secretStore.secret(forName: Self.keyName) else {
             errorMessage = "API anahtarı bulunamadı; yeniden bağlan."
@@ -239,23 +256,48 @@ struct PostmanImportView: View {
         isImporting = true
         errorMessage = nil
         Task {
-            var report: [String] = []
+            var prepared: [AppState.PreparedImport] = []
+            var uids: [UUID: String] = [:]
+            var failures: [String] = []
             for summary in targets {
                 importingUID = summary.id
                 do {
                     let data = try await client.fetchCollectionData(uid: summary.id, apiKey: key)
-                    report.append(appState.importCollectionData(data, source: .postman))
-                    importedUIDs.insert(summary.id)
-                    selectedUIDs.remove(summary.id)
+                    let reserved = prepared.map(\.review.collection.name)
+                    switch appState.prepareImport(data, source: .postman, reservedNames: reserved) {
+                    case .success(let item):
+                        prepared.append(item)
+                        uids[item.id] = summary.id
+                    case .failure(let failure):
+                        failures.append("✗ \"\(summary.name)\": \(failure.message)")
+                    }
                 } catch {
-                    report.append("✗ \"\(summary.name)\" çekilemedi: \(error.localizedDescription)")
+                    failures.append("✗ \"\(summary.name)\" çekilemedi: \(error.localizedDescription)")
                 }
             }
             importingUID = nil
             isImporting = false
-            let successCount = targets.count - report.filter { $0.hasPrefix("✗") }.count
-            lastResultMessage = (["\(successCount)/\(targets.count) koleksiyon aktarıldı."] + report)
-                .joined(separator: "\n")
+            pendingUIDs = uids
+            pendingFailures = failures
+            if prepared.isEmpty {
+                lastResultMessage = failures.joined(separator: "\n")
+            } else if prepared.allSatisfy(\.review.isClean) {
+                finishImport(prepared)
+            } else {
+                pendingReview = AppState.PendingImport(items: prepared)
+            }
         }
+    }
+
+    private func finishImport(_ items: [AppState.PreparedImport]) {
+        pendingReview = nil
+        let report = appState.commitImport(items)
+        for item in items {
+            if let uid = pendingUIDs[item.id] {
+                importedUIDs.insert(uid)
+                selectedUIDs.remove(uid)
+            }
+        }
+        lastResultMessage = ([report] + pendingFailures).joined(separator: "\n")
     }
 }

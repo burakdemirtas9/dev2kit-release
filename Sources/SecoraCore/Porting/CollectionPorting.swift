@@ -87,6 +87,12 @@ public enum CollectionPorting {
         if requests.isEmpty {
             warnings.append("Koleksiyonda dönüştürülebilir istek bulunamadı.")
         }
+        // Script'ler bilinçli olarak çalıştırılmaz (içe aktarılan kod, kullanıcının
+        // secret'larına erişebilirdi); ama sessizce kaybolmamalı.
+        let scripts = postman.scriptCount
+        if scripts > 0 {
+            warnings.append("\(scripts) Postman script'i (pre-request/test) aktarılmadı: Secora script çalıştırmaz. Bu script'lere bağlı adımları (token alma, değişken atama) elle yapman gerekebilir.")
+        }
         let (name, renamed) = try resolveName(
             postman.info.name ?? "Postman Koleksiyonu",
             suffix: "fromPostman",
@@ -263,6 +269,38 @@ private struct PostmanCollection: Decodable {
         let name: String?
         let item: [Item]?
         let request: PMRequest?
+        let event: [PMEvent]?
+
+        var scriptCount: Int {
+            (event ?? []).filter(\.hasCode).count + (item ?? []).reduce(0) { $0 + $1.scriptCount }
+        }
+    }
+
+    /// Pre-request / test script'i. Yalnızca varlığı sayılır; içerik okunmaz.
+    struct PMEvent: Decodable {
+        let script: Script?
+
+        struct Script: Decodable {
+            /// Postman `exec`'i satır dizisi ya da tek metin olarak yazabilir.
+            let lines: [String]
+
+            private enum CodingKeys: String, CodingKey { case exec }
+
+            init(from decoder: Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                if let array = try? container.decode([String].self, forKey: .exec) {
+                    lines = array
+                } else if let text = try? container.decode(String.self, forKey: .exec) {
+                    lines = [text]
+                } else {
+                    lines = []
+                }
+            }
+        }
+
+        var hasCode: Bool {
+            script?.lines.contains { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } ?? false
+        }
     }
 
     struct PMRequest: Decodable {
@@ -355,4 +393,9 @@ private struct PostmanCollection: Decodable {
 
     let info: Info
     let item: [Item]?
+    let event: [PMEvent]?
+
+    var scriptCount: Int {
+        (event ?? []).filter(\.hasCode).count + (item ?? []).reduce(0) { $0 + $1.scriptCount }
+    }
 }

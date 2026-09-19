@@ -485,6 +485,19 @@ struct SidebarView: View {
         .sheet(isPresented: $showingKibanaImport) {
             KibanaImportView()
         }
+        .sheet(item: Binding(
+            get: { appState.pendingImport },
+            set: { appState.pendingImport = $0 }
+        )) { pending in
+            ImportReviewView(
+                items: pending.items,
+                onConfirm: {
+                    appState.pendingImport = nil
+                    appState.portingMessage = appState.commitImport(pending.items)
+                },
+                onCancel: { appState.pendingImport = nil }
+            )
+        }
         .alert(
             "Koleksiyonu Yeniden Adlandır",
             isPresented: Binding(

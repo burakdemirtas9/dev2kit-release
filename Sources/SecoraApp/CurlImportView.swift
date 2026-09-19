@@ -13,6 +13,8 @@ struct CurlImportView: View {
     @State private var targetCollectionID: UUID?
     @State private var preview: CurlImporter.Result?
     @State private var parseError: String?
+    /// Önizlenen isteğin güvenlik bulguları; kesin engel varsa aktarılmaz.
+    @State private var findings: [ImportFinding] = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -76,7 +78,7 @@ struct CurlImportView: View {
                     .keyboardShortcut(.cancelAction)
                 Button("İçe Aktar") { performImport() }
                     .keyboardShortcut(.defaultAction)
-                    .disabled(preview == nil || targetCollectionID == nil)
+                    .disabled(preview == nil || targetCollectionID == nil || findings.contains { $0.severity == .block })
             }
         }
         .padding(20)
@@ -102,6 +104,12 @@ struct CurlImportView: View {
                 Text(details(request))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                ForEach(findings, id: \.self) { finding in
+                    Label("\(finding.title): \(finding.detail)", systemImage: finding.severity == .block ? "xmark.octagon.fill" : "exclamationmark.shield.fill")
+                        .font(.caption)
+                        .foregroundStyle(finding.severity == .block ? Theme.down : (finding.severity == .warn ? Theme.warning : .secondary))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 ForEach(result.warnings, id: \.self) { warning in
                     Label(warning, systemImage: "exclamationmark.triangle.fill")
                         .font(.caption)
@@ -135,14 +143,17 @@ struct CurlImportView: View {
         guard !trimmed.isEmpty else {
             preview = nil
             parseError = nil
+            findings = []
             return
         }
         do {
             preview = try CurlImporter.parse(trimmed, name: name.isEmpty ? "cURL İsteği" : name)
             parseError = nil
+            findings = preview.map { ImportReviewer.review($0.request, context: appState.importContext) } ?? []
         } catch {
             preview = nil
             parseError = error.localizedDescription
+            findings = []
         }
     }
 
