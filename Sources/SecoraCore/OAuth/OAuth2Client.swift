@@ -104,7 +104,7 @@ public enum OAuth2Client {
         if let resolvedClientSecret, !resolvedClientSecret.isEmpty {
             fields["client_secret"] = resolvedClientSecret
         }
-        return try tokenRequest(config: config, fields: fields)
+        return try tokenRequest(tokenURL: config.tokenURL, fields: fields)
     }
 
     public static func refreshRequest(
@@ -122,11 +122,47 @@ public enum OAuth2Client {
         }
         let scopes = config.scopes.trimmingCharacters(in: .whitespaces)
         if !scopes.isEmpty { fields["scope"] = scopes }
-        return try tokenRequest(config: config, fields: fields)
+        return try tokenRequest(tokenURL: config.tokenURL, fields: fields)
     }
 
-    private static func tokenRequest(config: OAuth2Config, fields: [String: String]) throws -> URLRequest {
-        let trimmed = config.tokenURL.trimmingCharacters(in: .whitespaces)
+    /// Client credentials (RFC 6749 §4.4): kullanıcı yok, uygulama kendi
+    /// kimliğiyle token alır. Değerler çağıran tarafından çözülmüş gelir.
+    public static func clientCredentialsRequest(
+        tokenURL: String,
+        clientID: String,
+        clientSecret: String,
+        scope: String,
+        authentication: TokenVariable.ClientAuthentication
+    ) throws -> URLRequest {
+        guard !clientID.trimmingCharacters(in: .whitespaces).isEmpty else {
+            throw FlowError(message: "Client ID boş.")
+        }
+        var fields = ["grant_type": "client_credentials"]
+        let trimmedScope = scope.trimmingCharacters(in: .whitespaces)
+        if !trimmedScope.isEmpty { fields["scope"] = trimmedScope }
+        switch authentication {
+        case .requestBody:
+            fields["client_id"] = clientID
+            fields["client_secret"] = clientSecret
+            return try tokenRequest(tokenURL: tokenURL, fields: fields)
+        case .basicHeader:
+            var request = try tokenRequest(tokenURL: tokenURL, fields: fields)
+            // RFC 6749 §2.3.1: kimlik ve secret önce form kodlanır, sonra base64.
+            let credentials = "\(formEncode(clientID)):\(formEncode(clientSecret))"
+            request.setValue("Basic \(Data(credentials.utf8).base64EncodedString())", forHTTPHeaderField: "Authorization")
+            return request
+        }
+    }
+
+    private static func formEncode(_ value: String) -> String {
+        var allowed = CharacterSet.alphanumerics
+        allowed.insert(charactersIn: "-._*")
+        return (value.addingPercentEncoding(withAllowedCharacters: allowed) ?? value)
+            .replacingOccurrences(of: "%20", with: "+")
+    }
+
+    private static func tokenRequest(tokenURL: String, fields: [String: String]) throws -> URLRequest {
+        let trimmed = tokenURL.trimmingCharacters(in: .whitespaces)
         guard let url = URL(string: trimmed), url.scheme != nil, url.host != nil else {
             throw FlowError(message: "Geçersiz token adresi.")
         }

@@ -6,11 +6,30 @@ public struct EnvironmentModel: Codable, Identifiable, Hashable, Sendable {
     public var id: UUID
     public var name: String
     public var variables: [KeyValueEntry]
+    /// Değeri OAuth2 client credentials ile alınan değişkenler (`{{accessToken}}`).
+    public var tokenVariables: [TokenVariable]
 
-    public init(id: UUID = UUID(), name: String = "Yeni Environment", variables: [KeyValueEntry] = []) {
+    public init(
+        id: UUID = UUID(),
+        name: String = "Yeni Environment",
+        variables: [KeyValueEntry] = [],
+        tokenVariables: [TokenVariable] = []
+    ) {
         self.id = id
         self.name = name
         self.variables = variables
+        self.tokenVariables = tokenVariables
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            id: try container.decode(UUID.self, forKey: .id),
+            name: try container.decode(String.self, forKey: .name),
+            variables: try container.decode([KeyValueEntry].self, forKey: .variables),
+            // Bu alan eklenmeden önce yazılmış dosyalarda yok.
+            tokenVariables: try container.decodeIfPresent([TokenVariable].self, forKey: .tokenVariables) ?? []
+        )
     }
 }
 

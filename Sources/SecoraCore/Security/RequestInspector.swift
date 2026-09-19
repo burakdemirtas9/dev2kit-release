@@ -197,6 +197,24 @@ public enum SecretReferences {
     private static let maxDepth = 5
 
     public static func names(in model: RequestModel, environment: EnvironmentModel?) -> Set<String> {
+        var names = Set<String>()
+        if case .oauth2(let config) = model.auth { names.insert(config.tokenSecretName) }
+        let variables = variableMap(environment)
+        for text in templateTexts(of: model) { collect(from: text, variables: variables, depth: 0, into: &names) }
+        return names
+    }
+
+    /// İsteğin doğrudan ya da başka değişkenler üzerinden kullandığı değişken adları
+    /// (`{{secret:…}}` hariç). Tanımsız değişkenler de dahildir.
+    public static func variableNames(in model: RequestModel, environment: EnvironmentModel?) -> Set<String> {
+        var names = Set<String>()
+        let variables = variableMap(environment)
+        for text in templateTexts(of: model) { collectVariables(from: text, variables: variables, depth: 0, into: &names) }
+        return names
+    }
+
+    /// Gönderimde çözülen tüm metin alanları (devre dışı satırlar hariç).
+    private static func templateTexts(of model: RequestModel) -> [String] {
         var texts = [model.url]
         for entry in model.headers where entry.enabled { texts += [entry.key, entry.value] }
         for entry in model.queryParams where entry.enabled { texts += [entry.key, entry.value] }
@@ -206,17 +224,13 @@ public enum SecretReferences {
         case .formURLEncoded(let fields), .multipartForm(let fields):
             for field in fields where field.enabled { texts += [field.key, field.value] }
         }
-        var names = Set<String>()
         switch model.auth {
-        case .none: break
+        case .none, .oauth2: break
         case .basic(let username, let password): texts += [username, password]
         case .bearer(let token): texts.append(token)
         case .apiKey(let key, let value, _): texts += [key, value]
-        case .oauth2(let config): names.insert(config.tokenSecretName)
         }
-        let variables = variableMap(environment)
-        for text in texts { collect(from: text, variables: variables, depth: 0, into: &names) }
-        return names
+        return texts
     }
 
     /// Adreste ya da query'de (API key query auth'u dahil) kullanılan secret'lar.
@@ -236,6 +250,18 @@ public enum SecretReferences {
             map[entry.key] = entry.value
         }
         return map
+    }
+
+    private static func collectVariables(from text: String, variables: [String: String], depth: Int, into names: inout Set<String>) {
+        guard depth < maxDepth, text.contains("{{") else { return }
+        for match in text.matches(of: pattern) {
+            let token = String(match.1)
+            guard !token.hasPrefix("secret:") else { continue }
+            names.insert(token)
+            if let value = variables[token] {
+                collectVariables(from: value, variables: variables, depth: depth + 1, into: &names)
+            }
+        }
     }
 
     private static func collect(from text: String, variables: [String: String], depth: Int, into names: inout Set<String>) {

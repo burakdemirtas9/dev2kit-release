@@ -75,6 +75,32 @@ public struct OAuth2Service: Sendable {
         return token
     }
 
+    /// Client credentials ile token alır. Değerler çözülmüş gelir.
+    /// Sağlayıcı `expires_in` göndermezse süre JWT'nin `exp` alanından okunur;
+    /// o da yoksa token, sunucu 401 dönene kadar geçerli sayılır.
+    public func clientCredentials(
+        tokenURL: String,
+        clientID: String,
+        clientSecret: String,
+        scope: String,
+        authentication: TokenVariable.ClientAuthentication,
+        hostPolicy: HostPolicyState
+    ) async throws -> OAuth2Token {
+        try Self.enforce(hostPolicy, on: tokenURL)
+        let request = try OAuth2Client.clientCredentialsRequest(
+            tokenURL: tokenURL,
+            clientID: clientID,
+            clientSecret: clientSecret,
+            scope: scope,
+            authentication: authentication
+        )
+        var token = try await perform(request, hostPolicy: hostPolicy)
+        if token.expiresAt == nil {
+            token.expiresAt = HeaderClassifier.jwtExpiry(token.accessToken)
+        }
+        return token
+    }
+
     static func enforce(_ policy: HostPolicyState, on address: String) throws {
         let url = URL(string: address.trimmingCharacters(in: .whitespaces))
         if let violation = policy.violation(for: url) {

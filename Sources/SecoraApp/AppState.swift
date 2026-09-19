@@ -671,18 +671,28 @@ final class AppState {
         inFlight[id]?.cancel()
         setResponse(.loading, for: id)
         let environment = activeEnvironment
+        let usedTokens = TokenVariables.referenced(by: request, environment: environment)
 
         inFlight[id] = Task { [weak self] in
             guard let self else { return }
             do {
                 await self.ensureValidToken(request)
+                // Token değişkeni kullanan istekte önce geçerli token hazırlanır;
+                // süresi dolmamışsa bellektekiyle hiç ağa çıkılmadan devam edilir.
+                let (sendEnvironment, sendStore) = try await self.prepareTokens(usedTokens, environment: environment)
                 let response = try await engine.send(
                     request,
-                    environment: environment,
-                    secretStore: secretStore,
+                    environment: sendEnvironment,
+                    secretStore: sendStore,
                     hostPolicy: self.hostPolicy,
                     approvedWarnings: self.approvalStore.load()
                 )
+                // Token sunucuda erken geçersiz kılınmış olabilir: bir sonraki
+                // gönderim yenisini alsın. İstek bilerek yeniden gönderilmez;
+                // kullanıcı 401'i görür ve tekrar gönderir.
+                if response.statusCode == 401, let environment {
+                    usedTokens.forEach { self.forgetToken($0, in: environment) }
+                }
                 let display = await Task.detached { AppState.makeDisplay(response) }.value
                 try Task.checkCancellation()
                 self.setResponse(.success(display), for: id)
@@ -752,6 +762,97 @@ final class AppState {
     }
 
     @ObservationIgnored private var inFlight: [UUID: Task<Void, Never>] = [:]
+
+    // MARK: - Token değişkenleri (client credentials)
+
+    enum TokenState: Equatable {
+        case fetching
+        case valid(expiresAt: Date?)
+        case failed(String)
+    }
+
+    /// Arayüz için: environment + değişken başına son durum.
+    private(set) var tokenStates: [String: TokenState] = [:]
+    /// Token'lar yalnızca bellekte; uygulama kapanınca gider.
+    @ObservationIgnored private var tokenCache: [String: OAuth2Token] = [:]
+    /// Süren alma işlemleri: aynı anda gelen istekler tek isteği paylaşır.
+    @ObservationIgnored private var tokenFetches: [String: Task<OAuth2Token, Error>] = [:]
+
+    /// Anahtar değişkenin ayarlarını da içerir: token adresi, client ya da
+    /// scope değişince eski token (süresi dolmamış olsa bile) kullanılmaz.
+    func tokenKey(_ variable: TokenVariable, in environment: EnvironmentModel) -> String {
+        "\(environment.id.uuidString)/\(variable.id.uuidString)/\(variable.hashValue)"
+    }
+
+    func tokenState(_ variable: TokenVariable, in environment: EnvironmentModel) -> TokenState? {
+        tokenStates[tokenKey(variable, in: environment)]
+    }
+
+    /// Gönderim için environment ve secret deposunu hazırlar: kullanılan her
+    /// token değişkeni geçerli bir token'a bağlanır.
+    private func prepareTokens(
+        _ variables: [TokenVariable],
+        environment: EnvironmentModel?
+    ) async throws -> (EnvironmentModel?, SecretStore) {
+        guard let environment, !variables.isEmpty else { return (environment, secretStore) }
+        var overrides: [String: String] = [:]
+        for variable in variables {
+            overrides[variable.secretName] = try await validToken(variable, in: environment).accessToken
+        }
+        return (TokenVariables.environmentForSend(environment), OverlaySecretStore(base: secretStore, overrides: overrides))
+    }
+
+    /// Bellekteki token geçerliyse onu, değilse yenisini döner.
+    func validToken(_ variable: TokenVariable, in environment: EnvironmentModel, forceRefresh: Bool = false) async throws -> OAuth2Token {
+        let key = tokenKey(variable, in: environment)
+        if !forceRefresh, let cached = tokenCache[key], !cached.isExpired() { return cached }
+        if let running = tokenFetches[key] {
+            do {
+                return try await running.value
+            } catch {
+                throw TokenError(variable: variable.trimmedName, reason: error.localizedDescription)
+            }
+        }
+
+        let resolver = VariableResolver(environment: environment, secretStore: secretStore)
+        let service = oauthService
+        let policy = hostPolicy
+        let task = Task { () throws -> OAuth2Token in
+            try await service.clientCredentials(
+                tokenURL: try resolver.resolve(variable.tokenURL),
+                clientID: try resolver.resolve(variable.clientID),
+                clientSecret: try resolver.resolve(variable.clientSecret),
+                scope: try resolver.resolve(variable.scope),
+                authentication: variable.clientAuthentication,
+                hostPolicy: policy
+            )
+        }
+        tokenFetches[key] = task
+        tokenStates[key] = .fetching
+        defer { tokenFetches[key] = nil }
+        do {
+            let token = try await task.value
+            tokenCache[key] = token
+            tokenStates[key] = .valid(expiresAt: token.expiresAt)
+            return token
+        } catch {
+            tokenCache[key] = nil
+            tokenStates[key] = .failed(error.localizedDescription)
+            throw TokenError(variable: variable.trimmedName, reason: error.localizedDescription)
+        }
+    }
+
+    func forgetToken(_ variable: TokenVariable, in environment: EnvironmentModel) {
+        let key = tokenKey(variable, in: environment)
+        tokenCache[key] = nil
+        tokenStates[key] = nil
+    }
+
+    struct TokenError: LocalizedError {
+        let variable: String
+        let reason: String
+        var errorDescription: String? { "{{\(variable)}} için token alınamadı; istek gönderilmedi. \(reason)" }
+    }
 
     // MARK: - OAuth2
 
@@ -1097,6 +1198,7 @@ final class AppState {
         var options: [String] = activeEnvironment?.variables
             .filter { $0.enabled && !$0.key.isEmpty }
             .map(\.key) ?? []
+        options += activeEnvironment?.tokenVariables.map(\.trimmedName).filter { !$0.isEmpty && !options.contains($0) } ?? []
         options += secretNames.map { "secret:\($0)" }
         let query = token.trimmingCharacters(in: .whitespaces).lowercased()
         let filtered = query.isEmpty
@@ -1106,11 +1208,24 @@ final class AppState {
     }
 
     func curlCommand(for request: RequestModel, includeSecrets: Bool) -> String {
+        // Token değişkenleri: bellekte geçerli token varsa o, yoksa değişken adı yazılır.
+        var environment = activeEnvironment
+        var store = secretStore
+        if let active = activeEnvironment, !active.tokenVariables.isEmpty {
+            var overrides: [String: String] = [:]
+            for variable in active.tokenVariables {
+                let cached = tokenCache[tokenKey(variable, in: active)]
+                overrides[variable.secretName] = cached.flatMap { $0.isExpired() ? nil : $0.accessToken }
+                    ?? "{{\(variable.trimmedName)}}"
+            }
+            environment = TokenVariables.environmentForSend(active)
+            store = OverlaySecretStore(base: secretStore, overrides: overrides)
+        }
         do {
             return try CurlExporter.export(
                 request,
-                environment: activeEnvironment,
-                secretStore: secretStore,
+                environment: environment,
+                secretStore: store,
                 includeSecrets: includeSecrets
             )
         } catch {
