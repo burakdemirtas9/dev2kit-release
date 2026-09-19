@@ -81,12 +81,14 @@ public enum RedirectGuard {
             case policyDisabled
             case tooManyRedirects
             case insecureDowngrade
+            case hostNotAllowed
 
             public var explanation: String {
                 switch self {
                 case .policyDisabled: return "yönlendirme takibi kapalı"
                 case .tooManyRedirects: return "yönlendirme sınırı aşıldı"
                 case .insecureDowngrade: return "https → http düşüşü engellendi"
+                case .hostNotAllowed: return "yönetici politikası dışındaki host'a yönlendirme engellendi"
                 }
             }
         }
@@ -109,9 +111,11 @@ public enum RedirectGuard {
         to destination: URL,
         policy: RedirectPolicy,
         redirectCount: Int,
-        credentialHeaders: [String] = sensitiveHeaders
+        credentialHeaders: [String] = sensitiveHeaders,
+        hostPolicy: HostPolicyState = .notConfigured
     ) -> Decision {
         guard policy.follow else { return .stop(reason: .policyDisabled) }
+        guard hostPolicy.violation(for: destination) == nil else { return .stop(reason: .hostNotAllowed) }
         guard redirectCount < policy.maxRedirects else { return .stop(reason: .tooManyRedirects) }
 
         let sourceSecure = source.scheme?.lowercased() == "https"

@@ -31,6 +31,33 @@ struct ResponseView: View {
                 systemImage: "exclamationmark.triangle",
                 description: Text(message)
             )
+        case .blocked(let findings):
+            securityReview(
+                findings,
+                title: "İstek engellendi",
+                subtitle: "Bu istek gönderilmedi ve bu haliyle gönderilemez.",
+                icon: "xmark.shield.fill",
+                tint: Theme.down
+            )
+        case .needsApproval(let findings):
+            securityReview(
+                findings,
+                title: "İstek durduruldu",
+                subtitle: "Gönderilmeden önce kontrol etmen gereken durumlar var. Onaylarsan aynı durum bir daha sorulmaz.",
+                icon: "exclamationmark.shield.fill",
+                tint: Theme.warning
+            ) {
+                HStack {
+                    Spacer()
+                    Button("Vazgeç", role: .cancel) {
+                        appState.dismissSecurityReview()
+                    }
+                    .keyboardShortcut(.cancelAction)
+                    Button("Yine de Gönder") {
+                        appState.approveAndSend(findings)
+                    }
+                }
+            }
         case .success(let display):
             let response = display.data
             VStack(spacing: 0) {
@@ -101,6 +128,44 @@ struct ResponseView: View {
                 Text(fileSaveError ?? "")
             }
         }
+    }
+
+    /// Güvenlik bulgularının listesi. Onay düğmeleri yalnızca uyarılarda
+    /// verilir; kesin engelde kullanıcıya geçersiz kılma yolu sunulmaz.
+    private func securityReview(
+        _ findings: [SecurityFinding],
+        title: String,
+        subtitle: String,
+        icon: String,
+        tint: Color,
+        @ViewBuilder actions: () -> some View = { EmptyView() }
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label(title, systemImage: icon)
+                .font(.title3.bold())
+                .foregroundStyle(tint)
+            Text(subtitle)
+                .foregroundStyle(.secondary)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(findings) { finding in
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(finding.title).fontWeight(.semibold)
+                            Text(finding.detail)
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(10)
+                        .background(tint.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+                    }
+                }
+            }
+            actions()
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     /// Yönlendirme zinciri: her adımda nereye gidildiği ve hangi hassas

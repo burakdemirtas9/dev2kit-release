@@ -10,15 +10,24 @@ final class RedirectTracker: NSObject, URLSessionTaskDelegate, @unchecked Sendab
     private let policy: RedirectPolicy
     /// Bu isteğe özgü kimlik taşıyan başlıklar (API key başlığı, secret referanslı başlıklar).
     private let credentialHeaders: [String]
+    /// Yönlendirme hedefi de yönetici politikasına tabidir: izinli bir host
+    /// 302 ile izinsiz bir host'a kaçış yolu olmasın.
+    private let hostPolicy: HostPolicyState
     /// Bu isteğe uygulanacak TLS malzemesi (kurum CA'sı, istemci kimliği).
     private let tlsProfile: ResolvedTLSProfile?
     private let lock = NSLock()
     private var recorded: [RedirectStep] = []
     private var stop: RedirectGuard.Decision.StopReason?
 
-    init(policy: RedirectPolicy, credentialHeaders: [String], tlsProfile: ResolvedTLSProfile? = nil) {
+    init(
+        policy: RedirectPolicy,
+        credentialHeaders: [String],
+        hostPolicy: HostPolicyState,
+        tlsProfile: ResolvedTLSProfile? = nil
+    ) {
         self.policy = policy
         self.credentialHeaders = credentialHeaders
+        self.hostPolicy = hostPolicy
         self.tlsProfile = tlsProfile
     }
 
@@ -77,7 +86,8 @@ final class RedirectTracker: NSObject, URLSessionTaskDelegate, @unchecked Sendab
             to: destination,
             policy: policy,
             redirectCount: recorded.count,
-            credentialHeaders: credentialHeaders
+            credentialHeaders: credentialHeaders,
+            hostPolicy: hostPolicy
         ) {
         case .stop(let reason):
             stop = reason

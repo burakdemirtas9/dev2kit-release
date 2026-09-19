@@ -186,6 +186,11 @@ final class AppState {
     private let store: WorkspaceStore
     private let engine = RequestEngine()
     private let historyStore = HistoryStore()
+    private let approvalStore = SecurityApprovalStore()
+
+    /// Yönetici politikası her kullanımda diskten okunur: yönetici dosyayı
+    /// değiştirince uygulamayı yeniden başlatmak gerekmesin. Dosya küçük.
+    var hostPolicy: HostPolicyState { HostPolicyLoader.load() }
 
     // MARK: - Geçmiş
 
@@ -303,6 +308,10 @@ final class AppState {
         case loading
         case success(ResponseDisplay)
         case failure(String)
+        /// Kesin güvenlik engeli; istek gönderilmedi.
+        case blocked([SecurityFinding])
+        /// Güvenlik uyarıları; istek gönderilmedi, kullanıcının kararı bekleniyor.
+        case needsApproval([SecurityFinding])
     }
 
     /// Yanıtın gösterime hazır hali. Pretty-print ve dil tespiti yanıt gelince
@@ -585,7 +594,13 @@ final class AppState {
             guard let self else { return }
             do {
                 await self.ensureValidToken(request)
-                let response = try await engine.send(request, environment: environment, secretStore: secretStore)
+                let response = try await engine.send(
+                    request,
+                    environment: environment,
+                    secretStore: secretStore,
+                    hostPolicy: self.hostPolicy,
+                    approvedWarnings: self.approvalStore.load()
+                )
                 let display = await Task.detached { AppState.makeDisplay(response) }.value
                 try Task.checkCancellation()
                 self.setResponse(.success(display), for: id)
@@ -606,12 +621,44 @@ final class AppState {
                 self.setResponse(.idle, for: id)
             } catch let error as URLError where error.code == .cancelled {
                 self.setResponse(.idle, for: id)
+            } catch RequestEngineError.securityBlocked(let findings) {
+                self.setResponse(.blocked(findings), for: id)
+                // Denetim izi: engellenen gönderim geçmişte görünsün.
+                let reasons = findings.map(\.title).joined(separator: ", ")
+                self.recordHistory(request, outcome: .failed(message: "Güvenlik engeli: \(reasons)"), responseText: nil)
+            } catch RequestEngineError.needsApproval(let findings) {
+                self.setResponse(.needsApproval(findings), for: id)
             } catch {
                 self.setResponse(.failure(error.localizedDescription), for: id)
                 self.recordHistory(request, outcome: .failed(message: error.localizedDescription), responseText: nil)
             }
             self.inFlight[id] = nil
         }
+    }
+
+    /// Kullanıcı uyarıları gördü ve "Yine de gönder" dedi: onaylar kalıcı
+    /// kaydedilir, seçili isteğin GÜNCEL hali yeniden gönderilir. İstek bu
+    /// arada değiştiyse yeni durum yeniden denetlenir; onay yalnızca
+    /// gösterilen uyarıları kapsar.
+    func approveAndSend(_ findings: [SecurityFinding]) {
+        guard let request = selectedRequest?.wrappedValue else { return }
+        do {
+            try approvalStore.approve(findings.compactMap(\.approvalKey))
+        } catch {
+            setResponse(.failure("Onay kaydedilemedi: \(error.localizedDescription)"), for: request.id)
+            return
+        }
+        send(request)
+    }
+
+    func dismissSecurityReview() {
+        guard let id = selectedRequestID else { return }
+        setResponse(.idle, for: id)
+    }
+
+    /// Tüm "Yine de gönder" onaylarını unutur; uyarılar yeniden sorulur.
+    func resetSecurityApprovals() throws {
+        try approvalStore.reset()
     }
 
     /// Uçuştaki isteği iptal eder. Bağlantı kapanır, kimlik bilgisi taşıyan
@@ -661,6 +708,7 @@ final class AppState {
                 let token = try await oauthService.authorize(
                     config: config,
                     resolvedClientSecret: resolvedClientSecret(config),
+                    hostPolicy: hostPolicy,
                     openURL: { url in NSWorkspace.shared.open(url) }
                 )
                 try store(token, for: config)
@@ -689,7 +737,8 @@ final class AppState {
             let renewed = try await oauthService.refresh(
                 config: config,
                 refreshToken: refreshToken,
-                resolvedClientSecret: resolvedClientSecret(config)
+                resolvedClientSecret: resolvedClientSecret(config),
+                hostPolicy: hostPolicy
             )
             try store(renewed, for: config)
         } catch {

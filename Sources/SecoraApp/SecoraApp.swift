@@ -82,6 +82,25 @@ struct SecoraApp: App {
                 .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
             }
             .disabled(appState.selectedRequestID == nil)
+            Divider()
+            Button("Güvenlik Onaylarını Sıfırla…") {
+                confirmResetSecurityApprovals()
+            }
+        }
+    }
+
+    /// Onaylar kalıcı olduğu için geri almanın da bir yolu olmalı.
+    private func confirmResetSecurityApprovals() {
+        let alert = NSAlert()
+        alert.messageText = "Güvenlik onayları sıfırlansın mı?"
+        alert.informativeText = "\"Yine de gönder\" ile onayladığın tüm uyarılar unutulur; aynı durumlar yeniden sorulur."
+        alert.addButton(withTitle: "Sıfırla")
+        alert.addButton(withTitle: "Vazgeç")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        do {
+            try appState.resetSecurityApprovals()
+        } catch {
+            NSAlert(error: error).runModal()
         }
     }
 

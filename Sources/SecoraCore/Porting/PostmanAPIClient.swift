@@ -18,9 +18,12 @@ public struct PostmanAPIClient: Sendable {
         case unauthorized
         case http(Int)
         case invalidResponse
+        case blockedByPolicy(String)
 
         public var errorDescription: String? {
             switch self {
+            case .blockedByPolicy(let reason):
+                return "Postman API'sine bağlanılmadı: \(reason)"
             case .unauthorized:
                 return "Postman API anahtarı geçersiz (401). Anahtarı kontrol et: postman.co → Settings → API Keys."
             case .http(let code):
@@ -34,7 +37,12 @@ public struct PostmanAPIClient: Sendable {
     private let session: URLSession
     private let baseURL = URL(string: "https://api.getpostman.com")!
 
-    public init(timeout: TimeInterval = 30) {
+    /// Postman API'si de dışarıya giden bir bağlantı: yönetici politikası
+    /// api.getpostman.com'a izin vermiyorsa hesap bağlantısı kurulmaz.
+    private let hostPolicy: @Sendable () -> HostPolicyState
+
+    public init(timeout: TimeInterval = 30, hostPolicy: @escaping @Sendable () -> HostPolicyState = { HostPolicyLoader.load() }) {
+        self.hostPolicy = hostPolicy
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = timeout
         self.session = URLSession(configuration: config)
@@ -58,8 +66,12 @@ public struct PostmanAPIClient: Sendable {
 
     private func get(path: String, apiKey: String) async throws -> Data {
         var request = URLRequest(url: baseURL.appendingPathComponent(path))
+        let policy = hostPolicy()
+        if let violation = policy.violation(for: request.url) {
+            throw APIError.blockedByPolicy(violation)
+        }
         request.setValue(apiKey, forHTTPHeaderField: "X-Api-Key")
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.data(for: request, delegate: PolicyRedirectGuard(policy: policy))
         guard let http = response as? HTTPURLResponse else {
             throw APIError.invalidResponse
         }

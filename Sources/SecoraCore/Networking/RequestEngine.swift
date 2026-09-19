@@ -41,9 +41,15 @@ public enum RequestEngineError: Error, LocalizedError {
     case invalidURL(String)
     case notHTTPResponse
     case notAuthorized(String)
+    /// Kesin güvenlik engeli: istek gönderilmedi, kullanıcı geçersiz kılamaz.
+    case securityBlocked([SecurityFinding])
+    /// Onay bekleyen güvenlik uyarıları: istek gönderilmedi.
+    case needsApproval([SecurityFinding])
 
     public var errorDescription: String? {
         switch self {
+        case .securityBlocked(let findings), .needsApproval(let findings):
+            return findings.map { "\($0.title): \($0.detail)" }.joined(separator: "\n")
         case .invalidURL(let url): return "Geçersiz URL: \(url)"
         case .notHTTPResponse: return "Sunucudan HTTP yanıtı alınamadı."
         case .notAuthorized(let name):
@@ -102,13 +108,30 @@ public final class RequestEngine: @unchecked Sendable {
     /// okumamak için burada tutulur; değişince AppState yeniler.
     public var trustStoreCertificates: [SecCertificate] = []
 
+    /// - Parameters:
+    ///   - hostPolicy: Yönetici host politikası. Bilerek varsayılan değersiz:
+    ///     her çağıran politikayı açıkça vermek zorunda, unutulup atlanamasın.
+    ///   - approvedWarnings: Kullanıcının daha önce onayladığı uyarı anahtarları.
     public func send(
         _ model: RequestModel,
         environment: EnvironmentModel?,
-        secretStore: SecretStore
+        secretStore: SecretStore,
+        hostPolicy: HostPolicyState,
+        approvedWarnings: Set<String> = []
     ) async throws -> ResponseData {
         let resolver = VariableResolver(environment: environment, secretStore: secretStore)
         var urlRequest = try buildURLRequest(model, resolver: resolver)
+
+        // Ağa çıkmadan önce: engel varsa hiç gönderilmez, onaylanmamış uyarı
+        // varsa kullanıcıya sorulmak üzere durulur.
+        let findings = RequestInspector.inspect(
+            model: model,
+            request: urlRequest,
+            environment: environment,
+            policy: hostPolicy
+        )
+        try RequestInspector.enforce(findings, approved: approvedWarnings)
+
         urlRequest.timeoutInterval = model.options.timeout
         // Çerez gönderimi istek başına kapatılabilir.
         urlRequest.httpShouldHandleCookies = model.options.sendCookies
@@ -118,6 +141,7 @@ public final class RequestEngine: @unchecked Sendable {
         let tracker = RedirectTracker(
             policy: model.options.redirect,
             credentialHeaders: RedirectGuard.credentialHeaders(for: model),
+            hostPolicy: hostPolicy,
             tlsProfile: tlsProfile
         )
         let start = ContinuousClock.now
@@ -177,10 +201,7 @@ public final class RequestEngine: @unchecked Sendable {
         request.httpMethod = model.method.rawValue
 
         for entry in model.headers where entry.enabled && !entry.key.isEmpty {
-            request.setValue(
-                try resolver.resolve(entry.value),
-                forHTTPHeaderField: try resolver.resolve(entry.key)
-            )
+            try setHeader(try resolver.resolve(entry.value), named: try resolver.resolve(entry.key), on: &request)
         }
 
         switch model.auth {
@@ -189,26 +210,38 @@ public final class RequestEngine: @unchecked Sendable {
         case .basic(let username, let password):
             let credentials = "\(try resolver.resolve(username)):\(try resolver.resolve(password))"
             let encoded = Data(credentials.utf8).base64EncodedString()
-            request.setValue("Basic \(encoded)", forHTTPHeaderField: "Authorization")
+            try setHeader("Basic \(encoded)", named: "Authorization", on: &request)
         case .bearer(let token):
-            request.setValue("Bearer \(try resolver.resolve(token))", forHTTPHeaderField: "Authorization")
+            try setHeader("Bearer \(try resolver.resolve(token))", named: "Authorization", on: &request)
         case .apiKey(let key, let value, .header):
-            request.setValue(try resolver.resolve(value), forHTTPHeaderField: try resolver.resolve(key))
+            try setHeader(try resolver.resolve(value), named: try resolver.resolve(key), on: &request)
         case .oauth2(let config):
             guard let stored = try resolver.secret(named: config.tokenSecretName), !stored.isEmpty else {
                 throw RequestEngineError.notAuthorized(config.name)
             }
             if let data = stored.data(using: .utf8),
                let token = try? JSONDecoder().decode(OAuth2Token.self, from: data) {
-                request.setValue(token.authorizationHeaderValue, forHTTPHeaderField: "Authorization")
+                try setHeader(token.authorizationHeaderValue, named: "Authorization", on: &request)
             } else {
                 // cURL dışa aktarımında vault yerine placeholder gelir; aynen geçir.
-                request.setValue("Bearer \(stored)", forHTTPHeaderField: "Authorization")
+                try setHeader("Bearer \(stored)", named: "Authorization", on: &request)
             }
         }
 
         try attachBody(to: &request, model: model, resolver: resolver)
         return request
+    }
+
+    /// Foundation satır sonu (CR/LF) içeren başlığı SESSİZCE düşürür: istek
+    /// kimlik bilgisi olmadan gider ve kullanıcı nedenini göremez. Değer
+    /// (secret ya da değişkenden gelmiş olabilir) burada çözülmüş haliyle
+    /// denetlenir ve açık bir güvenlik engeli olarak durdurulur.
+    private func setHeader(_ value: String, named name: String, on request: inout URLRequest) throws {
+        if RequestInspector.containsHiddenCharacters(name, allowTab: false)
+            || RequestInspector.containsHiddenCharacters(value, allowTab: true) {
+            throw RequestEngineError.securityBlocked([RequestInspector.headerInjectionFinding(name)])
+        }
+        request.setValue(value, forHTTPHeaderField: name)
     }
 
     private func attachBody(

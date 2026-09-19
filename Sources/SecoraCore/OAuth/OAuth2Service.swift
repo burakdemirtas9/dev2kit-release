@@ -16,11 +16,16 @@ public struct OAuth2Service: Sendable {
     }
 
     /// Tam yetkilendirme akışı. Dönen token çağıran tarafından vault'a yazılır.
+    /// Yetkilendirme ve token adresleri de yönetici politikasına tabidir:
+    /// tarayıcı açılmadan ve token isteği gitmeden önce kontrol edilir.
     public func authorize(
         config: OAuth2Config,
         resolvedClientSecret: String?,
+        hostPolicy: HostPolicyState,
         openURL: @Sendable (URL) -> Void
     ) async throws -> OAuth2Token {
+        try Self.enforce(hostPolicy, on: config.authorizationURL)
+        try Self.enforce(hostPolicy, on: config.tokenURL)
         let receiver = try LoopbackReceiver()
         defer { receiver.stop() }
 
@@ -46,20 +51,22 @@ public struct OAuth2Service: Sendable {
             redirectURI: redirectURI,
             resolvedClientSecret: resolvedClientSecret
         )
-        return try await perform(request)
+        return try await perform(request, hostPolicy: hostPolicy)
     }
 
     public func refresh(
         config: OAuth2Config,
         refreshToken: String,
-        resolvedClientSecret: String?
+        resolvedClientSecret: String?,
+        hostPolicy: HostPolicyState
     ) async throws -> OAuth2Token {
+        try Self.enforce(hostPolicy, on: config.tokenURL)
         let request = try OAuth2Client.refreshRequest(
             config: config,
             refreshToken: refreshToken,
             resolvedClientSecret: resolvedClientSecret
         )
-        var token = try await perform(request)
+        var token = try await perform(request, hostPolicy: hostPolicy)
         // Bazı sağlayıcılar yenilemede yeni refresh token döndürmez;
         // eskisini koruyoruz, aksi halde bir sonraki yenileme yapılamaz.
         if token.refreshToken == nil {
@@ -68,11 +75,38 @@ public struct OAuth2Service: Sendable {
         return token
     }
 
-    private func perform(_ request: URLRequest) async throws -> OAuth2Token {
-        let (data, response) = try await session.data(for: request)
+    static func enforce(_ policy: HostPolicyState, on address: String) throws {
+        let url = URL(string: address.trimmingCharacters(in: .whitespaces))
+        if let violation = policy.violation(for: url) {
+            throw OAuth2Client.FlowError(message: violation)
+        }
+    }
+
+    private func perform(_ request: URLRequest, hostPolicy: HostPolicyState) async throws -> OAuth2Token {
+        let (data, response) = try await session.data(for: request, delegate: PolicyRedirectGuard(policy: hostPolicy))
         guard let http = response as? HTTPURLResponse else {
             throw OAuth2Client.FlowError(message: "Sağlayıcıdan HTTP yanıtı alınamadı.")
         }
         return try OAuth2Client.parseTokenResponse(data, statusCode: http.statusCode)
+    }
+}
+
+/// Token isteği yönlendirilirse hedef de politikaya uymalı; uymuyorsa
+/// yönlendirme izlenmez ve 3xx yanıtı hata olarak döner.
+final class PolicyRedirectGuard: NSObject, URLSessionTaskDelegate, Sendable {
+    let policy: HostPolicyState
+
+    init(policy: HostPolicyState) {
+        self.policy = policy
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        willPerformHTTPRedirection response: HTTPURLResponse,
+        newRequest request: URLRequest,
+        completionHandler: @escaping (URLRequest?) -> Void
+    ) {
+        completionHandler(policy.violation(for: request.url) == nil ? request : nil)
     }
 }
