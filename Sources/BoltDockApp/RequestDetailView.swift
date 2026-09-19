@@ -5,17 +5,9 @@ import BoltDockCore
 struct RequestDetailView: View {
     @Environment(AppState.self) private var appState
     @Binding var request: RequestModel
-    @State private var selectedTab: EditorTab = .headers
     @State private var showingCurl = false
     @State private var showingOptions = false
     @State private var showingRevertConfirm = false
-
-    enum EditorTab: String, CaseIterable {
-        case headers = "Headers"
-        case body = "Body"
-        case auth = "Auth"
-        case params = "Query"
-    }
 
     var body: some View {
         VSplitView {
@@ -153,16 +145,18 @@ struct RequestDetailView: View {
     }
 
     private var editorTabs: some View {
-        VStack(spacing: 0) {
-            Picker("", selection: $selectedTab) {
-                ForEach(EditorTab.allCases, id: \.self) { tab in
+        @Bindable var state = appState
+        // Açık sekme AppState'te: ⌘1…⌘4 menü komutları view @State'ine erişemez.
+        return VStack(spacing: 0) {
+            Picker("", selection: $state.editorTab) {
+                ForEach(EditorTab.allCases) { tab in
                     Text(tab.rawValue).tag(tab)
                 }
             }
             .pickerStyle(.segmented)
             .padding(10)
 
-            switch selectedTab {
+            switch appState.editorTab {
             case .headers:
                 KeyValueEditor(entries: $request.headers, keyPlaceholder: "Header-Adi", valuePlaceholder: "değer veya {{secret:isim}}")
             case .body:

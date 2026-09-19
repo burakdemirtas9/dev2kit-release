@@ -26,6 +26,20 @@ enum AppearanceMode: String, CaseIterable {
     }
 }
 
+/// İstek düzenleyicinin sekmeleri.
+///
+/// Neden view'da değil burada: ⌘1…⌘4 menü komutları `RequestDetailView`'ın
+/// yerel `@State`'ine erişemez. Yan fayda: istekler arasında geçiş yapınca
+/// açık sekme korunur.
+enum EditorTab: String, CaseIterable, Identifiable {
+    case headers = "Headers"
+    case body = "Body"
+    case auth = "Auth"
+    case params = "Query"
+
+    var id: String { rawValue }
+}
+
 /// Uygulamanın tek merkezi durumu. Workspace değişiklikleri debounce'suz,
 /// her mutasyondan sonra diske yazılır (MVP için yeterli; dosya küçük).
 @Observable
@@ -35,6 +49,45 @@ final class AppState {
     var selectedRequestID: UUID?
 
     var saveError: String?
+
+    // MARK: - Sidebar arama
+
+    /// Sidebar filtresi. Kalıcı DEĞİL: arama geçici bir görünüm durumu,
+    /// uygulamayı filtreli açmak "isteklerim kaybolmuş" etkisi yaratır.
+    var searchQuery = ""
+
+    /// Arama alanına odaklanma isteği (⌘F). Bool yerine sayaç: alan zaten
+    /// odaklıyken ya da kullanıcı başka yere tıkladıktan sonra tekrar ⌘F'ye
+    /// bastığında da gözlemlenebilir bir değişiklik olması gerekiyor.
+    private(set) var searchFocusRequest = 0
+
+    func focusSearch() {
+        searchFocusRequest += 1
+    }
+
+    func clearSearch() {
+        searchQuery = ""
+    }
+
+    /// Her satır için ayrı ayrı sorulduğundan ucuz tutuldu: `tokens(from:)`
+    /// ile aynı sonucu verir (yalnızca boşluktan oluşan sorgu arama sayılmaz)
+    /// ama dizi ayırmaz.
+    var isSearching: Bool {
+        searchQuery.contains { !$0.isWhitespace }
+    }
+
+    /// Sidebar'da gösterilecek koleksiyonlar; arama boşsa hepsi.
+    var visibleCollections: [RequestSearch.Match] {
+        RequestSearch.filter(workspace.collections, query: searchQuery)
+    }
+
+    /// Arama sonucundaki ilk istek — arama alanında ⏎ ile seçilir.
+    var firstSearchHit: RequestModel? {
+        visibleCollections.first(where: { !$0.requests.isEmpty })?.requests.first
+    }
+
+    /// İstek düzenleyicide açık sekme (⌘1…⌘4 ile de değişir).
+    var editorTab: EditorTab = .headers
 
     /// Otomatik kaydın görünür hali. Görünmeyen kayıt, kaydetmemek kadar
     /// güvensizlik yaratıyor — kullanıcı ne olduğunu bilmeli.
@@ -373,8 +426,31 @@ final class AppState {
         guard let index = workspace.collections.firstIndex(where: { $0.id == collectionID }) else { return }
         let request = RequestModel()
         workspace.collections[index].requests.append(request)
+        // Kapalı koleksiyona eklenen istek seçili ama görünmez kalırdı.
+        collapsedCollectionIDs.remove(collectionID)
         selectedRequestID = request.id
         persist()
+    }
+
+    /// ⌘N: yeni isteği en makul koleksiyona ekler — seçili isteğin koleksiyonu,
+    /// yoksa ilk koleksiyon. Hiç koleksiyon yoksa bir tane açar; kısayol hiçbir
+    /// durumda sessizce hiçbir şey yapmamalı.
+    ///
+    /// Açık arama temizlenir: yeni isteğin adı filtreye uymayacağı için aksi
+    /// halde seçili ama listede görünmeyen bir istek oluşurdu.
+    func addRequestToCurrentCollection() {
+        clearSearch()
+        if let id = selectedRequestID, let location = locateRequest(id) {
+            addRequest(to: workspace.collections[location.collection].id)
+            return
+        }
+        if let first = workspace.collections.first {
+            addRequest(to: first.id)
+            return
+        }
+        let collection = CollectionModel()
+        workspace.collections.append(collection)
+        addRequest(to: collection.id)
     }
 
     /// İsteği aynı koleksiyonda hemen altına kopyalar ve seçer.
@@ -428,6 +504,9 @@ final class AppState {
     }
 
     func addCollection() {
+        // Açık arama temizlenir: yeni koleksiyonun adı filtreye uymayacağı için
+        // oluşturulur ama listede görünmezdi.
+        clearSearch()
         workspace.collections.append(CollectionModel())
         persist()
     }

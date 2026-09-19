@@ -198,19 +198,54 @@ struct SidebarView: View {
     @State private var deleteTarget: CollectionModel?
     @State private var deleteRequestTarget: RequestModel?
     @State private var draggingCollectionID: UUID?
+    @FocusState private var searchFocused: Bool
 
     /// Sürükleme sırasında diğer koleksiyonlar soluklaşır ve kilitlenir.
     private func isDimmed(_ collectionID: UUID) -> Bool {
         draggingCollectionID != nil && draggingCollectionID != collectionID
     }
 
+    /// Liste seçimi. Boşa çekilen seçim yok sayılır.
+    ///
+    /// Sebep: filtreleme sırasında AÇIK olan istek listeden düşerse AppKit
+    /// tablo seçimini boşaltıp bunu binding'e geri yazar — kullanıcı ⌘F ile
+    /// arama yazmaya başlayınca düzenlediği istek kapanırdı. İstek silme gibi
+    /// gerçek temizleme yolları `selectedRequestID`'yi doğrudan set ettiği
+    /// için onlar etkilenmez.
+    private var listSelection: Binding<UUID?> {
+        Binding(
+            get: { appState.selectedRequestID },
+            set: { newValue in
+                guard let newValue else { return }
+                appState.selectedRequestID = newValue
+            }
+        )
+    }
+
+    /// Arama sırasında daraltılmış koleksiyonlar da açılır: aksi halde eşleşen
+    /// istekler gizli kalırdı. Kullanıcının daraltma tercihine dokunulmaz,
+    /// yalnızca gösterim sırasında yok sayılır.
+    private func isCollapsedForDisplay(_ collectionID: UUID) -> Bool {
+        !appState.isSearching && appState.isCollectionCollapsed(collectionID)
+    }
+
     var body: some View {
-        @Bindable var state = appState
-        List(selection: $state.selectedRequestID) {
-            ForEach(appState.workspace.collections) { collection in
+        // Filtreleme render başına bir kez: boş-sonuç kontrolü, liste ve
+        // eşleşme sayacı aynı sonucu kullanır.
+        let matches = appState.visibleCollections
+        List(selection: listSelection) {
+            if appState.isSearching, matches.isEmpty {
+                Text("\"\(appState.searchQuery)\" için eşleşme yok")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 12)
+            }
+            ForEach(matches) { match in
+                let collection = match.collection
                 Section {
-                    if !appState.isCollectionCollapsed(collection.id) {
-                    ForEach(collection.requests) { request in
+                    if !isCollapsedForDisplay(collection.id) {
+                    ForEach(match.requests) { request in
                         HStack {
                             Text(request.method.rawValue)
                                 .font(.system(size: 10, weight: .bold, design: .monospaced))
@@ -254,20 +289,29 @@ struct SidebarView: View {
                         }
                         .opacity(isDimmed(collection.id) ? 0.35 : 1)
                         .disabled(draggingCollectionID != nil)
+                        .moveDisabled(appState.isSearching)
                     }
                     .onMove { source, destination in
+                        // Filtreliyken indeksler GÖRÜNEN listeye göre gelir;
+                        // gerçek sıradaki konumlara karşılık gelmez, yanlış
+                        // isteği taşır. `moveDisabled` ile birlikte ikinci hat.
+                        guard !appState.isSearching else { return }
                         appState.moveRequests(in: collection.id, from: source, to: destination)
                     }
-                    Button {
-                        appState.addRequest(to: collection.id)
-                    } label: {
-                        Label("Yeni İstek", systemImage: "plus")
-                            .font(.caption)
+                    // Filtreliyken gizlenir: arama sonucunun arasında duran
+                    // "Yeni İstek" satırları sonucu okunmaz hale getiriyor.
+                    if !appState.isSearching {
+                        Button {
+                            appState.addRequest(to: collection.id)
+                        } label: {
+                            Label("Yeni İstek", systemImage: "plus")
+                                .font(.caption)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.secondary)
+                        .opacity(isDimmed(collection.id) ? 0.35 : 1)
+                        .disabled(draggingCollectionID != nil)
                     }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.secondary)
-                    .opacity(isDimmed(collection.id) ? 0.35 : 1)
-                    .disabled(draggingCollectionID != nil)
                     }
                 } header: {
                     HStack(spacing: 4) {
@@ -276,22 +320,30 @@ struct SidebarView: View {
                                 appState.toggleCollectionCollapsed(collection.id)
                             }
                         } label: {
-                            Image(systemName: appState.isCollectionCollapsed(collection.id) ? "chevron.right" : "chevron.down")
+                            Image(systemName: isCollapsedForDisplay(collection.id) ? "chevron.right" : "chevron.down")
                                 .font(.caption2.weight(.semibold))
                                 .foregroundStyle(.secondary)
                                 .frame(width: 14)
                                 .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        .help(appState.isCollectionCollapsed(collection.id) ? "Genişlet" : "Daralt")
+                        // Aramada gösterim zorla açık olduğu için düğme yanıltıcı
+                        // olurdu: basınca hiçbir şey değişmiyormuş gibi görünür.
+                        .disabled(appState.isSearching)
+                        .help(appState.isSearching
+                              ? "Arama sırasında tüm koleksiyonlar açık"
+                              : (appState.isCollectionCollapsed(collection.id) ? "Genişlet" : "Daralt"))
                         Image(systemName: "line.3.horizontal")
                             .font(.caption2)
                             .foregroundStyle(.quaternary)
                         Text(collection.name)
-                        Text("\(collection.requests.count)")
+                        // Aramada "eşleşen/toplam", normalde yalnızca toplam.
+                        Text(appState.isSearching && match.requests.count != collection.requests.count
+                             ? "\(match.requests.count)/\(collection.requests.count)"
+                             : "\(collection.requests.count)")
                             .font(.caption2)
                             .foregroundStyle(.tertiary)
-                        if appState.isCollectionCollapsed(collection.id),
+                        if isCollapsedForDisplay(collection.id),
                            appState.hasDirtyRequest(in: collection) {
                             Image(systemName: "circle.fill")
                                 .font(.system(size: 6))
@@ -303,6 +355,11 @@ struct SidebarView: View {
                     .contentShape(Rectangle())
                     .opacity(isDimmed(collection.id) ? 0.35 : 1)
                     .onDrag {
+                        // Filtreliyken sıralama kapalı: görünen liste gerçek
+                        // sırayı temsil etmiyor. Boş sağlayıcı dönünce
+                        // `draggingCollectionID` set edilmez ve drop hedefleri
+                        // (bkz. CollectionReorderDelegate) hiçbir şey yapmaz.
+                        guard !appState.isSearching else { return NSItemProvider() }
                         draggingCollectionID = collection.id
                         return NSItemProvider(object: collection.id.uuidString as NSString)
                     }
@@ -342,6 +399,14 @@ struct SidebarView: View {
         .onDrop(of: [.text], isTargeted: nil) { _ in
             draggingCollectionID = nil
             return true
+        }
+        .safeAreaInset(edge: .top, spacing: 0) {
+            searchBar(hitCount: RequestSearch.totalRequests(in: matches))
+        }
+        // ⌘F menü komutu view'ın odak durumuna erişemiyor; AppState'teki sayaç
+        // üzerinden köprülenir.
+        .onChange(of: appState.searchFocusRequest) {
+            searchFocused = true
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             VStack(spacing: 0) {
@@ -446,6 +511,57 @@ struct SidebarView: View {
             Text("\"\(deleteRequestTarget?.name ?? "")\" kalıcı olarak silinecek.")
         }
         .frame(minWidth: 220)
+    }
+
+    /// Sidebar filtresi. ⌘F odaklanır, Esc temizler, ⏎ ilk sonucu seçer.
+    private func searchBar(hitCount: Int) -> some View {
+        @Bindable var state = appState
+        return VStack(spacing: 0) {
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                TextField("İstek ara", text: $state.searchQuery)
+                    .textFieldStyle(.plain)
+                    .focused($searchFocused)
+                    .onSubmit { selectFirstHit() }
+                    // Esc: alanı boşaltır ama odağı bırakmaz — kullanıcı
+                    // genelde yeni bir arama yazmak için basıyor.
+                    // Alan boşken tuş tüketilmez ki Esc'in başka anlamları
+                    // (sheet kapatma vb.) çalışmaya devam etsin.
+                    .onKeyPress(.escape) {
+                        guard !appState.searchQuery.isEmpty else { return .ignored }
+                        appState.clearSearch()
+                        return .handled
+                    }
+                if !appState.searchQuery.isEmpty {
+                    Text("\(hitCount)")
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .help("\(hitCount) eşleşen istek")
+                    Button {
+                        appState.clearSearch()
+                        searchFocused = true
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.tertiary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Aramayı temizle (Esc)")
+                }
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            Divider()
+        }
+        .background(.bar)
+    }
+
+    /// Arama alanında ⏎: ilk eşleşen isteği seçer, odağı listeye bırakmadan.
+    /// Amaç "yaz → enter → istek açıldı" akışı; ad tam bilinmese de çalışır.
+    private func selectFirstHit() {
+        guard let hit = appState.firstSearchHit else { return }
+        appState.selectedRequestID = hit.id
     }
 
     private func methodColor(_ method: HTTPMethod) -> Color {

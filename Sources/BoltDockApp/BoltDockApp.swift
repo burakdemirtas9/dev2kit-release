@@ -49,6 +49,42 @@ struct BoltDockApp: App {
         defaults.set(false, forKey: "NSAutomaticPeriodSubstitutionEnabled")
     }
 
+    /// Menü çubuğundaki komutlar. Kısayollar buraya konur ki menüde görünür,
+    /// yani keşfedilebilir olsunlar — görünmez kısayol yok sayılır.
+    @CommandsBuilder
+    private var appCommands: some Commands {
+        // "New Window" yerine "Yeni İstek": tek pencereli, koleksiyon merkezli
+        // bir araçta ⌘N'in beklenen anlamı yeni istektir (Postman/Insomnia da böyle).
+        CommandGroup(replacing: .newItem) {
+            Button("Yeni İstek") {
+                appState.addRequestToCurrentCollection()
+            }
+            .keyboardShortcut("n", modifiers: .command)
+            Button("Yeni Koleksiyon") {
+                appState.addCollection()
+            }
+            .keyboardShortcut("n", modifiers: [.command, .shift])
+        }
+        // Find, macOS'ta Düzen menüsünde yapıştırma grubundan sonra durur.
+        CommandGroup(after: .pasteboard) {
+            Divider()
+            Button("İstek Ara") {
+                appState.focusSearch()
+            }
+            .keyboardShortcut("f", modifiers: .command)
+        }
+        CommandMenu("İstek") {
+            ForEach(Array(EditorTab.allCases.enumerated()), id: \.element) { index, tab in
+                Button(tab.rawValue) {
+                    appState.editorTab = tab
+                }
+                // ⌘1…⌘4 — sekme sayısı 9'u geçmediği sürece güvenli.
+                .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
+            }
+            .disabled(appState.selectedRequestID == nil)
+        }
+    }
+
     var body: some Scene {
         WindowGroup("BoltDock") {
             ContentView()
@@ -58,5 +94,6 @@ struct BoltDockApp: App {
                 .onAppear { appDelegate.appState = appState }
         }
         .windowResizability(.contentMinSize)
+        .commands { appCommands }
     }
 }
