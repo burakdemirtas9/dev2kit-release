@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!--
+      Hardened Runtime entitlement dosyası.
+
+      BİLİNÇLİ OLARAK BOŞ: Hardened Runtime'ın sağladığı korumaları gevşeten
+      hiçbir entitlement eklenmedi. Özellikle şunlar YOK ve olmamalı:
+
+        com.apple.security.cs.allow-unsigned-executable-memory
+        com.apple.security.cs.disable-library-validation
+        com.apple.security.cs.allow-dyld-environment-variables
+        com.apple.security.cs.disable-executable-page-protection
+
+      Bunlar "çalışmıyordu, ekledim" diye eklenen kaçış kapılarıdır ve
+      kütüphane enjeksiyonuna kapı açar. Secora'nın hiçbirine ihtiyacı yok:
+      JIT kullanmıyor, dinamik kütüphane yüklemiyor.
+
+      App Sandbox burada AÇIK DEĞİL. Developer ID ile dağıtımda ve
+      notarization için gerekli değil (yalnızca Mac App Store için zorunlu).
+      Açılması veri dizinini konteynere taşıyacağı için mevcut kullanıcı
+      verisinin taşınmasını gerektirir; ayrı bir adım olarak değerlendirilmeli.
+    -->
+</dict>
+</plist>

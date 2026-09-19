@@ -1,11 +1,11 @@
 #!/bin/bash
-# BoltDock.app'i Apple'a notarize ettirip bileti uygulamaya iliştirir.
+# Secora.app'i Apple'a notarize ettirip bileti uygulamaya iliştirir.
 #
 # Ön koşullar:
 #   1. Apple Developer Program üyeliği
 #   2. ./scripts/make-app.sh Developer ID ile imzalamış olmalı
 #   3. notarytool kimlik profili kurulu olmalı (bir kez):
-#        xcrun notarytool store-credentials "boltdock" \
+#        xcrun notarytool store-credentials "secora" \
 #          --apple-id "eposta@ornek.com" \
 #          --team-id "TAKIMKIMLIGI" \
 #          --password "uygulama-ozel-parola"
@@ -15,9 +15,9 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-APP="build/BoltDock.app"
-ZIP="build/BoltDock.zip"
-PROFILE="${NOTARY_PROFILE:-boltdock}"
+APP="build/Secora.app"
+ZIP="build/Secora.zip"
+PROFILE="${NOTARY_PROFILE:-secora}"
 
 if [ ! -d "$APP" ]; then
     echo "Hata: $APP yok. Önce ./scripts/make-app.sh çalıştır." >&2
@@ -47,4 +47,4 @@ spctl --assess --type execute --verbose=2 "$APP"
 
 echo
 echo "Hazır: $APP notarize edildi ve biletlendi."
-echo "Dağıtım için: ditto -c -k --keepParent $APP build/BoltDock-dagitim.zip"
+echo "Dağıtım için: ditto -c -k --keepParent $APP build/Secora-dagitim.zip"

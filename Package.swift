@@ -2,7 +2,7 @@
 import PackageDescription
 
 let package = Package(
-    name: "BoltDock",
+    name: "Secora",
     platforms: [
         .macOS(.v14)
     ],
@@ -10,25 +10,25 @@ let package = Package(
         // UI'dan bağımsız çekirdek: modeller, istek motoru, keychain, persistence.
         // Tüm birim testleri bu hedefe yazılır.
         .target(
-            name: "BoltDockCore",
-            path: "Sources/BoltDockCore"
+            name: "SecoraCore",
+            path: "Sources/SecoraCore"
         ),
-        // SwiftUI uygulaması. `swift run BoltDockApp` ile geliştirme modunda açılır.
+        // SwiftUI uygulaması. `swift run SecoraApp` ile geliştirme modunda açılır.
         .executableTarget(
-            name: "BoltDockApp",
-            dependencies: ["BoltDockCore"],
-            path: "Sources/BoltDockApp",
+            name: "SecoraApp",
+            dependencies: ["SecoraCore"],
+            path: "Sources/SecoraApp",
             // Kaynak görsel ikonu yeniden üretmek, entitlements ise imzalama
             // için repoda durur; ikisi de bundle'a gömülmez.
-            exclude: ["Resources/AppIcon.png", "Resources/BoltDock.entitlements"],
+            exclude: ["Resources/AppIcon.png", "Resources/Secora.entitlements"],
             // İkon: .app bundle'ına make-app.sh kopyalar; `swift run` ile
             // bundle olmadan çalışırken Dock ikonu Bundle.module'den yüklenir.
             resources: [.copy("Resources/AppIcon.icns")]
         ),
         .testTarget(
-            name: "BoltDockCoreTests",
-            dependencies: ["BoltDockCore"],
-            path: "Tests/BoltDockCoreTests"
+            name: "SecoraCoreTests",
+            dependencies: ["SecoraCore"],
+            path: "Tests/SecoraCoreTests"
         ),
     ]
 )

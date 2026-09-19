@@ -1,26 +1,26 @@
 #!/bin/bash
-# Release derlemesi yapıp BoltDock.app bundle'ı üretir.
+# Release derlemesi yapıp Secora.app bundle'ı üretir.
 #
 # İmza: Developer ID sertifikası varsa onunla + Hardened Runtime ile imzalar
 # (notarization'a hazır). Yoksa ad-hoc imzalar ve uyarır — ad-hoc imzalı
 # uygulama başka bir Mac'te Gatekeeper tarafından engellenir.
 #
-# Kullanım: ./scripts/make-app.sh  → build/BoltDock.app
+# Kullanım: ./scripts/make-app.sh  → build/Secora.app
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 VERSION="0.1.0"
 BUILD_NUMBER="$(git rev-list --count HEAD 2>/dev/null || echo 1)"
-APP="build/BoltDock.app"
-ENTITLEMENTS="Sources/BoltDockApp/Resources/BoltDock.entitlements"
+APP="build/Secora.app"
+ENTITLEMENTS="Sources/SecoraApp/Resources/Secora.entitlements"
 
 swift build -c release
-BIN="$(swift build -c release --show-bin-path)/BoltDockApp"
+BIN="$(swift build -c release --show-bin-path)/SecoraApp"
 
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp "$BIN" "$APP/Contents/MacOS/BoltDock"
-cp Sources/BoltDockApp/Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+cp "$BIN" "$APP/Contents/MacOS/Secora"
+cp Sources/SecoraApp/Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -28,13 +28,13 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <plist version="1.0">
 <dict>
     <key>CFBundleExecutable</key>
-    <string>BoltDock</string>
+    <string>Secora</string>
     <key>CFBundleIdentifier</key>
-    <string>com.boltdock.app</string>
+    <string>com.secora.app</string>
     <key>CFBundleName</key>
-    <string>BoltDock</string>
+    <string>Secora</string>
     <key>CFBundleDisplayName</key>
-    <string>BoltDock</string>
+    <string>Secora</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>CFBundlePackageType</key>
