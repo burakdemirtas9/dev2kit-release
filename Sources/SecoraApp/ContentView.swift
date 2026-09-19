@@ -194,6 +194,7 @@ struct SidebarView: View {
     @State private var showingPostmanImport = false
     @State private var showingCurlImport = false
     @State private var showingKibanaImport = false
+    @State private var showingOpenAPIImport = false
     @State private var renameTargetID: UUID?
     @State private var renameText = ""
     @State private var deleteTarget: CollectionModel?
@@ -457,12 +458,16 @@ struct SidebarView: View {
                     Button("Kibana Logundan İstek…") {
                         showingKibanaImport = true
                     }
+                    Divider()
+                    Button("Swagger / OpenAPI Adresinden…") {
+                        showingOpenAPIImport = true
+                    }
                     } label: {
                         Label("İçe Aktar", systemImage: "square.and.arrow.down")
                     }
                     .menuStyle(.borderlessButton)
                     .fixedSize()
-                    .help("Koleksiyon ya da istek içe aktar (Secora, Postman, cURL, Kibana)")
+                    .help("Koleksiyon ya da istek içe aktar (Secora, Postman, cURL, Kibana, OpenAPI)")
                 }
                 .padding(8)
             }
@@ -484,6 +489,9 @@ struct SidebarView: View {
         }
         .sheet(isPresented: $showingKibanaImport) {
             KibanaImportView()
+        }
+        .sheet(isPresented: $showingOpenAPIImport) {
+            OpenAPIImportView()
         }
         .sheet(item: Binding(
             get: { appState.pendingImport },

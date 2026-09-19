@@ -543,6 +543,77 @@ final class AppState {
         return workspace.regularCollections.first { $0.name.caseInsensitiveCompare(target) == .orderedSame }
     }
 
+    /// Aktif environment'ta bu adda değişken yoksa ekler. Var olanın değeri
+    /// değiştirilmez: kullanıcının girdiği adres içe aktarmayla ezilmesin.
+    func addVariableToActiveEnvironmentIfMissing(_ name: String, value: String) {
+        let trimmed = value.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty,
+              let index = workspace.environments.firstIndex(where: { $0.id == workspace.activeEnvironmentID }),
+              !workspace.environments[index].variables.contains(where: { $0.key == name }) else { return }
+        workspace.environments[index].variables.append(KeyValueEntry(key: name, value: trimmed))
+        persist()
+    }
+
+    // MARK: - OpenAPI / Swagger
+
+    struct OpenAPIFetchError: LocalizedError {
+        let message: String
+        var errorDescription: String? { message }
+    }
+
+    /// Adresten OpenAPI dokümanını bulur. İndirme, istek motoru üzerinden
+    /// yapılır: yönetici politikası, http/https dışı adres engeli, yönlendirme
+    /// koruması ve kurum CA'sı burada da geçerlidir. Kimlik bilgisi gönderilmez.
+    func discoverOpenAPI(_ address: String) async throws -> OpenAPIDiscovery.Outcome {
+        let trimmed = address.trimmingCharacters(in: .whitespaces)
+        guard let url = URL(string: trimmed), let scheme = url.scheme?.lowercased(),
+              scheme == "http" || scheme == "https", url.host?.isEmpty == false else {
+            throw OpenAPIFetchError(message: "Geçerli bir http ya da https adresi gir, ör. http://localhost:8080/v3/api-docs")
+        }
+        let engine = self.engine
+        let policy = hostPolicy
+        let approved = approvalStore.load()
+        return try await OpenAPIDiscovery.discover(from: url) { candidate in
+            let request = RequestModel(
+                name: "OpenAPI",
+                method: .get,
+                url: candidate.absoluteString,
+                headers: [KeyValueEntry(key: "Accept", value: "application/json")]
+            )
+            // Güvenlik engeli, bağlantı ve TLS hataları olduğu gibi yukarı çıkar:
+            // keşif durur ve kullanıcı asıl sebebi görür.
+            let response = try await engine.send(
+                request,
+                environment: nil,
+                secretStore: InMemorySecretStore(),
+                hostPolicy: policy,
+                approvedWarnings: approved
+            )
+            guard (200..<300).contains(response.statusCode) else {
+                throw OpenAPIDiscovery.HTTPStatusError(url: candidate, statusCode: response.statusCode)
+            }
+            guard response.body.count <= ImportReviewer.maxImportBytes else {
+                throw OpenAPIFetchError(message: "Doküman çok büyük; en fazla \(ImportReviewer.maxImportBytes / 1_048_576) MB.")
+            }
+            return response.body
+        }
+    }
+
+    /// Dokümandan koleksiyon kurar ve içe aktarma incelemesinden geçirir.
+    func prepareOpenAPIImport(_ document: OpenAPIImporter.Document, variableName: String) -> Result<PreparedImport, ImportFailure> {
+        do {
+            let outcome = try OpenAPIImporter.makeCollection(
+                from: document,
+                variableName: variableName,
+                existingNames: workspace.collections.map(\.name)
+            )
+            let review = ImportReviewer.review(collection: outcome.collection, notes: outcome.warnings, context: importContext)
+            return .success(PreparedImport(review: review, wasRenamed: outcome.wasRenamed))
+        } catch {
+            return .failure(ImportFailure(message: "Koleksiyon oluşturulamadı: \(error.localizedDescription)"))
+        }
+    }
+
     enum KibanaImportTarget {
         case newRequest(CollectionDestination)
         case selectedRequest
@@ -562,12 +633,7 @@ final class AppState {
         }
         if !output.secrets.isEmpty { invalidateSecretNames() }
 
-        if let variable, !variable.value.isEmpty,
-           let index = workspace.environments.firstIndex(where: { $0.id == workspace.activeEnvironmentID }),
-           !workspace.environments[index].variables.contains(where: { $0.key == variable.name }) {
-            workspace.environments[index].variables.append(KeyValueEntry(key: variable.name, value: variable.value))
-            persist()
-        }
+        if let variable { addVariableToActiveEnvironmentIfMissing(variable.name, value: variable.value) }
 
         switch target {
         case .newRequest(let destination):
