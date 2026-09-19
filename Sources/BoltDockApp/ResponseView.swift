@@ -1,9 +1,12 @@
+import AppKit
 import SwiftUI
 import BoltDockCore
 
 struct ResponseView: View {
     @Environment(AppState.self) private var appState
     @State private var selectedTab: Tab = .body
+    @State private var copied = false
+    @State private var fileSaveError: String?
 
     enum Tab: String, CaseIterable {
         case body = "Body"
@@ -31,7 +34,7 @@ struct ResponseView: View {
         case .success(let display):
             let response = display.data
             VStack(spacing: 0) {
-                statusBar(response)
+                statusBar(display)
                 Divider()
                 Picker("", selection: $selectedTab) {
                     ForEach(Tab.allCases, id: \.self) { tab in
@@ -81,6 +84,22 @@ struct ResponseView: View {
                     selectedTab = .body
                 }
             }
+            .task(id: copied) {
+                guard copied else { return }
+                try? await Task.sleep(for: .seconds(1.5))
+                copied = false
+            }
+            .alert(
+                "Dosyaya kaydedilemedi",
+                isPresented: Binding(
+                    get: { fileSaveError != nil },
+                    set: { if !$0 { fileSaveError = nil } }
+                )
+            ) {
+                Button("Tamam") { fileSaveError = nil }
+            } message: {
+                Text(fileSaveError ?? "")
+            }
         }
     }
 
@@ -126,8 +145,9 @@ struct ResponseView: View {
         .listStyle(.inset)
     }
 
-    private func statusBar(_ response: ResponseData) -> some View {
-        HStack(spacing: 16) {
+    private func statusBar(_ display: AppState.ResponseDisplay) -> some View {
+        let response = display.data
+        return HStack(spacing: 16) {
             Text("\(response.statusCode)")
                 .font(.system(.body, design: .monospaced)).bold()
                 .foregroundStyle(response.isSuccess ? Theme.up : (response.statusCode < 500 ? Theme.warning : Theme.down))
@@ -146,10 +166,59 @@ struct ResponseView: View {
                     .foregroundStyle(Theme.down)
             }
             Spacer()
+            responseActions(display)
         }
         .font(.callout)
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
+    }
+
+    /// Kopyalama ve kaydetme yalnızca kullanıcı düğmeye bastığında olur;
+    /// hiçbir yanıt kendiliğinden panoya ya da diske gitmez.
+    private func responseActions(_ display: AppState.ResponseDisplay) -> some View {
+        let response = display.data
+        let isText = !response.body.isEmpty && response.bodyText != nil
+        return HStack(spacing: 10) {
+            Button {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(display.prettyText, forType: .string)
+                copied = true
+            } label: {
+                Label(copied ? "Kopyalandı" : "Kopyala",
+                      systemImage: copied ? "checkmark" : "doc.on.doc")
+            }
+            .disabled(!isText)
+            .help(isText
+                  ? "Görünen gövdeyi panoya kopyalar"
+                  : "Gövde boş ya da metin değil; Dosyaya Kaydet ile alabilirsin")
+
+            Button {
+                saveBodyToFile(response)
+            } label: {
+                Label("Dosyaya Kaydet…", systemImage: "square.and.arrow.down")
+            }
+            .disabled(response.body.isEmpty)
+            .help(response.body.isEmpty
+                  ? "Gövde boş"
+                  : "Sunucudan gelen ham gövdeyi, seçtiğin konuma kaydeder")
+        }
+        .buttonStyle(.borderless)
+    }
+
+    /// Ham byte'lar yazılır (biçimlendirilmiş hali değil): PDF, görsel gibi
+    /// ikili yanıtlar bozulmadan kaydedilsin. Konum ve adı kaydetme
+    /// penceresinde kullanıcı seçer; Vazgeç derse hiçbir şey yazılmaz.
+    private func saveBodyToFile(_ response: ResponseData) {
+        let panel = NSSavePanel()
+        panel.title = "Yanıtı Dosyaya Kaydet"
+        panel.nameFieldStringValue = ResponseFileName.suggested(for: response)
+        panel.canCreateDirectories = true
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try response.body.write(to: url, options: .atomic)
+        } catch {
+            fileSaveError = error.localizedDescription
+        }
     }
 
 }
