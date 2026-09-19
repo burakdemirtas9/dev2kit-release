@@ -82,7 +82,8 @@ struct CurlImportView: View {
         .padding(20)
         .frame(width: 620, height: 520)
         .onAppear {
-            targetCollectionID = appState.workspace.collections.first?.id
+            // Varsayılan davranış korunur: kullanıcının ilk koleksiyonu (Koleksiyonsuz kabı en üstte durur).
+            targetCollectionID = appState.workspace.regularCollections.first?.id ?? appState.workspace.collections.first?.id
         }
     }
 

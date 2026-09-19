@@ -16,7 +16,9 @@ struct KibanaImportView: View {
     @State private var entryID: String?
     @State private var options = KibanaImporter.Options(selectedHeaders: [])
     @State private var applyToSelected = false
-    @State private var targetCollectionID: UUID?
+    /// Varsayılan: koleksiyonsuz. Kullanıcı isterse mevcut ya da yeni bir koleksiyon seçer.
+    @State private var destination: DestinationChoice = .ungrouped
+    @State private var newCollectionName = ""
     @State private var gatewayAddress = ""
     @State private var showingFilePicker = false
     @State private var importError: String?
@@ -60,9 +62,6 @@ struct KibanaImportView: View {
         }
         .padding(20)
         .frame(width: 680, height: 680)
-        .onAppear {
-            targetCollectionID = appState.workspace.collections.first?.id
-        }
         .fileImporter(isPresented: $showingFilePicker, allowedContentTypes: [.json]) { picked in
             guard case .success(let url) = picked else { return }
             let accessing = url.startAccessingSecurityScopedResource()
@@ -300,12 +299,7 @@ struct KibanaImportView: View {
             }
             HStack {
                 if !applyToSelected {
-                    Picker("Ekle:", selection: $targetCollectionID) {
-                        ForEach(appState.workspace.collections) { collection in
-                            Text(collection.name).tag(UUID?.some(collection.id))
-                        }
-                    }
-                    .frame(maxWidth: 260)
+                    destinationPicker
                 }
                 Spacer()
                 Button("Vazgeç") { dismiss() }
@@ -319,7 +313,47 @@ struct KibanaImportView: View {
 
     private var canImport: Bool {
         guard entry != nil, options.includeURL || options.includeBody || options.includeHeaders else { return false }
-        return applyToSelected ? appState.selectedRequest != nil : targetCollectionID != nil
+        if applyToSelected { return appState.selectedRequest != nil }
+        if destination == .newCollection {
+            return !newCollectionName.trimmingCharacters(in: .whitespaces).isEmpty
+        }
+        return true
+    }
+
+    enum DestinationChoice: Hashable {
+        case ungrouped
+        case existing(UUID)
+        case newCollection
+    }
+
+    private var destinationPicker: some View {
+        HStack(spacing: 8) {
+            Picker("Ekle:", selection: $destination) {
+                Label(CollectionModel.ungroupedName, systemImage: "tray").tag(DestinationChoice.ungrouped)
+                let collections = appState.workspace.regularCollections
+                if !collections.isEmpty {
+                    Divider()
+                    ForEach(collections) { collection in
+                        Text(collection.name).tag(DestinationChoice.existing(collection.id))
+                    }
+                }
+                Divider()
+                Label("Yeni koleksiyon…", systemImage: "folder.badge.plus").tag(DestinationChoice.newCollection)
+            }
+            .frame(maxWidth: 240)
+            if destination == .newCollection {
+                VStack(alignment: .leading, spacing: 2) {
+                    TextField("Koleksiyon adı", text: $newCollectionName)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 170)
+                    if appState.existingCollection(named: newCollectionName) != nil {
+                        Text("Bu adla bir koleksiyon var; ona eklenir.")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
     }
 
     // MARK: - Durum
@@ -389,10 +423,12 @@ struct KibanaImportView: View {
         let target: AppState.KibanaImportTarget
         if applyToSelected {
             target = .selectedRequest
-        } else if let targetCollectionID {
-            target = .newRequest(collectionID: targetCollectionID)
         } else {
-            return
+            switch destination {
+            case .ungrouped: target = .newRequest(.ungrouped)
+            case .existing(let id): target = .newRequest(.existing(id))
+            case .newCollection: target = .newRequest(.new(name: newCollectionName))
+            }
         }
         do {
             try appState.importFromKibana(

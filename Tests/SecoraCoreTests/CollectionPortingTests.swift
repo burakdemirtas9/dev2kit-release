@@ -152,3 +152,33 @@ final class CollectionPortingTests: XCTestCase {
         XCTAssertThrowsError(try CollectionPorting.importPostman(Data("[1,2]".utf8), existingNames: []))
     }
 }
+
+final class UngroupedCollectionTests: XCTestCase {
+    func testOldFilesDecodeAsRegularCollections() throws {
+        let json = #"{"id":"6F9619FF-8B86-D011-B42D-00C04FC964FF","name":"API","requests":[]}"#
+        let collection = try JSONDecoder().decode(CollectionModel.self, from: Data(json.utf8))
+        XCTAssertFalse(collection.isUngrouped)
+    }
+
+    func testUngroupedFlagRoundTrips() throws {
+        let original = CollectionModel(name: CollectionModel.ungroupedName, isUngrouped: true)
+        let decoded = try JSONDecoder().decode(CollectionModel.self, from: JSONEncoder().encode(original))
+        XCTAssertTrue(decoded.isUngrouped)
+    }
+
+    func testEnsureUngroupedIsIdempotentAndPinnedFirst() {
+        var workspace = WorkspaceModel(collections: [CollectionModel(name: "A"), CollectionModel(name: "B")])
+        let first = workspace.ensureUngroupedCollection()
+        let second = workspace.ensureUngroupedCollection()
+        XCTAssertEqual(first, second)
+        XCTAssertEqual(workspace.collections.count, 3)
+        XCTAssertEqual(workspace.collections.first?.id, first)
+        XCTAssertEqual(workspace.regularCollections.map(\.name), ["A", "B"])
+    }
+
+    func testImportedFileCannotCreateASecondUngroupedCollection() throws {
+        let data = try CollectionPorting.exportData(CollectionModel(name: "Sahte", isUngrouped: true))
+        let outcome = try CollectionPorting.importSecora(data, existingNames: [])
+        XCTAssertFalse(outcome.collection.isUngrouped)
+    }
+}

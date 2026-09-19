@@ -453,7 +453,7 @@ final class AppState {
             addRequest(to: workspace.collections[location.collection].id)
             return
         }
-        if let first = workspace.collections.first {
+        if let first = workspace.regularCollections.first {
             addRequest(to: first.id)
             return
         }
@@ -490,10 +490,19 @@ final class AppState {
         persist()
     }
 
+    /// İsteği koleksiyonsuz bölüme taşır.
+    func removeFromCollection(_ id: UUID) {
+        moveRequest(id, toCollection: workspace.ensureUngroupedCollection())
+    }
+
     /// Dışarıdan gelen (curl vb.) isteği koleksiyona ekler ve seçer.
     /// Ad çakışması koleksiyon import'uyla aynı kurala göre çözülür.
     func addImportedRequest(_ request: RequestModel, to collectionID: UUID) {
         guard let index = workspace.collections.firstIndex(where: { $0.id == collectionID }) else { return }
+        // Seçilen istek görünür olmalı: arama filtresine uymayabilir ya da
+        // hedef koleksiyon kapalı olabilir.
+        clearSearch()
+        collapsedCollectionIDs.remove(collectionID)
         var copy = request
         copy.id = UUID()
         let existing = workspace.collections[index].requests.map(\.name)
@@ -504,8 +513,38 @@ final class AppState {
         persist()
     }
 
+    /// İçe aktarılan isteğin gideceği yer.
+    enum CollectionDestination: Hashable {
+        case ungrouped
+        case existing(UUID)
+        /// Aynı adda bir koleksiyon zaten varsa ona eklenir; kopyası açılmaz.
+        case new(name: String)
+    }
+
+    /// Hedefi koleksiyon kimliğine çevirir; gerekiyorsa kabı ya da koleksiyonu oluşturur.
+    private func resolve(_ destination: CollectionDestination) -> UUID? {
+        switch destination {
+        case .ungrouped:
+            return workspace.ensureUngroupedCollection()
+        case .existing(let id):
+            return workspace.collections.contains { $0.id == id } ? id : nil
+        case .new(let rawName):
+            let name = rawName.trimmingCharacters(in: .whitespaces)
+            guard !name.isEmpty else { return nil }
+            if let existing = existingCollection(named: name) { return existing.id }
+            let collection = CollectionModel(name: name)
+            workspace.collections.append(collection)
+            return collection.id
+        }
+    }
+
+    func existingCollection(named name: String) -> CollectionModel? {
+        let target = name.trimmingCharacters(in: .whitespaces)
+        return workspace.regularCollections.first { $0.name.caseInsensitiveCompare(target) == .orderedSame }
+    }
+
     enum KibanaImportTarget {
-        case newRequest(collectionID: UUID)
+        case newRequest(CollectionDestination)
         case selectedRequest
     }
 
@@ -531,7 +570,10 @@ final class AppState {
         }
 
         switch target {
-        case .newRequest(let collectionID):
+        case .newRequest(let destination):
+            // Koleksiyon, token'lar vault'a yazıldıktan SONRA oluşturulur:
+            // yazma başarısızsa boş bir koleksiyon açılmış olmasın.
+            guard let collectionID = resolve(destination) else { return }
             addImportedRequest(output.request, to: collectionID)
         case .selectedRequest:
             selectedRequest?.wrappedValue = output.request
@@ -557,12 +599,15 @@ final class AppState {
     func renameCollection(_ id: UUID, to newName: String) {
         let trimmed = newName.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty,
-              let index = workspace.collections.firstIndex(where: { $0.id == id }) else { return }
+              let index = workspace.collections.firstIndex(where: { $0.id == id }),
+              !workspace.collections[index].isUngrouped else { return }
         workspace.collections[index].name = trimmed
         persist()
     }
 
     func deleteCollection(_ id: UUID) {
+        // Koleksiyonsuz kap silinmez; içindeki istekler tek tek silinir.
+        guard workspace.collections.first(where: { $0.id == id })?.isUngrouped != true else { return }
         if let collection = workspace.collections.first(where: { $0.id == id }),
            collection.requests.contains(where: { $0.id == selectedRequestID }) {
             selectedRequestID = nil
@@ -575,7 +620,10 @@ final class AppState {
     func moveCollection(_ id: UUID, before targetID: UUID) {
         guard id != targetID,
               let from = workspace.collections.firstIndex(where: { $0.id == id }),
-              let to = workspace.collections.firstIndex(where: { $0.id == targetID }) else { return }
+              let to = workspace.collections.firstIndex(where: { $0.id == targetID }),
+              // Koleksiyonsuz kap hep en üstte: ne taşınır ne önüne bir şey konur.
+              !workspace.collections[from].isUngrouped,
+              !workspace.collections[to].isUngrouped else { return }
         workspace.collections.move(
             fromOffsets: IndexSet(integer: from),
             toOffset: to > from ? to + 1 : to

@@ -233,7 +233,8 @@ struct SidebarView: View {
     var body: some View {
         // Filtreleme render başına bir kez: boş-sonuç kontrolü, liste ve
         // eşleşme sayacı aynı sonucu kullanır.
-        let matches = appState.visibleCollections
+        // Boş "Koleksiyonsuz" kabı gösterilmez: içinde istek yokken bölüm yoktur.
+        let matches = appState.visibleCollections.filter { !($0.collection.isUngrouped && $0.requests.isEmpty) }
         List(selection: listSelection) {
             if appState.isSearching, matches.isEmpty {
                 Text("\"\(appState.searchQuery)\" için eşleşme yok")
@@ -268,17 +269,23 @@ struct SidebarView: View {
                             } label: {
                                 Label("Çoğalt", systemImage: "plus.square.on.square")
                             }
-                            if appState.workspace.collections.count > 1 {
+                            let targets = appState.workspace.regularCollections.filter { $0.id != collection.id }
+                            if !targets.isEmpty {
                                 Menu {
-                                    ForEach(appState.workspace.collections) { target in
-                                        if target.id != collection.id {
-                                            Button(target.name) {
-                                                appState.moveRequest(request.id, toCollection: target.id)
-                                            }
+                                    ForEach(targets) { target in
+                                        Button(target.name) {
+                                            appState.moveRequest(request.id, toCollection: target.id)
                                         }
                                     }
                                 } label: {
                                     Label("Şuraya Taşı", systemImage: "folder")
+                                }
+                            }
+                            if !collection.isUngrouped {
+                                Button {
+                                    appState.removeFromCollection(request.id)
+                                } label: {
+                                    Label("Koleksiyondan Çıkar", systemImage: "tray")
                                 }
                             }
                             Divider()
@@ -334,10 +341,19 @@ struct SidebarView: View {
                         .help(appState.isSearching
                               ? "Arama sırasında tüm koleksiyonlar açık"
                               : (appState.isCollectionCollapsed(collection.id) ? "Genişlet" : "Daralt"))
-                        Image(systemName: "line.3.horizontal")
-                            .font(.caption2)
-                            .foregroundStyle(.quaternary)
-                        Text(collection.name)
+                        if collection.isUngrouped {
+                            // Sürüklenemez, yeniden adlandırılamaz: tutamaç yerine kendi simgesi.
+                            Image(systemName: "tray")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                            Text(collection.name)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Image(systemName: "line.3.horizontal")
+                                .font(.caption2)
+                                .foregroundStyle(.quaternary)
+                            Text(collection.name)
+                        }
                         // Aramada "eşleşen/toplam", normalde yalnızca toplam.
                         Text(appState.isSearching && match.requests.count != collection.requests.count
                              ? "\(match.requests.count)/\(collection.requests.count)"
@@ -360,7 +376,7 @@ struct SidebarView: View {
                         // sırayı temsil etmiyor. Boş sağlayıcı dönünce
                         // `draggingCollectionID` set edilmez ve drop hedefleri
                         // (bkz. CollectionReorderDelegate) hiçbir şey yapmaz.
-                        guard !appState.isSearching else { return NSItemProvider() }
+                        guard !appState.isSearching, !collection.isUngrouped else { return NSItemProvider() }
                         draggingCollectionID = collection.id
                         return NSItemProvider(object: collection.id.uuidString as NSString)
                     }
@@ -373,6 +389,7 @@ struct SidebarView: View {
                         )
                     )
                     .contextMenu {
+                        if !collection.isUngrouped {
                         Button {
                             renameText = collection.name
                             renameTargetID = collection.id
@@ -390,6 +407,7 @@ struct SidebarView: View {
                             deleteTarget = collection
                         } label: {
                             Label("Sil…", systemImage: "trash")
+                        }
                         }
                     }
                 }
