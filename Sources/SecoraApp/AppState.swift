@@ -504,6 +504,40 @@ final class AppState {
         persist()
     }
 
+    enum KibanaImportTarget {
+        case newRequest(collectionID: UUID)
+        case selectedRequest
+    }
+
+    /// Kibana logundan üretilen isteği ekler ya da seçili isteğin üzerine yazar.
+    /// Sıra bilinçli: önce token'lar vault'a yazılır; bu başarısız olursa istek
+    /// oluşturulmaz, yani vault'ta karşılığı olmayan bir `{{secret:…}}`
+    /// referansı kalmaz. Adres değişkeni yalnızca aktif environment'ta yoksa eklenir.
+    func importFromKibana(
+        _ output: KibanaImporter.Output,
+        target: KibanaImportTarget,
+        variable: (name: String, value: String)?
+    ) throws {
+        for secret in output.secrets {
+            try secretStore.setSecret(secret.value, forName: secret.name)
+        }
+        if !output.secrets.isEmpty { invalidateSecretNames() }
+
+        if let variable, !variable.value.isEmpty,
+           let index = workspace.environments.firstIndex(where: { $0.id == workspace.activeEnvironmentID }),
+           !workspace.environments[index].variables.contains(where: { $0.key == variable.name }) {
+            workspace.environments[index].variables.append(KeyValueEntry(key: variable.name, value: variable.value))
+            persist()
+        }
+
+        switch target {
+        case .newRequest(let collectionID):
+            addImportedRequest(output.request, to: collectionID)
+        case .selectedRequest:
+            selectedRequest?.wrappedValue = output.request
+        }
+    }
+
     func deleteRequest(_ id: UUID) {
         for index in workspace.collections.indices {
             workspace.collections[index].requests.removeAll { $0.id == id }

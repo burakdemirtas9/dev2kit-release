@@ -193,6 +193,7 @@ struct SidebarView: View {
     @State private var pendingImportSource: AppState.ImportSource = .secora
     @State private var showingPostmanImport = false
     @State private var showingCurlImport = false
+    @State private var showingKibanaImport = false
     @State private var renameTargetID: UUID?
     @State private var renameText = ""
     @State private var deleteTarget: CollectionModel?
@@ -435,12 +436,15 @@ struct SidebarView: View {
                     Button("cURL'den İstek…") {
                         showingCurlImport = true
                     }
+                    Button("Kibana Logundan İstek…") {
+                        showingKibanaImport = true
+                    }
                     } label: {
                         Label("İçe Aktar", systemImage: "square.and.arrow.down")
                     }
                     .menuStyle(.borderlessButton)
                     .fixedSize()
-                    .help("Koleksiyon içe aktar (Secora veya Postman)")
+                    .help("Koleksiyon ya da istek içe aktar (Secora, Postman, cURL, Kibana)")
                 }
                 .padding(8)
             }
@@ -459,6 +463,9 @@ struct SidebarView: View {
         }
         .sheet(isPresented: $showingCurlImport) {
             CurlImportView()
+        }
+        .sheet(isPresented: $showingKibanaImport) {
+            KibanaImportView()
         }
         .alert(
             "Koleksiyonu Yeniden Adlandır",
