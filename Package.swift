@@ -2,7 +2,7 @@
 import PackageDescription
 
 let package = Package(
-    name: "Secora",
+    name: "Dev2Kit",
     platforms: [
         .macOS(.v14)
     ],
@@ -10,25 +10,25 @@ let package = Package(
         // UI'dan bağımsız çekirdek: modeller, istek motoru, keychain, persistence.
         // Tüm birim testleri bu hedefe yazılır.
         .target(
-            name: "SecoraCore",
-            path: "Sources/SecoraCore"
+            name: "Dev2KitCore",
+            path: "Sources/Dev2KitCore"
         ),
-        // SwiftUI uygulaması. `swift run SecoraApp` ile geliştirme modunda açılır.
+        // SwiftUI uygulaması. `swift run Dev2KitApp` ile geliştirme modunda açılır.
         .executableTarget(
-            name: "SecoraApp",
-            dependencies: ["SecoraCore"],
-            path: "Sources/SecoraApp",
+            name: "Dev2KitApp",
+            dependencies: ["Dev2KitCore"],
+            path: "Sources/Dev2KitApp",
             // Kaynak görsel ikonu yeniden üretmek, entitlements ise imzalama
             // için repoda durur; ikisi de bundle'a gömülmez.
-            exclude: ["Resources/AppIcon.png", "Resources/Secora.entitlements"],
+            exclude: ["Resources/AppIcon.png", "Resources/Dev2Kit.entitlements"],
             // İkon: .app bundle'ına make-app.sh kopyalar; `swift run` ile
             // bundle olmadan çalışırken Dock ikonu Bundle.module'den yüklenir.
             resources: [.copy("Resources/AppIcon.icns")]
         ),
         .testTarget(
-            name: "SecoraCoreTests",
-            dependencies: ["SecoraCore"],
-            path: "Tests/SecoraCoreTests"
+            name: "Dev2KitCoreTests",
+            dependencies: ["Dev2KitCore"],
+            path: "Tests/Dev2KitCoreTests"
         ),
     ]
 )

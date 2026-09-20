@@ -1,26 +1,26 @@
 #!/bin/bash
-# Release derlemesi yapıp Secora.app bundle'ı üretir.
+# Release derlemesi yapıp dev2kit.app bundle'ı üretir.
 #
 # İmza: Developer ID sertifikası varsa onunla + Hardened Runtime ile imzalar
 # (notarization'a hazır). Yoksa ad-hoc imzalar ve uyarır — ad-hoc imzalı
 # uygulama başka bir Mac'te Gatekeeper tarafından engellenir.
 #
-# Kullanım: ./scripts/make-app.sh  → build/Secora.app
+# Kullanım: ./scripts/make-app.sh  → build/dev2kit.app
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 VERSION="0.1.0"
 BUILD_NUMBER="$(git rev-list --count HEAD 2>/dev/null || echo 1)"
-APP="build/Secora.app"
-ENTITLEMENTS="Sources/SecoraApp/Resources/Secora.entitlements"
+APP="build/dev2kit.app"
+ENTITLEMENTS="Sources/Dev2KitApp/Resources/Dev2Kit.entitlements"
 
 swift build -c release
-BIN="$(swift build -c release --show-bin-path)/SecoraApp"
+BIN="$(swift build -c release --show-bin-path)/Dev2KitApp"
 
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp "$BIN" "$APP/Contents/MacOS/Secora"
-cp Sources/SecoraApp/Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+cp "$BIN" "$APP/Contents/MacOS/dev2kit"
+cp Sources/Dev2KitApp/Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -28,13 +28,13 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <plist version="1.0">
 <dict>
     <key>CFBundleExecutable</key>
-    <string>Secora</string>
+    <string>dev2kit</string>
     <key>CFBundleIdentifier</key>
-    <string>com.secora.app</string>
+    <string>com.dev2kit.app</string>
     <key>CFBundleName</key>
-    <string>Secora</string>
+    <string>dev2kit</string>
     <key>CFBundleDisplayName</key>
-    <string>Secora</string>
+    <string>dev2kit</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>CFBundlePackageType</key>
