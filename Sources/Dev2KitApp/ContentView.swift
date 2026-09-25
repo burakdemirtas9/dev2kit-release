@@ -336,6 +336,14 @@ struct SidebarView: View {
                     }
                     }
                 } header: {
+                    // Daralt/genişlet hedefi başlığın TAMAMI. Bunun Button olması
+                    // ŞART: List section header'ında düz .onTapGesture tıklama
+                    // almıyor (NSTableView olayı yutuyor), Button alıyor.
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            appState.toggleCollectionCollapsed(collection.id)
+                        }
+                    } label: {
                     HStack(spacing: 4) {
                         Image(systemName: isCollapsedForDisplay(collection.id) ? "chevron.right" : "chevron.down")
                             .font(.caption2.weight(.semibold))
@@ -369,19 +377,16 @@ struct SidebarView: View {
                         }
                         Spacer(minLength: 0)
                     }
-                    // Daralt/genişlet hedefi başlığın TAMAMI. Önceden yalnızca
-                    // 14pt'lik chevron tıklanabiliyordu; koleksiyon adına basmak
-                    // hiçbir şey yapmadığı için nişan almak gerekiyordu.
+                    // Önceden yalnızca 14pt'lik chevron tıklanabiliyordu;
+                    // koleksiyon adına basmak hiçbir şey yapmadığı için
+                    // nişan almak gerekiyordu.
                     .frame(minHeight: HitTarget.row)
                     .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
                     // Aramada gösterim zorla açık olduğu için daraltma yanıltıcı
                     // olurdu: basınca hiçbir şey değişmiyormuş gibi görünür.
-                    .onTapGesture {
-                        guard !appState.isSearching else { return }
-                        withAnimation(.easeInOut(duration: 0.15)) {
-                            appState.toggleCollectionCollapsed(collection.id)
-                        }
-                    }
+                    .disabled(appState.isSearching)
                     .help(appState.isSearching
                           ? "Arama sırasında tüm koleksiyonlar açık"
                           : (appState.isCollectionCollapsed(collection.id) ? "Genişlet" : "Daralt"))
