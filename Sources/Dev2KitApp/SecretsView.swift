@@ -31,6 +31,7 @@ struct SecretsView: View {
                             delete(name)
                         } label: {
                             Image(systemName: "trash")
+                                .iconHitTarget()
                         }
                         .buttonStyle(.plain)
                     }

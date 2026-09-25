@@ -268,6 +268,9 @@ struct SidebarView: View {
                                     .help("Son gönderildiği halden farklı")
                             }
                         }
+                        // Satırın tamamı tıklanabilir: adın bittiği yerden sonrası
+                        // ölü alan kalmasın, çift tıklama da her yerde çalışsın.
+                        .rowHitTarget()
                         .tag(request.id)
                         // Tek tıklama önizler (liste seçimi), çift tıklama sekmeyi kalıcı yapar.
                         .simultaneousGesture(TapGesture(count: 2).onEnded {
@@ -324,6 +327,7 @@ struct SidebarView: View {
                         } label: {
                             Label("Yeni İstek", systemImage: "plus")
                                 .font(.caption)
+                                .rowHitTarget(minHeight: 20)
                         }
                         .buttonStyle(.plain)
                         .foregroundStyle(.secondary)
@@ -333,24 +337,10 @@ struct SidebarView: View {
                     }
                 } header: {
                     HStack(spacing: 4) {
-                        Button {
-                            withAnimation(.easeInOut(duration: 0.15)) {
-                                appState.toggleCollectionCollapsed(collection.id)
-                            }
-                        } label: {
-                            Image(systemName: isCollapsedForDisplay(collection.id) ? "chevron.right" : "chevron.down")
-                                .font(.caption2.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                                .frame(width: 14)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        // Aramada gösterim zorla açık olduğu için düğme yanıltıcı
-                        // olurdu: basınca hiçbir şey değişmiyormuş gibi görünür.
-                        .disabled(appState.isSearching)
-                        .help(appState.isSearching
-                              ? "Arama sırasında tüm koleksiyonlar açık"
-                              : (appState.isCollectionCollapsed(collection.id) ? "Genişlet" : "Daralt"))
+                        Image(systemName: isCollapsedForDisplay(collection.id) ? "chevron.right" : "chevron.down")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 14)
                         if collection.isUngrouped {
                             // Sürüklenemez, yeniden adlandırılamaz: tutamaç yerine kendi simgesi.
                             Image(systemName: "tray")
@@ -379,7 +369,22 @@ struct SidebarView: View {
                         }
                         Spacer(minLength: 0)
                     }
+                    // Daralt/genişlet hedefi başlığın TAMAMI. Önceden yalnızca
+                    // 14pt'lik chevron tıklanabiliyordu; koleksiyon adına basmak
+                    // hiçbir şey yapmadığı için nişan almak gerekiyordu.
+                    .frame(minHeight: HitTarget.row)
                     .contentShape(Rectangle())
+                    // Aramada gösterim zorla açık olduğu için daraltma yanıltıcı
+                    // olurdu: basınca hiçbir şey değişmiyormuş gibi görünür.
+                    .onTapGesture {
+                        guard !appState.isSearching else { return }
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            appState.toggleCollectionCollapsed(collection.id)
+                        }
+                    }
+                    .help(appState.isSearching
+                          ? "Arama sırasında tüm koleksiyonlar açık"
+                          : (appState.isCollectionCollapsed(collection.id) ? "Genişlet" : "Daralt"))
                     .opacity(isDimmed(collection.id) ? 0.35 : 1)
                     .onDrag {
                         // Filtreliyken sıralama kapalı: görünen liste gerçek
@@ -606,6 +611,7 @@ struct SidebarView: View {
                     } label: {
                         Image(systemName: "xmark.circle.fill")
                             .foregroundStyle(.tertiary)
+                            .iconHitTarget(20)
                     }
                     .buttonStyle(.plain)
                     .help("Aramayı temizle (Esc)")

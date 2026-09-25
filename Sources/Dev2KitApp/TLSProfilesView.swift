@@ -199,6 +199,7 @@ private struct TLSProfileDetail: View {
                     path.wrappedValue = ""
                 } label: {
                     Image(systemName: "xmark.circle")
+                        .iconHitTarget()
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
@@ -226,6 +227,7 @@ private struct KeyValueFreeList: View {
                         if index < items.count { items.remove(at: index) }
                     } label: {
                         Image(systemName: "minus.circle")
+                            .iconHitTarget()
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(.secondary)
@@ -235,6 +237,7 @@ private struct KeyValueFreeList: View {
                 items.append("")
             } label: {
                 Label("Host Ekle", systemImage: "plus").font(.caption)
+                    .rowHitTarget(minHeight: 20)
             }
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
@@ -308,6 +311,7 @@ struct TrustStoreSection: View {
                                 notice = appState.removeCertificate(path: entry.path)
                             } label: {
                                 Image(systemName: "trash")
+                                    .iconHitTarget()
                             }
                             .buttonStyle(.plain)
                             .foregroundStyle(.secondary)

@@ -97,6 +97,8 @@ struct RequestDetailView: View {
                         Label("son gönderilenden farklı", systemImage: "circle.fill")
                             .font(.caption)
                             .labelStyle(DirtyLabelStyle())
+                            .frame(minHeight: 20)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .help("Bu istek en son gönderildiği halden farklı — tıklayıp o hale dönebilirsin")
@@ -277,6 +279,7 @@ struct KeyValueEditor: View {
                         entries.removeAll { $0.id == entry.id }
                     } label: {
                         Image(systemName: "minus.circle")
+                            .iconHitTarget()
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(.secondary)
@@ -287,6 +290,7 @@ struct KeyValueEditor: View {
             } label: {
                 Label("Satır Ekle", systemImage: "plus")
                     .font(.caption)
+                    .rowHitTarget(minHeight: 20)
             }
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
