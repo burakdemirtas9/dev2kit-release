@@ -22,7 +22,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         MainActor.assumeIsolated {
-            appState?.flushPendingWrites()
+            // Kapanışta bekleyen yazım arka planda; bitmesini beklemek şart.
+            appState?.waitForPendingWrites()
         }
     }
 

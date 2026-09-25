@@ -12,6 +12,8 @@ struct RequestTabBar: View {
 
     var body: some View {
         ScrollViewReader { proxy in
+            // Kirli istekler sekme başına değil, render başına tek kez.
+            let dirty = appState.dirtyRequestIDs
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 0) {
                     ForEach(appState.openTabs, id: \.self) { id in
@@ -20,7 +22,7 @@ struct RequestTabBar: View {
                                 request: request,
                                 isSelected: appState.selectedRequestID == id,
                                 isPreview: appState.previewTabID == id,
-                                isDirty: appState.isDirty(id)
+                                isDirty: dirty.contains(id)
                             )
                             .id(id)
                             .opacity(dragging == id ? 0.4 : 1)

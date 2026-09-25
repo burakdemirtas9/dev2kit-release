@@ -259,6 +259,8 @@ final class AppState {
 
     let secretStore: SecretStore
     private let store: WorkspaceStore
+    /// Diske yazma MainActor'ı bloklamasın diye seri arka plan yazıcısı.
+    private let saver: WorkspaceSaver
     private let engine = RequestEngine()
     private let historyStore = HistoryStore()
     private let approvalStore = SecurityApprovalStore()
@@ -403,6 +405,7 @@ final class AppState {
     // sorduruyordu; imzalı dağıtımda KeychainSecretStore'a dönülebilir.
     init(store: WorkspaceStore = WorkspaceStore(), secretStore: SecretStore = FileSecretStore()) {
         self.store = store
+        self.saver = WorkspaceSaver(store: store)
         self.secretStore = secretStore
         let collapsedStrings = UserDefaults.standard.stringArray(forKey: Self.collapsedKey) ?? []
         self.collapsedCollectionIDs = Set(collapsedStrings.compactMap(UUID.init(uuidString:)))
@@ -473,18 +476,35 @@ final class AppState {
 
     // MARK: - "Son gönderilenden farklı" takibi
 
+    /// Son gönderildiği halden farklı isteklerin kimlikleri — TEK geçişte.
+    ///
+    /// Neden küme: `isDirty(_:)` satır başına çağrıldığında her satırda tüm
+    /// koleksiyonları tarayıp (locateRequest) gövde metinlerini karşılaştırıyordu;
+    /// 100+ istekte render başına O(n²) iş demekti ve listede takılma yaratıyordu.
+    /// View bu kümeyi gövdesinde BİR kez okur, satırlar `contains` ile bakar.
+    var dirtyRequestIDs: Set<UUID> {
+        guard !workspace.sentBaselines.isEmpty else { return [] }
+        var ids: Set<UUID> = []
+        for collection in workspace.collections {
+            for request in collection.requests {
+                guard let baseline = workspace.sentBaselines[request.id.uuidString] else { continue }
+                if !request.isFunctionallyEqual(to: baseline) { ids.insert(request.id) }
+            }
+        }
+        return ids
+    }
+
     /// İstek en son gönderildiği halden farklı mı.
     /// Hiç gönderilmemiş isteklerde işaret çıkmaz: karşılaştırılacak bir
     /// "test edilmiş hal" yoktur.
+    ///
+    /// Tek istek için kullanılır (ör. açık isteğin başlığı). Liste/satır
+    /// döngüsünde ÇAĞIRMA: orada `dirtyRequestIDs` kullanılır.
     func isDirty(_ id: UUID) -> Bool {
         guard let baseline = workspace.sentBaselines[id.uuidString],
               let location = locateRequest(id) else { return false }
         return !workspace.collections[location.collection].requests[location.request]
             .isFunctionallyEqual(to: baseline)
-    }
-
-    func hasDirtyRequest(in collection: CollectionModel) -> Bool {
-        collection.requests.contains { isDirty($0.id) }
     }
 
     var lastSentBaseline: RequestModel? {
@@ -1454,13 +1474,25 @@ final class AppState {
 
     private func writeWorkspace() {
         persistTask = nil
-        do {
-            try store.save(workspace)
-            saveError = nil
-            saveState = .saved(Date())
-        } catch {
-            saveError = "Kaydedilemedi: \(error.localizedDescription)"
-            saveState = .failed(error.localizedDescription)
+        // Encode + disk yazımı arka planda; MainActor yalnızca sonucu işler.
+        saver.save(workspace) { error in
+            MainActor.assumeIsolated {
+                guard let error else {
+                    self.saveError = nil
+                    self.saveState = .saved(Date())
+                    return
+                }
+                self.saveError = "Kaydedilemedi: \(error.localizedDescription)"
+                self.saveState = .failed(error.localizedDescription)
+            }
         }
+    }
+
+    /// Bekleyen yazımı başlatıp bitmesini bekler.
+    /// Yalnızca uygulama kapanışında çağrılır: kapanırken yarım kalan yazım
+    /// veri kaybı demektir. Normal akışta `flushPendingWrites()` yeterlidir.
+    func waitForPendingWrites() {
+        flushPendingWrites()
+        saver.waitForPendingWrites()
     }
 }

@@ -241,6 +241,9 @@ struct SidebarView: View {
         // eşleşme sayacı aynı sonucu kullanır.
         // Boş "Koleksiyonsuz" kabı gösterilmez: içinde istek yokken bölüm yoktur.
         let matches = appState.visibleCollections.filter { !($0.collection.isUngrouped && $0.requests.isEmpty) }
+        // Kirli istekler render başına TEK kez hesaplanır; satırlar ve
+        // başlıklar bu kümeye bakar (bkz. AppState.dirtyRequestIDs).
+        let dirty = appState.dirtyRequestIDs
         List(selection: listSelection) {
             if appState.isSearching, matches.isEmpty {
                 Text("\"\(appState.searchQuery)\" için eşleşme yok")
@@ -261,7 +264,7 @@ struct SidebarView: View {
                                 .frame(width: 44, alignment: .leading)
                             Text(request.name)
                                 .lineLimit(1)
-                            if appState.isDirty(request.id) {
+                            if dirty.contains(request.id) {
                                 Image(systemName: "circle.fill")
                                     .font(.system(size: 6))
                                     .foregroundStyle(Theme.warning)
@@ -369,7 +372,7 @@ struct SidebarView: View {
                             .font(.caption2)
                             .foregroundStyle(.tertiary)
                         if isCollapsedForDisplay(collection.id),
-                           appState.hasDirtyRequest(in: collection) {
+                           collection.requests.contains(where: { dirty.contains($0.id) }) {
                             Image(systemName: "circle.fill")
                                 .font(.system(size: 6))
                                 .foregroundStyle(Theme.warning)
