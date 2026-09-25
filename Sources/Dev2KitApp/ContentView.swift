@@ -271,9 +271,6 @@ struct SidebarView: View {
                                     .help("Son gönderildiği halden farklı")
                             }
                         }
-                        // Satırın tamamı tıklanabilir: adın bittiği yerden sonrası
-                        // ölü alan kalmasın, çift tıklama da her yerde çalışsın.
-                        .rowHitTarget()
                         .tag(request.id)
                         // Tek tıklama önizler (liste seçimi), çift tıklama sekmeyi kalıcı yapar.
                         .simultaneousGesture(TapGesture(count: 2).onEnded {
