@@ -236,6 +236,57 @@ struct SidebarView: View {
         !appState.isSearching && appState.isCollectionCollapsed(collectionID)
     }
 
+
+    /// Alt çubuk: yeni koleksiyon + içe aktarma.
+    private var bottomBar: some View {
+        VStack(spacing: 0) {
+            Divider()
+            HStack(spacing: 8) {
+                Button {
+                    appState.addCollection()
+                } label: {
+                    Label("Yeni Koleksiyon", systemImage: "folder.badge.plus")
+                        .frame(maxWidth: .infinity)
+                }
+                Menu {
+                Button("dev2kit Koleksiyonu…") {
+                    pendingImportSource = .dev2kit
+                    showingImporter = true
+                }
+                Divider()
+                Button("Postman'den Otomatik Al…") {
+                    showingPostmanImport = true
+                }
+                Button("Postman Dosyası…") {
+                    pendingImportSource = .postman
+                    showingImporter = true
+                }
+                Divider()
+                Button("cURL'den İstek…") {
+                    showingCurlImport = true
+                }
+                Button("Kibana Logundan İstek…") {
+                    showingKibanaImport = true
+                }
+                Divider()
+                Button("Swagger / OpenAPI Adresinden…") {
+                    showingOpenAPIImport = true
+                }
+                Button("Kaynak Koddan Giden İstekler…") {
+                    showingSourceImport = true
+                }
+                } label: {
+                    Label("İçe Aktar", systemImage: "square.and.arrow.down")
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+                .help("Koleksiyon ya da istek içe aktar (dev2kit, Postman, cURL, Kibana, OpenAPI)")
+            }
+            .padding(8)
+        }
+        .background(.bar)
+    }
+
     var body: some View {
         // Filtreleme render başına bir kez: boş-sonuç kontrolü, liste ve
         // eşleşme sayacı aynı sonucu kullanır.
@@ -271,6 +322,7 @@ struct SidebarView: View {
                                     .help("Son gönderildiği halden farklı")
                             }
                         }
+                        .background(RowProbe(id: request.id, name: request.name))
                         .tag(request.id)
                         // Tek tıklama önizler (liste seçimi), çift tıklama sekmeyi kalıcı yapar.
                         .simultaneousGesture(TapGesture(count: 2).onEnded {
@@ -439,62 +491,18 @@ struct SidebarView: View {
             draggingCollectionID = nil
             return true
         }
-        .safeAreaInset(edge: .top, spacing: 0) {
-            searchBar(hitCount: RequestSearch.totalRequests(in: matches))
+        .onChange(of: appState.selectedRequestID) {
+            ClickDebug.selected(appState.selectedRequestID.flatMap { appState.request(withID: $0)?.name })
         }
         // ⌘F menü komutu view'ın odak durumuna erişemiyor; AppState'teki sayaç
         // üzerinden köprülenir.
         .onChange(of: appState.searchFocusRequest) {
             searchFocused = true
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            VStack(spacing: 0) {
-                Divider()
-                HStack(spacing: 8) {
-                    Button {
-                        appState.addCollection()
-                    } label: {
-                        Label("Yeni Koleksiyon", systemImage: "folder.badge.plus")
-                            .frame(maxWidth: .infinity)
-                    }
-                    Menu {
-                    Button("dev2kit Koleksiyonu…") {
-                        pendingImportSource = .dev2kit
-                        showingImporter = true
-                    }
-                    Divider()
-                    Button("Postman'den Otomatik Al…") {
-                        showingPostmanImport = true
-                    }
-                    Button("Postman Dosyası…") {
-                        pendingImportSource = .postman
-                        showingImporter = true
-                    }
-                    Divider()
-                    Button("cURL'den İstek…") {
-                        showingCurlImport = true
-                    }
-                    Button("Kibana Logundan İstek…") {
-                        showingKibanaImport = true
-                    }
-                    Divider()
-                    Button("Swagger / OpenAPI Adresinden…") {
-                        showingOpenAPIImport = true
-                    }
-                    Button("Kaynak Koddan Giden İstekler…") {
-                        showingSourceImport = true
-                    }
-                    } label: {
-                        Label("İçe Aktar", systemImage: "square.and.arrow.down")
-                    }
-                    .menuStyle(.borderlessButton)
-                    .fixedSize()
-                    .help("Koleksiyon ya da istek içe aktar (dev2kit, Postman, cURL, Kibana, OpenAPI)")
-                }
-                .padding(8)
-            }
-            .background(.bar)
-        }
+        .modifier(SidebarChrome(
+            search: AnyView(searchBar(hitCount: RequestSearch.totalRequests(in: matches))),
+            bottom: AnyView(bottomBar)
+        ))
         .fileImporter(
             isPresented: $showingImporter,
             allowedContentTypes: [.json]
