@@ -111,6 +111,23 @@ public struct RequestModel: Codable, Identifiable, Hashable, Sendable {
     /// gönderilecek şeyi değiştirmez, dolayısıyla "değişti" işareti
     /// çıkarmamalı. Karşılaştırma "şu an göndereceğim şey, en son test
     /// ettiğimle aynı mı" sorusunu yanıtlar.
+    /// İşlevsel alanları verilen referans hale döndürür; `id` ve `name` korunur.
+    ///
+    /// `isFunctionallyEqual` ile AYNI alan kümesini kullanır: biri değişirse
+    /// diğeri de değişmeli, yoksa "farklı" işareti duran ama geri dönüşü
+    /// eksik bir istek ortaya çıkar.
+    public func revertingFunctionalFields(to baseline: RequestModel) -> RequestModel {
+        var reverted = self
+        reverted.method = baseline.method
+        reverted.url = baseline.url
+        reverted.headers = baseline.headers
+        reverted.queryParams = baseline.queryParams
+        reverted.body = baseline.body
+        reverted.auth = baseline.auth
+        reverted.options = baseline.options
+        return reverted
+    }
+
     public func isFunctionallyEqual(to other: RequestModel) -> Bool {
         method == other.method
             && url == other.url

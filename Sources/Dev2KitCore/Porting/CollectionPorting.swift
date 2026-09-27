@@ -109,6 +109,14 @@ public enum CollectionPorting {
 
     /// İsim çakışmasını çözer: önce "isim <suffix>", o da doluysa "isim <suffix> 2..50".
     /// Hepsi doluysa hata — kullanıcıya bildirilmeli.
+    /// Çakışmayan ad; 50 denemede bulunamazsa orijinali döner.
+    ///
+    /// `resolveName`'in hata fırlatmayan sarmalayıcısı: çağıranların üçü de
+    /// `(try? resolveName(...))?.0 ?? base` yazıyordu, kural tek yerde olsun.
+    public static func uniqueName(_ base: String, suffix: String, existingNames: [String]) -> String {
+        (try? resolveName(base, suffix: suffix, existingNames: existingNames).0) ?? base
+    }
+
     public static func resolveName(_ base: String, suffix: String, existingNames: [String]) throws -> (String, Bool) {
         let existing = Set(existingNames)
         guard existing.contains(base) else { return (base, false) }

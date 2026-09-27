@@ -244,7 +244,7 @@ public enum KibanaImporter {
         if options.includeBody, let body = entry.body {
             let contentType = entry.headers.first { $0.id == "content-type" }?.value
                 ?? (isJSON(body) ? "application/json" : "text/plain")
-            let pretty = isJSON(body) ? ((try? JSONFormatter.beautify(body)) ?? body) : body
+            let pretty = isJSON(body) ? Beautifier.beautifiedOrOriginal(body, as: .json) : body
             request.body = .raw(content: pretty, contentType: contentType)
         }
         if options.includeHeaders {
