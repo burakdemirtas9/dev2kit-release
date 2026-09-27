@@ -325,9 +325,7 @@ struct SidebarView: View {
                         .background(RowProbe(id: request.id, name: request.name))
                         .tag(request.id)
                         // Tek tıklama önizler (liste seçimi), çift tıklama sekmeyi kalıcı yapar.
-                        .simultaneousGesture(TapGesture(count: 2).onEnded {
-                            appState.pinTab(request.id)
-                        })
+                        .modifier(PinOnDoubleClick(id: request.id))
                         .contextMenu {
                             Button {
                                 appState.duplicateRequest(request.id)
