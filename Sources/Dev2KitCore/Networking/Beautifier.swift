@@ -14,6 +14,13 @@ public enum Beautifier {
         case json, xml, html, javascript, plain
     }
 
+    /// Yalnızca başlıktan tür. Gövde tipi seçicisi gibi içeriğin henüz
+    /// yazılmadığı yerlerde kullanılır; içerik varsa `kind(contentType:body:)`
+    /// daha isabetli.
+    public static func kind(contentType: String) -> Kind {
+        kind(contentType: contentType, body: "")
+    }
+
     /// Content-Type başlığından ve içerikten türü tahmin eder.
     ///
     /// Başlık önceliklidir; yoksa ya da tanınmıyorsa gövdeye bakılır —
@@ -47,5 +54,18 @@ public enum Beautifier {
     /// olduğu gibi bırakır. Kullanıcı yanıtı yine de görebilmeli.
     public static func beautifiedOrOriginal(_ text: String, as kind: Kind) -> String {
         (try? beautify(text, as: kind)) ?? text
+    }
+}
+
+public extension Beautifier.Kind {
+    /// Bu tür gönderilirken kullanılacak Content-Type başlığı.
+    var contentType: String {
+        switch self {
+        case .json: return "application/json"
+        case .xml: return "application/xml"
+        case .html: return "text/html"
+        case .javascript: return "application/javascript"
+        case .plain: return "text/plain"
+        }
     }
 }
