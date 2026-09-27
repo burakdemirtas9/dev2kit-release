@@ -10,8 +10,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @MainActor var appState: AppState?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Geçici tıklama teşhisi; DEV2KIT_CLICK_DEBUG=1 yoksa hiçbir şey yapmaz.
-        ClickDebug.start()
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         // `swift run` ile bundle olmadığı için Dock ikonu elle atanır.

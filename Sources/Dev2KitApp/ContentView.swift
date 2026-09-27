@@ -322,7 +322,6 @@ struct SidebarView: View {
                                     .help("Son gönderildiği halden farklı")
                             }
                         }
-                        .background(RowProbe(id: request.id, name: request.name))
                         .tag(request.id)
                         // Tek tıklama önizler (liste seçimi). Çift tıklama sekmeyi
                         // kalıcı yapar; o iş satır içeriğinde DEĞİL, AppKit olay
@@ -491,18 +490,15 @@ struct SidebarView: View {
             draggingCollectionID = nil
             return true
         }
-        .onChange(of: appState.selectedRequestID) {
-            ClickDebug.selected(appState.selectedRequestID.flatMap { appState.request(withID: $0)?.name })
-        }
         // ⌘F menü komutu view'ın odak durumuna erişemiyor; AppState'teki sayaç
         // üzerinden köprülenir.
         .onChange(of: appState.searchFocusRequest) {
             searchFocused = true
         }
-        .modifier(SidebarChrome(
-            search: AnyView(searchBar(hitCount: RequestSearch.totalRequests(in: matches))),
-            bottom: AnyView(bottomBar)
-        ))
+        .safeAreaInset(edge: .top, spacing: 0) {
+            searchBar(hitCount: RequestSearch.totalRequests(in: matches))
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) { bottomBar }
         .fileImporter(
             isPresented: $showingImporter,
             allowedContentTypes: [.json]
