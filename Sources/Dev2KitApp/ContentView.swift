@@ -324,8 +324,10 @@ struct SidebarView: View {
                         }
                         .background(RowProbe(id: request.id, name: request.name))
                         .tag(request.id)
-                        // Tek tıklama önizler (liste seçimi), çift tıklama sekmeyi kalıcı yapar.
-                        .modifier(PinOnDoubleClick(id: request.id))
+                        // Tek tıklama önizler (liste seçimi). Çift tıklama sekmeyi
+                        // kalıcı yapar; o iş satır içeriğinde DEĞİL, AppKit olay
+                        // akışında (bkz. SidebarDoubleClick) — gesture buraya
+                        // bağlanınca tek tıklamayı yutuyor.
                         .contextMenu {
                             Button {
                                 appState.duplicateRequest(request.id)

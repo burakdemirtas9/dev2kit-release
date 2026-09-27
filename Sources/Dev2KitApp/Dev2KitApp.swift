@@ -137,7 +137,12 @@ struct Dev2KitApp: App {
                 .environment(appState)
                 .tint(Theme.accent)
                 .frame(minWidth: 900, minHeight: 560)
-                .onAppear { appDelegate.appState = appState }
+                .onAppear {
+                    appDelegate.appState = appState
+                    SidebarDoubleClick.install {
+                        if let id = appState.selectedRequestID { appState.pinTab(id) }
+                    }
+                }
         }
         .windowResizability(.contentMinSize)
         .commands { appCommands }

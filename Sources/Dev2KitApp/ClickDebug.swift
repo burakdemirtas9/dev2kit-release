@@ -21,8 +21,6 @@ import SwiftUI
 enum ClickDebug {
     static let isEnabled = ProcessInfo.processInfo.environment["DEV2KIT_CLICK_DEBUG"] == "1"
     static let plainSidebar = ProcessInfo.processInfo.environment["DEV2KIT_PLAIN_SIDEBAR"] == "1"
-    /// Satırdaki çift tıklama gesture'ını kaldırır (tek tıklamayı yutma şüphesi).
-    static let noDoubleTap = ProcessInfo.processInfo.environment["DEV2KIT_NO_DBLTAP"] == "1"
 
     /// Satırların en son çizilen çerçeveleri (pencere koordinatı, üst-sol orijin).
     /// Anahtar UUID: aynı adlı ("Yeni İstek") satırlar birbirini ezmesin.
@@ -70,7 +68,7 @@ enum ClickDebug {
         let inWindow = event.locationInWindow                       // alt-sol orijin
         let topLeft = CGPoint(x: inWindow.x, y: height - inWindow.y) // üst-sol orijin
         write("")
-        write("TIK  pencere-içi (üstten)  x=\(Int(topLeft.x))  y=\(Int(topLeft.y))")
+        write("TIK  pencere-içi (üstten)  x=\(Int(topLeft.x))  y=\(Int(topLeft.y))  tıklama sayısı=\(event.clickCount)  anaPencere=\(event.window === NSApp.mainWindow)")
 
         if let hit = root.hitTest(inWindow) {
             write("  AppKit hitTest: \(type(of: hit))")
@@ -162,23 +160,6 @@ struct SidebarChrome: ViewModifier {
             content
                 .safeAreaInset(edge: .top, spacing: 0) { search }
                 .safeAreaInset(edge: .bottom, spacing: 0) { bottom }
-        }
-    }
-}
-
-
-/// Çift tıkla sekmeyi kalıcı yapma. DEV2KIT_NO_DBLTAP=1 ile devre dışı kalır:
-/// macOS 26'da bu gesture'ın satırdaki TEK tıklamayı yutup yutmadığını ölçer.
-struct PinOnDoubleClick: ViewModifier {
-    @Environment(AppState.self) private var appState
-    let id: UUID
-
-    @ViewBuilder
-    func body(content: Content) -> some View {
-        if ClickDebug.noDoubleTap {
-            content
-        } else {
-            content.simultaneousGesture(TapGesture(count: 2).onEnded { appState.pinTab(id) })
         }
     }
 }
