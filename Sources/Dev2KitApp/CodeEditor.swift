@@ -1,11 +1,23 @@
 import AppKit
 import SwiftUI
+import Dev2KitCore
 
 enum CodeLanguage: Equatable {
     case plain
     case json
     case markup      // XML / HTML
     case javascript
+
+    /// Core'daki tür tahmininin arayüz karşılığı. XML ve HTML aynı
+    /// renklendirme kurallarını kullandığı için ikisi de `markup`.
+    init(_ kind: Beautifier.Kind) {
+        switch kind {
+        case .json: self = .json
+        case .xml, .html: self = .markup
+        case .javascript: self = .javascript
+        case .plain: self = .plain
+        }
+    }
 }
 
 /// Regex tabanlı, hafif sözdizimi renklendirici.

@@ -4,6 +4,20 @@ import SwiftUI
 import UniformTypeIdentifiers
 import Dev2KitCore
 
+// AppState tek sınıf ama beş dosyaya yayılmış durumda. Burada DURUM (stored
+// property'ler, tipler, init) ve doğrudan durumla ilgili küçük işler var;
+// davranış uzantı dosyalarında:
+//
+//   AppState+Sending      gönderim, yanıt, güvenlik onayı, token, OAuth2
+//   AppState+Porting      içe/dışa aktarma (dosya, Postman, cURL, Kibana, OpenAPI, kaynak tarama)
+//   AppState+History      geçmiş kaydı ve geçmişten geri yükleme
+//   AppState+Collections  koleksiyon ve environment yönetimi
+//   AppState+TLS          güven deposu, TLS profilleri, çerezler
+//
+// Saf kurallar burada DEĞİL, `Dev2KitCore`'da ve testli: seçim (MultiSelection),
+// kirlilik (DirtyRequests), geçmişten geri yükleme (HistoryRestore), öneriler
+// (TemplateSuggestions), sekme kuralları (RequestTabs), arama (RequestSearch).
+
 enum AppearanceMode: String, CaseIterable {
     case system
     case light
@@ -275,22 +289,28 @@ final class AppState {
         }
     }
 
+    // Aşağıdaki üyeler `private` DEĞİL: AppState uzantı dosyalarından
+    // (Sending, History, Porting) kullanılıyorlar. Uzantılar aynı modülde,
+    // dolayısıyla dışarıya kapalılık modül sınırında korunuyor.
     let secretStore: SecretStore
-    private let store: WorkspaceStore
+    let store: WorkspaceStore
     /// Diske yazma MainActor'ı bloklamasın diye seri arka plan yazıcısı.
     private let saver: WorkspaceSaver
-    private let engine = RequestEngine()
-    private let historyStore = HistoryStore()
-    private let approvalStore = SecurityApprovalStore()
+    let engine = RequestEngine()
+    /// `private` değil: `AppState+History` uzantısı da kullanıyor.
+    /// Uzantılar aynı modülde; dışarıya kapalılık modül sınırında korunuyor.
+    let historyStore = HistoryStore()
+    let approvalStore = SecurityApprovalStore()
 
     /// Yönetici politikası her kullanımda diskten okunur: yönetici dosyayı
     /// değiştirince uygulamayı yeniden başlatmak gerekmesin. Dosya küçük.
     var hostPolicy: HostPolicyState { HostPolicyLoader.load() }
 
-    // MARK: - Geçmiş
+    // MARK: - Geçmiş durumu (davranış: AppState+History)
 
     /// Geçmiş kayıtları, en yenisi başta.
-    private(set) var history: [HistoryEntry] = []
+    /// Yazan tek yer `AppState+History`; view'lar yalnızca okur.
+    var history: [HistoryEntry] = []
 
     var historySettings: HistorySettings {
         didSet {
@@ -302,101 +322,12 @@ final class AppState {
 
     private static let historySettingsKey = "historySettings"
 
-    func reloadHistory() {
-        history = historyStore.entries()
-    }
-
     /// Geçmiş dosyasının diskteki boyutu.
     var historyFileSize: Int { historyStore.fileSizeBytes() }
-
-    func clearHistory() {
-        historyStore.deleteAll()
-        reloadHistory()
-    }
 
     func clearHistory(environmentName: String?) {
         historyStore.deleteEntries(environmentName: environmentName)
         reloadHistory()
-    }
-
-    func deleteHistoryEntry(_ id: UUID) {
-        historyStore.delete(id: id)
-        reloadHistory()
-    }
-
-    /// Geçmişteki hali mevcut isteğe geri yazar.
-    /// Maskelenmiş alanlar geri yüklenmez: "••••••" değerini isteğe yazmak
-    /// çalışan bir kimlik bilgisini sessizce bozardı.
-    func restore(_ entry: HistoryEntry) -> Bool {
-        guard let requestID = entry.requestID, let location = locateRequest(requestID) else { return false }
-        var target = workspace.collections[location.collection].requests[location.request]
-        let snapshot = entry.snapshot
-        target.method = snapshot.method
-        target.url = snapshot.url.contains(HistoryRedactor.mask) ? target.url : snapshot.url
-        target.queryParams = merge(snapshot.queryParams, into: target.queryParams)
-        target.headers = merge(snapshot.headers, into: target.headers)
-        target.body = snapshot.body
-        target.options = snapshot.options
-        if !containsMask(snapshot.auth) { target.auth = snapshot.auth }
-        workspace.collections[location.collection].requests[location.request] = target
-        selectedRequestID = target.id
-        pinTab(target.id)
-        persist()
-        return true
-    }
-
-    /// Geçmişteki isteği yeni bir istek olarak ekler (silinmiş isteği kurtarmak için).
-    func restoreAsNewRequest(_ entry: HistoryEntry, to collectionID: UUID) {
-        var snapshot = entry.snapshot
-        snapshot.name = entry.requestName
-        addImportedRequest(snapshot, to: collectionID)
-    }
-
-    /// Maskeli değerler eski hâliyle korunur; diğerleri anlık görüntüden gelir.
-    private func merge(_ snapshot: [KeyValueEntry], into current: [KeyValueEntry]) -> [KeyValueEntry] {
-        snapshot.map { entry in
-            guard entry.value.contains(HistoryRedactor.mask) else { return entry }
-            var restored = entry
-            restored.value = current.first { $0.key.lowercased() == entry.key.lowercased() }?.value ?? ""
-            return restored
-        }
-    }
-
-    private func containsMask(_ auth: AuthConfig) -> Bool {
-        switch auth {
-        case .none: return false
-        case .basic(_, let password): return password.contains(HistoryRedactor.mask)
-        case .bearer(let token): return token.contains(HistoryRedactor.mask)
-        case .apiKey(_, let value, _): return value.contains(HistoryRedactor.mask)
-        case .oauth2(let config): return config.clientSecret.contains(HistoryRedactor.mask)
-        }
-    }
-
-    /// Gönderim sonucunu geçmişe yazar. Anlık görüntü ŞABLON halidir ve
-    /// ham kimlik bilgileri maskelenir.
-    private func recordHistory(_ request: RequestModel, outcome: HistoryEntry.Outcome, responseText: String?) {
-        guard historySettings.isEnabled else { return }
-        let collectionName = workspace.collections.first { collection in
-            collection.requests.contains { $0.id == request.id }
-        }?.name
-        let preview = historySettings.storeResponseBodies
-            ? responseText.map { HistoryRedactor.redactResponse($0, limit: historySettings.responsePreviewLimit) }
-            : nil
-        let entry = HistoryEntry(
-            requestID: request.id,
-            requestName: request.name,
-            collectionName: collectionName,
-            environmentName: activeEnvironment?.name,
-            method: request.method,
-            url: HistoryRedactor.maskURL(request.url),
-            outcome: outcome,
-            snapshot: HistoryTrimmer.trim(
-                HistoryRedactor.redact(request),
-                maxBodyBytes: historySettings.maxSnapshotBodyBytes
-            ),
-            responsePreview: preview
-        )
-        history = historyStore.append(entry, settings: historySettings)
     }
 
     enum ResponseState {
@@ -464,13 +395,33 @@ final class AppState {
     /// İsteğin güncel konumu. Index'ler binding içinde SAKLANMAZ: koleksiyon
     /// sürüklenince veya silinince eski index yanlış isteğe yazar ya da
     /// dizi sınırını aşıp çökertir. Her erişimde ID'den yeniden bulunur.
-    private func locateRequest(_ id: UUID) -> (collection: Int, request: Int)? {
+    func locateRequest(_ id: UUID) -> (collection: Int, request: Int)? {
         for (ci, collection) in workspace.collections.enumerated() {
             if let ri = collection.requests.firstIndex(where: { $0.id == id }) {
                 return (ci, ri)
             }
         }
         return nil
+    }
+
+    /// İsteği yerinde değiştirir. "Bul → kopyala → yaz" dansı on bir yerde
+    /// tekrarlanıyordu; index'i yalnızca burası biliyor.
+    ///
+    /// DİKKAT: `body` içinde `workspace`'e DOKUNMA. Bu çağrı `workspace` üzerinde
+    /// yazma erişimi tutar; içeride ayrıca okumak "simultaneous access" hatası
+    /// verip uygulamayı çökertir. İhtiyacın olan veriyi önce dışarıda oku.
+    /// Salt okuma sorguları için `request(withID:)` kullan.
+    ///
+    /// - Returns: istek bulunduysa `body`'nin sonucu, yoksa `nil`.
+    @discardableResult
+    func withRequest<T>(_ id: UUID, _ body: (inout RequestModel) -> T) -> T? {
+        guard let location = locateRequest(id) else { return nil }
+        return body(&workspace.collections[location.collection].requests[location.request])
+    }
+
+    /// İsteğin bulunduğu koleksiyon.
+    func collection(containing id: UUID) -> CollectionModel? {
+        locateRequest(id).map { workspace.collections[$0.collection] }
     }
 
     var selectedRequest: Binding<RequestModel>? {
@@ -501,15 +452,7 @@ final class AppState {
     /// 100+ istekte render başına O(n²) iş demekti ve listede takılma yaratıyordu.
     /// View bu kümeyi gövdesinde BİR kez okur, satırlar `contains` ile bakar.
     var dirtyRequestIDs: Set<UUID> {
-        guard !workspace.sentBaselines.isEmpty else { return [] }
-        var ids: Set<UUID> = []
-        for collection in workspace.collections {
-            for request in collection.requests {
-                guard let baseline = workspace.sentBaselines[request.id.uuidString] else { continue }
-                if !request.isFunctionallyEqual(to: baseline) { ids.insert(request.id) }
-            }
-        }
-        return ids
+        DirtyRequests.ids(in: workspace.collections, baselines: workspace.sentBaselines)
     }
 
     /// İstek en son gönderildiği halden farklı mı.
@@ -519,10 +462,12 @@ final class AppState {
     /// Tek istek için kullanılır (ör. açık isteğin başlığı). Liste/satır
     /// döngüsünde ÇAĞIRMA: orada `dirtyRequestIDs` kullanılır.
     func isDirty(_ id: UUID) -> Bool {
-        guard let baseline = workspace.sentBaselines[id.uuidString],
-              let location = locateRequest(id) else { return false }
-        return !workspace.collections[location.collection].requests[location.request]
-            .isFunctionallyEqual(to: baseline)
+        // `withRequest` DEĞİL: o `workspace`'e yazma erişimi alır, içeride
+        // `workspace.sentBaselines` okumak aynı anda erişim demek ve Swift
+        // exclusivity kontrolü uygulamayı çökertir (canlı yakalandı).
+        // Okuma sorgularında read-only erişimci kullanılır.
+        guard let request = request(withID: id) else { return false }
+        return DirtyRequests.isDirty(request, baselines: workspace.sentBaselines)
     }
 
     var lastSentBaseline: RequestModel? {
@@ -534,22 +479,17 @@ final class AppState {
     /// Kaydedilmemiş düzenlemeleri geri alınamaz biçimde siler; çağıran
     /// taraf onay almalı.
     func revertToLastSent(_ id: UUID) {
-        guard let baseline = workspace.sentBaselines[id.uuidString],
-              let location = locateRequest(id) else { return }
-        var target = workspace.collections[location.collection].requests[location.request]
-        target.method = baseline.method
-        target.url = baseline.url
-        target.headers = baseline.headers
-        target.queryParams = baseline.queryParams
-        target.body = baseline.body
-        target.auth = baseline.auth
-        target.options = baseline.options
-        workspace.collections[location.collection].requests[location.request] = target
-        pinTab(target.id)
+        guard let baseline = workspace.sentBaselines[id.uuidString] else { return }
+        let reverted = withRequest(id) { request in
+            request = request.revertingFunctionalFields(to: baseline)
+            return true
+        }
+        guard reverted == true else { return }
+        pinTab(id)
         persist()
     }
 
-    private func recordBaseline(_ request: RequestModel) {
+    func recordBaseline(_ request: RequestModel) {
         workspace.sentBaselines[request.id.uuidString] = request
         workspace.pruneBaselines()
         persist()
@@ -574,8 +514,8 @@ final class AppState {
     /// halde seçili ama listede görünmeyen bir istek oluşurdu.
     func addRequestToCurrentCollection() {
         clearSearch()
-        if let id = selectedRequestID, let location = locateRequest(id) {
-            addRequest(to: workspace.collections[location.collection].id)
+        if let id = selectedRequestID, let current = collection(containing: id) {
+            addRequest(to: current.id)
             return
         }
         if let first = workspace.regularCollections.first {
@@ -593,9 +533,11 @@ final class AppState {
         guard let location = locateRequest(id) else { return }
         var copy = workspace.collections[location.collection].requests[location.request]
         copy.id = UUID()
-        let existing = workspace.collections[location.collection].requests.map(\.name)
-        copy.name = (try? CollectionPorting.resolveName(copy.name, suffix: "kopya", existingNames: existing).0)
-            ?? "\(copy.name) kopya"
+        copy.name = CollectionPorting.uniqueName(
+            copy.name,
+            suffix: "kopya",
+            existingNames: workspace.collections[location.collection].requests.map(\.name)
+        )
         workspace.collections[location.collection].requests.insert(copy, at: location.request + 1)
         selectedRequestID = copy.id
         pinTab(copy.id)
@@ -622,8 +564,7 @@ final class AppState {
         guard !moved.isEmpty else { return }
         for var request in moved {
             let existing = workspace.collections[target].requests.map(\.name)
-            request.name = (try? CollectionPorting.resolveName(request.name, suffix: "taşınan", existingNames: existing).0)
-                ?? request.name
+            request.name = CollectionPorting.uniqueName(request.name, suffix: "taşınan", existingNames: existing)
             workspace.collections[target].requests.append(request)
         }
         // Taşınanlar seçili kalsın: kullanıcı nereye gittiklerini görsün.
@@ -641,25 +582,6 @@ final class AppState {
         moveRequests(ids, toCollection: workspace.ensureUngroupedCollection())
     }
 
-    /// Dışarıdan gelen (curl vb.) isteği koleksiyona ekler ve seçer.
-    /// Ad çakışması koleksiyon import'uyla aynı kurala göre çözülür.
-    func addImportedRequest(_ request: RequestModel, to collectionID: UUID) {
-        guard let index = workspace.collections.firstIndex(where: { $0.id == collectionID }) else { return }
-        // Seçilen istek görünür olmalı: arama filtresine uymayabilir ya da
-        // hedef koleksiyon kapalı olabilir.
-        clearSearch()
-        collapsedCollectionIDs.remove(collectionID)
-        var copy = request
-        copy.id = UUID()
-        let existing = workspace.collections[index].requests.map(\.name)
-        copy.name = (try? CollectionPorting.resolveName(copy.name, suffix: "2", existingNames: existing).0)
-            ?? copy.name
-        workspace.collections[index].requests.append(copy)
-        selectedRequestID = copy.id
-        pinTab(copy.id)
-        persist()
-    }
-
     /// İçe aktarılan isteğin gideceği yer.
     enum CollectionDestination: Hashable {
         case ungrouped
@@ -669,7 +591,7 @@ final class AppState {
     }
 
     /// Hedefi koleksiyon kimliğine çevirir; gerekiyorsa kabı ya da koleksiyonu oluşturur.
-    private func resolve(_ destination: CollectionDestination) -> UUID? {
+    func resolve(_ destination: CollectionDestination) -> UUID? {
         switch destination {
         case .ungrouped:
             return workspace.ensureUngroupedCollection()
@@ -685,141 +607,16 @@ final class AppState {
         }
     }
 
-    func existingCollection(named name: String) -> CollectionModel? {
-        let target = name.trimmingCharacters(in: .whitespaces)
-        return workspace.regularCollections.first { $0.name.caseInsensitiveCompare(target) == .orderedSame }
-    }
-
-    /// Aktif environment'ta bu adda değişken yoksa ekler. Var olanın değeri
-    /// değiştirilmez: kullanıcının girdiği adres içe aktarmayla ezilmesin.
-    func addVariableToActiveEnvironmentIfMissing(_ name: String, value: String) {
-        let trimmed = value.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty,
-              let index = workspace.environments.firstIndex(where: { $0.id == workspace.activeEnvironmentID }),
-              !workspace.environments[index].variables.contains(where: { $0.key == name }) else { return }
-        workspace.environments[index].variables.append(KeyValueEntry(key: name, value: trimmed))
-        persist()
-    }
-
-    // MARK: - OpenAPI / Swagger
+    // MARK: - İçe aktarma tipleri (davranış: AppState+Porting)
 
     struct OpenAPIFetchError: LocalizedError {
         let message: String
         var errorDescription: String? { message }
     }
 
-    /// Adresten OpenAPI dokümanını bulur. İndirme, istek motoru üzerinden
-    /// yapılır: yönetici politikası, http/https dışı adres engeli, yönlendirme
-    /// koruması ve kurum CA'sı burada da geçerlidir. Kimlik bilgisi gönderilmez.
-    func discoverOpenAPI(_ address: String) async throws -> OpenAPIDiscovery.Outcome {
-        let trimmed = address.trimmingCharacters(in: .whitespaces)
-        guard let url = URL(string: trimmed), let scheme = url.scheme?.lowercased(),
-              scheme == "http" || scheme == "https", url.host?.isEmpty == false else {
-            throw OpenAPIFetchError(message: "Geçerli bir http ya da https adresi gir, ör. http://localhost:8080/v3/api-docs")
-        }
-        let engine = self.engine
-        let policy = hostPolicy
-        let approved = approvalStore.load()
-        return try await OpenAPIDiscovery.discover(from: url) { candidate in
-            let request = RequestModel(
-                name: "OpenAPI",
-                method: .get,
-                url: candidate.absoluteString,
-                headers: [KeyValueEntry(key: "Accept", value: "application/json")]
-            )
-            // Güvenlik engeli, bağlantı ve TLS hataları olduğu gibi yukarı çıkar:
-            // keşif durur ve kullanıcı asıl sebebi görür.
-            let response = try await engine.send(
-                request,
-                environment: nil,
-                secretStore: InMemorySecretStore(),
-                hostPolicy: policy,
-                approvedWarnings: approved
-            )
-            guard (200..<300).contains(response.statusCode) else {
-                throw OpenAPIDiscovery.HTTPStatusError(url: candidate, statusCode: response.statusCode)
-            }
-            guard response.body.count <= ImportReviewer.maxImportBytes else {
-                throw OpenAPIFetchError(message: "Doküman çok büyük; en fazla \(ImportReviewer.maxImportBytes / 1_048_576) MB.")
-            }
-            return response.body
-        }
-    }
-
-    /// Dokümandan koleksiyon kurar ve içe aktarma incelemesinden geçirir.
-    func prepareOpenAPIImport(_ document: OpenAPIImporter.Document, variableName: String) -> Result<PreparedImport, ImportFailure> {
-        do {
-            let outcome = try OpenAPIImporter.makeCollection(
-                from: document,
-                variableName: variableName,
-                existingNames: workspace.collections.map(\.name)
-            )
-            let review = ImportReviewer.review(collection: outcome.collection, notes: outcome.warnings, context: importContext)
-            return .success(PreparedImport(review: review, wasRenamed: outcome.wasRenamed))
-        } catch {
-            return .failure(ImportFailure(message: "Koleksiyon oluşturulamadı: \(error.localizedDescription)"))
-        }
-    }
-
-    // MARK: - Kaynak koddan giden istekler
-
-    /// Proje klasörünü arka planda okur. Yalnızca okuma: derleme, çalıştırma
-    /// ya da ağ erişimi yoktur.
-    nonisolated func scanOutbound(_ directory: URL) async throws -> OutboundScanResult {
-        try await Task.detached(priority: .userInitiated) {
-            let accessing = directory.startAccessingSecurityScopedResource()
-            defer { if accessing { directory.stopAccessingSecurityScopedResource() } }
-            return try OutboundScanner.scan(directory: directory)
-        }.value
-    }
-
-    func prepareOutboundImport(
-        _ result: OutboundScanResult,
-        variables: [OutboundCollectionBuilder.Variable]
-    ) -> Result<PreparedImport, ImportFailure> {
-        do {
-            let outcome = try OutboundCollectionBuilder.makeCollection(
-                from: result,
-                variables: variables,
-                existingNames: workspace.collections.map(\.name)
-            )
-            let review = ImportReviewer.review(collection: outcome.collection, notes: outcome.warnings, context: importContext)
-            return .success(PreparedImport(review: review, wasRenamed: outcome.wasRenamed))
-        } catch {
-            return .failure(ImportFailure(message: "Koleksiyon oluşturulamadı: \(error.localizedDescription)"))
-        }
-    }
-
     enum KibanaImportTarget {
         case newRequest(CollectionDestination)
         case selectedRequest
-    }
-
-    /// Kibana logundan üretilen isteği ekler ya da seçili isteğin üzerine yazar.
-    /// Sıra bilinçli: önce token'lar vault'a yazılır; bu başarısız olursa istek
-    /// oluşturulmaz, yani vault'ta karşılığı olmayan bir `{{secret:…}}`
-    /// referansı kalmaz. Adres değişkeni yalnızca aktif environment'ta yoksa eklenir.
-    func importFromKibana(
-        _ output: KibanaImporter.Output,
-        target: KibanaImportTarget,
-        variable: (name: String, value: String)?
-    ) throws {
-        for secret in output.secrets {
-            try secretStore.setSecret(secret.value, forName: secret.name)
-        }
-        if !output.secrets.isEmpty { invalidateSecretNames() }
-
-        if let variable { addVariableToActiveEnvironmentIfMissing(variable.name, value: variable.value) }
-
-        switch target {
-        case .newRequest(let destination):
-            // Koleksiyon, token'lar vault'a yazıldıktan SONRA oluşturulur:
-            // yazma başarısızsa boş bir koleksiyon açılmış olmasın.
-            guard let collectionID = resolve(destination) else { return }
-            addImportedRequest(output.request, to: collectionID)
-        case .selectedRequest:
-            selectedRequest?.wrappedValue = output.request
-        }
     }
 
     func deleteRequest(_ id: UUID) {
@@ -838,48 +635,6 @@ final class AppState {
         persist()
     }
 
-    func addCollection() {
-        // Açık arama temizlenir: yeni koleksiyonun adı filtreye uymayacağı için
-        // oluşturulur ama listede görünmezdi.
-        clearSearch()
-        workspace.collections.append(CollectionModel())
-        persist()
-    }
-
-    func renameCollection(_ id: UUID, to newName: String) {
-        let trimmed = newName.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty,
-              let index = workspace.collections.firstIndex(where: { $0.id == id }),
-              !workspace.collections[index].isUngrouped else { return }
-        workspace.collections[index].name = trimmed
-        persist()
-    }
-
-    func deleteCollection(_ id: UUID) {
-        // Koleksiyonsuz kap silinmez; içindeki istekler tek tek silinir.
-        guard workspace.collections.first(where: { $0.id == id })?.isUngrouped != true else { return }
-        let removed = workspace.collections.first { $0.id == id }?.requests.map(\.id) ?? []
-        workspace.collections.removeAll { $0.id == id }
-        removed.forEach(closeTab)
-        if let selected = selectedRequestID, removed.contains(selected) { selectedRequestID = nil }
-        persist()
-    }
-
-    /// Sürükle-bırak canlı sıralama: sürüklenen koleksiyonu hedefin konumuna taşır.
-    func moveCollection(_ id: UUID, before targetID: UUID) {
-        guard id != targetID,
-              let from = workspace.collections.firstIndex(where: { $0.id == id }),
-              let to = workspace.collections.firstIndex(where: { $0.id == targetID }),
-              // Koleksiyonsuz kap hep en üstte: ne taşınır ne önüne bir şey konur.
-              !workspace.collections[from].isUngrouped,
-              !workspace.collections[to].isUngrouped else { return }
-        workspace.collections.move(
-            fromOffsets: IndexSet(integer: from),
-            toOffset: to > from ? to + 1 : to
-        )
-        persist()
-    }
-
     func moveRequests(in collectionID: UUID, from source: IndexSet, to destination: Int) {
         guard let index = workspace.collections.firstIndex(where: { $0.id == collectionID }) else { return }
         workspace.collections[index].requests.move(fromOffsets: source, toOffset: destination)
@@ -889,10 +644,10 @@ final class AppState {
     /// Yanıtlar istek KİMLİĞİNE göre tutulur: başka bir isteğe geçince eski
     /// yanıt orada kalır, yenisinin yanıtıymış gibi görünmez.
     /// Diske hiç yazılmaz — yanıt gövdeleri token/kişisel veri içerebilir.
-    private var responses: [UUID: ResponseState] = [:]
+    var responses: [UUID: ResponseState] = [:]
     /// Bellek sınırı: en son bu kadar yanıt saklanır, eskisi düşer.
-    private static let retainedResponseLimit = 15
-    private var responseOrder: [UUID] = []
+    static let retainedResponseLimit = 15
+    var responseOrder: [UUID] = []
 
     var lastResponse: ResponseState {
         guard let id = selectedRequestID else { return .idle }
@@ -904,117 +659,9 @@ final class AppState {
         return false
     }
 
-    private func setResponse(_ state: ResponseState, for id: UUID) {
-        responses[id] = state
-        responseOrder.removeAll { $0 == id }
-        responseOrder.append(id)
-        while responseOrder.count > Self.retainedResponseLimit {
-            responses.removeValue(forKey: responseOrder.removeFirst())
-        }
-    }
+    @ObservationIgnored var inFlight: [UUID: Task<Void, Never>] = [:]
 
-    func send(_ request: RequestModel) {
-        flushPendingWrites()
-        // Gönderilen istek kullanılan istektir: önizleme sekmesi kalıcı olur.
-        pinTab(request.id)
-        let id = request.id
-        // Aynı isteğin önceki gönderimi hâlâ uçuyorsa iptal et.
-        inFlight[id]?.cancel()
-        setResponse(.loading, for: id)
-        let environment = activeEnvironment
-        let usedTokens = TokenVariables.referenced(by: request, environment: environment)
-
-        inFlight[id] = Task { [weak self] in
-            guard let self else { return }
-            do {
-                await self.ensureValidToken(request)
-                // Token değişkeni kullanan istekte önce geçerli token hazırlanır;
-                // süresi dolmamışsa bellektekiyle hiç ağa çıkılmadan devam edilir.
-                let (sendEnvironment, sendStore) = try await self.prepareTokens(usedTokens, environment: environment)
-                let response = try await engine.send(
-                    request,
-                    environment: sendEnvironment,
-                    secretStore: sendStore,
-                    hostPolicy: self.hostPolicy,
-                    approvedWarnings: self.approvalStore.load()
-                )
-                // Token sunucuda erken geçersiz kılınmış olabilir: bir sonraki
-                // gönderim yenisini alsın. İstek bilerek yeniden gönderilmez;
-                // kullanıcı 401'i görür ve tekrar gönderir.
-                if response.statusCode == 401, let environment {
-                    usedTokens.forEach { self.forgetToken($0, in: environment) }
-                }
-                let display = await Task.detached { AppState.makeDisplay(response) }.value
-                try Task.checkCancellation()
-                self.setResponse(.success(display), for: id)
-                // Referans noktası: "en son bunu test ettim".
-                self.recordBaseline(request)
-                let data = display.data
-                self.recordHistory(
-                    request,
-                    outcome: .completed(
-                        status: data.statusCode,
-                        duration: data.duration,
-                        byteCount: data.body.count,
-                        redirectCount: data.redirects.count
-                    ),
-                    responseText: display.prettyText
-                )
-            } catch is CancellationError {
-                self.setResponse(.idle, for: id)
-            } catch let error as URLError where error.code == .cancelled {
-                self.setResponse(.idle, for: id)
-            } catch RequestEngineError.securityBlocked(let findings) {
-                self.setResponse(.blocked(findings), for: id)
-                // Denetim izi: engellenen gönderim geçmişte görünsün.
-                let reasons = findings.map(\.title).joined(separator: ", ")
-                self.recordHistory(request, outcome: .failed(message: "Güvenlik engeli: \(reasons)"), responseText: nil)
-            } catch RequestEngineError.needsApproval(let findings) {
-                self.setResponse(.needsApproval(findings), for: id)
-            } catch {
-                self.setResponse(.failure(error.localizedDescription), for: id)
-                self.recordHistory(request, outcome: .failed(message: error.localizedDescription), responseText: nil)
-            }
-            self.inFlight[id] = nil
-        }
-    }
-
-    /// Kullanıcı uyarıları gördü ve "Yine de gönder" dedi: onaylar kalıcı
-    /// kaydedilir, seçili isteğin GÜNCEL hali yeniden gönderilir. İstek bu
-    /// arada değiştiyse yeni durum yeniden denetlenir; onay yalnızca
-    /// gösterilen uyarıları kapsar.
-    func approveAndSend(_ findings: [SecurityFinding]) {
-        guard let request = selectedRequest?.wrappedValue else { return }
-        do {
-            try approvalStore.approve(findings.compactMap(\.approvalKey))
-        } catch {
-            setResponse(.failure("Onay kaydedilemedi: \(error.localizedDescription)"), for: request.id)
-            return
-        }
-        send(request)
-    }
-
-    func dismissSecurityReview() {
-        guard let id = selectedRequestID else { return }
-        setResponse(.idle, for: id)
-    }
-
-    /// Tüm "Yine de gönder" onaylarını unutur; uyarılar yeniden sorulur.
-    func resetSecurityApprovals() throws {
-        try approvalStore.reset()
-    }
-
-    /// Uçuştaki isteği iptal eder. Bağlantı kapanır, kimlik bilgisi taşıyan
-    /// istek yarıda kalmaz.
-    func cancelSend(_ id: UUID) {
-        inFlight[id]?.cancel()
-        inFlight[id] = nil
-        setResponse(.idle, for: id)
-    }
-
-    @ObservationIgnored private var inFlight: [UUID: Task<Void, Never>] = [:]
-
-    // MARK: - Token değişkenleri (client credentials)
+    // MARK: - Token değişkenleri (davranış: AppState+Sending)
 
     enum TokenState: Equatable {
         case fetching
@@ -1023,81 +670,11 @@ final class AppState {
     }
 
     /// Arayüz için: environment + değişken başına son durum.
-    private(set) var tokenStates: [String: TokenState] = [:]
+    var tokenStates: [String: TokenState] = [:]
     /// Token'lar yalnızca bellekte; uygulama kapanınca gider.
-    @ObservationIgnored private var tokenCache: [String: OAuth2Token] = [:]
+    @ObservationIgnored var tokenCache: [String: OAuth2Token] = [:]
     /// Süren alma işlemleri: aynı anda gelen istekler tek isteği paylaşır.
-    @ObservationIgnored private var tokenFetches: [String: Task<OAuth2Token, Error>] = [:]
-
-    /// Anahtar değişkenin ayarlarını da içerir: token adresi, client ya da
-    /// scope değişince eski token (süresi dolmamış olsa bile) kullanılmaz.
-    func tokenKey(_ variable: TokenVariable, in environment: EnvironmentModel) -> String {
-        "\(environment.id.uuidString)/\(variable.id.uuidString)/\(variable.hashValue)"
-    }
-
-    func tokenState(_ variable: TokenVariable, in environment: EnvironmentModel) -> TokenState? {
-        tokenStates[tokenKey(variable, in: environment)]
-    }
-
-    /// Gönderim için environment ve secret deposunu hazırlar: kullanılan her
-    /// token değişkeni geçerli bir token'a bağlanır.
-    private func prepareTokens(
-        _ variables: [TokenVariable],
-        environment: EnvironmentModel?
-    ) async throws -> (EnvironmentModel?, SecretStore) {
-        guard let environment, !variables.isEmpty else { return (environment, secretStore) }
-        var overrides: [String: String] = [:]
-        for variable in variables {
-            overrides[variable.secretName] = try await validToken(variable, in: environment).accessToken
-        }
-        return (TokenVariables.environmentForSend(environment), OverlaySecretStore(base: secretStore, overrides: overrides))
-    }
-
-    /// Bellekteki token geçerliyse onu, değilse yenisini döner.
-    func validToken(_ variable: TokenVariable, in environment: EnvironmentModel, forceRefresh: Bool = false) async throws -> OAuth2Token {
-        let key = tokenKey(variable, in: environment)
-        if !forceRefresh, let cached = tokenCache[key], !cached.isExpired() { return cached }
-        if let running = tokenFetches[key] {
-            do {
-                return try await running.value
-            } catch {
-                throw TokenError(variable: variable.trimmedName, reason: error.localizedDescription)
-            }
-        }
-
-        let resolver = VariableResolver(environment: environment, secretStore: secretStore)
-        let service = oauthService
-        let policy = hostPolicy
-        let task = Task { () throws -> OAuth2Token in
-            try await service.clientCredentials(
-                tokenURL: try resolver.resolve(variable.tokenURL),
-                clientID: try resolver.resolve(variable.clientID),
-                clientSecret: try resolver.resolve(variable.clientSecret),
-                scope: try resolver.resolve(variable.scope),
-                authentication: variable.clientAuthentication,
-                hostPolicy: policy
-            )
-        }
-        tokenFetches[key] = task
-        tokenStates[key] = .fetching
-        defer { tokenFetches[key] = nil }
-        do {
-            let token = try await task.value
-            tokenCache[key] = token
-            tokenStates[key] = .valid(expiresAt: token.expiresAt)
-            return token
-        } catch {
-            tokenCache[key] = nil
-            tokenStates[key] = .failed(error.localizedDescription)
-            throw TokenError(variable: variable.trimmedName, reason: error.localizedDescription)
-        }
-    }
-
-    func forgetToken(_ variable: TokenVariable, in environment: EnvironmentModel) {
-        let key = tokenKey(variable, in: environment)
-        tokenCache[key] = nil
-        tokenStates[key] = nil
-    }
+    @ObservationIgnored var tokenFetches: [String: Task<OAuth2Token, Error>] = [:]
 
     struct TokenError: LocalizedError {
         let variable: String
@@ -1105,53 +682,20 @@ final class AppState {
         var errorDescription: String? { "{{\(variable)}} için token alınamadı; istek gönderilmedi. \(reason)" }
     }
 
-    // MARK: - OAuth2
+    // MARK: - OAuth2 durumu (davranış: AppState+Sending)
 
-    private let oauthService = OAuth2Service()
+    let oauthService = OAuth2Service()
     /// Yetkilendirme sürerken arayüzün beklemesi için.
     var authorizingConfigID: UUID?
     var authMessage: String?
 
-    func storedToken(for config: OAuth2Config) -> OAuth2Token? {
-        guard let raw = try? secretStore.secret(forName: config.tokenSecretName),
-              let data = raw.data(using: .utf8) else { return nil }
-        return try? JSONDecoder().decode(OAuth2Token.self, from: data)
-    }
-
-    /// Client secret `{{secret:isim}}` ile verilmiş olabilir; çözülür.
-    private func resolvedClientSecret(_ config: OAuth2Config) -> String? {
-        let raw = config.clientSecret.trimmingCharacters(in: .whitespaces)
-        guard !raw.isEmpty else { return nil }
-        let resolver = VariableResolver(environment: activeEnvironment, secretStore: secretStore)
-        return (try? resolver.resolve(raw)) ?? raw
-    }
-
-    private func store(_ token: OAuth2Token, for config: OAuth2Config) throws {
+    /// Token'ı vault'a yazar. Adı `store` DEĞİL: `store` aynı zamanda
+    /// workspace deposunun adı, uzantı dosyalarında çağrı karışıyordu.
+    func saveToken(_ token: OAuth2Token, for config: OAuth2Config) throws {
         let data = try JSONEncoder().encode(token)
         // Token vault'a yazılır; workspace dosyasına ASLA.
         try secretStore.setSecret(String(decoding: data, as: UTF8.self), forName: config.tokenSecretName)
         invalidateSecretNames()
-    }
-
-    /// Tarayıcıyı açıp yetkilendirme akışını yürütür.
-    func authorize(_ config: OAuth2Config) {
-        authorizingConfigID = config.id
-        authMessage = nil
-        Task {
-            do {
-                let token = try await oauthService.authorize(
-                    config: config,
-                    resolvedClientSecret: resolvedClientSecret(config),
-                    hostPolicy: hostPolicy,
-                    openURL: { url in NSWorkspace.shared.open(url) }
-                )
-                try store(token, for: config)
-                authMessage = "Yetkilendirme tamamlandı."
-            } catch {
-                authMessage = error.localizedDescription
-            }
-            authorizingConfigID = nil
-        }
     }
 
     func clearToken(for config: OAuth2Config) {
@@ -1160,133 +704,26 @@ final class AppState {
         authMessage = "Token silindi."
     }
 
-    /// Gönderimden önce token'ın geçerli olduğundan emin olur; süresi dolmuşsa
-    /// refresh token ile sessizce yeniler.
-    private func ensureValidToken(_ request: RequestModel) async {
-        guard case .oauth2(let config) = request.auth,
-              let token = storedToken(for: config),
-              token.isExpired(),
-              let refreshToken = token.refreshToken else { return }
-        do {
-            let renewed = try await oauthService.refresh(
-                config: config,
-                refreshToken: refreshToken,
-                resolvedClientSecret: resolvedClientSecret(config),
-                hostPolicy: hostPolicy
-            )
-            try store(renewed, for: config)
-        } catch {
-            // Yenileme başarısızsa istek eski token'la gider ve 401 alır;
-            // kullanıcı Auth sekmesinden yeniden yetkilendirir.
-            authMessage = "Token yenilenemedi: \(error.localizedDescription)"
-        }
-    }
+    // MARK: - TLS durumu (davranış: AppState+TLS)
 
-    // MARK: - Kurum güven deposu (cacerts)
+    var trustStore: TrustStore.LoadResult = .init(entries: [], problems: [])
 
-    private(set) var trustStore: TrustStore.LoadResult = .init(entries: [], problems: [])
-
-    func reloadTrustStore() {
-        let result = TrustStore.load()
-        trustStore = result
-        engine.trustStoreCertificates = result.certificates
-    }
-
-    func installCertificate(from url: URL) -> String {
-        do {
-            let destination = try TrustStore.install(from: url)
-            reloadTrustStore()
-            return "\(destination.lastPathComponent) güven deposuna eklendi."
-        } catch {
-            return "Eklenemedi: \(error.localizedDescription)"
-        }
-    }
-
-    func removeCertificate(path: String) -> String {
-        do {
-            try TrustStore.remove(path: path)
-            reloadTrustStore()
-            return "Sertifika kaldırıldı."
-        } catch {
-            return error.localizedDescription
-        }
-    }
-
-    // MARK: - TLS profilleri
-
-    func addTLSProfile() -> UUID {
-        let profile = TLSProfile()
-        workspace.tlsProfiles.append(profile)
-        syncTLSProfiles()
-        persist()
-        return profile.id
-    }
-
-    func deleteTLSProfile(_ id: UUID) {
-        workspace.tlsProfiles.removeAll { $0.id == id }
-        syncTLSProfiles()
-        persist()
-    }
-
-    func tlsProfileBinding(_ id: UUID) -> Binding<TLSProfile>? {
-        guard workspace.tlsProfiles.contains(where: { $0.id == id }) else { return nil }
-        let fallback = workspace.tlsProfiles.first { $0.id == id }!
-        return Binding(
-            get: { self.workspace.tlsProfiles.first { $0.id == id } ?? fallback },
-            set: { newValue in
-                guard let index = self.workspace.tlsProfiles.firstIndex(where: { $0.id == id }) else { return }
-                self.workspace.tlsProfiles[index] = newValue
-                self.syncTLSProfiles()
-                self.persistSoon()
-            }
-        )
-    }
-
-    /// Motor kendi kopyasını tutar; profil değişince güncellenmeli.
-    private func syncTLSProfiles() {
-        engine.tlsProfiles = workspace.tlsProfiles
-    }
-
-    // MARK: - Çerezler
-
-    private var cookieScope: RequestEngine.Scope {
+    var cookieScope: RequestEngine.Scope {
         RequestEngine.Scope(environmentID: workspace.activeEnvironmentID)
-    }
-
-    /// Aktif environment'ın çerez kavanozu (yalnızca bellekte tutulur).
-    func activeCookies() -> [HTTPCookie] {
-        engine.cookies(in: cookieScope)
-    }
-
-    func clearActiveCookies() {
-        engine.clearCookies(in: cookieScope)
     }
 
     /// Ana thread dışında çalışır: büyük gövdeleri biçimlendirmek pahalıdır.
     nonisolated static func makeDisplay(_ response: ResponseData) -> ResponseDisplay {
         let contentType = response.headers
-            .first { $0.name.lowercased() == "content-type" }?.value.lowercased() ?? ""
-        let text = response.bodyText
-        let trimmed = text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-
-        let language: CodeLanguage
-        if contentType.contains("json") {
-            language = .json
-        } else if contentType.contains("xml") || contentType.contains("html") {
-            language = .markup
-        } else if contentType.contains("javascript") {
-            language = .javascript
-        } else if trimmed.hasPrefix("{") || trimmed.hasPrefix("[") {
-            language = .json
-        } else {
-            language = .plain
-        }
-
-        var pretty = text ?? "(ikili veri: \(response.body.count) byte)"
-        if language == .json, let formatted = try? JSONFormatter.beautify(pretty) {
-            pretty = formatted
-        }
-        return ResponseDisplay(data: response, prettyText: pretty, language: language)
+            .first { $0.name.lowercased() == "content-type" }?.value ?? ""
+        let text = response.bodyText ?? "(ikili veri: \(response.body.count) byte)"
+        // Tür tahmini ve biçimlendirme tek yerde: Beautifier (Core, testli).
+        let kind = Beautifier.kind(contentType: contentType, body: text)
+        return ResponseDisplay(
+            data: response,
+            prettyText: Beautifier.beautifiedOrOriginal(text, as: kind),
+            language: CodeLanguage(kind)
+        )
     }
 
     /// Import/export sonucunu (başarı, yeniden adlandırma, uyarılar) kullanıcıya
@@ -1322,166 +759,13 @@ final class AppState {
         ImportReviewer.Context(policy: hostPolicy, vaultSecretNames: Set(secretNames))
     }
 
-    func importCollection(from url: URL, source: ImportSource) {
-        let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
-        guard size <= ImportReviewer.maxImportBytes else {
-            portingMessage = "Dosya çok büyük (\(ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file))); en fazla \(ImportReviewer.maxImportBytes / 1_048_576) MB içe aktarılır."
-            return
-        }
-        let data: Data
-        do {
-            data = try Data(contentsOf: url)
-        } catch {
-            portingMessage = "Dosya okunamadı: \(error.localizedDescription)"
-            return
-        }
-        switch prepareImport(data, source: source) {
-        case .success(let prepared) where prepared.review.isClean:
-            // Bulgu yoksa ek bir onay adımı gereksiz sürtünme olurdu.
-            portingMessage = commitImport([prepared])
-        case .success(let prepared):
-            pendingImport = PendingImport(items: [prepared])
-        case .failure(let failure):
-            portingMessage = failure.message
-        }
-    }
-
-    /// Veriyi çözümler ve inceler; çalışma alanına HENÜZ eklemez.
-    /// - Parameter reservedNames: Aynı turda hazırlanan diğer koleksiyonların
-    ///   adları; birlikte onaylandıklarında ad çakışmasın.
-    func prepareImport(_ data: Data, source: ImportSource, reservedNames: [String] = []) -> Result<PreparedImport, ImportFailure> {
-        guard data.count <= ImportReviewer.maxImportBytes else {
-            return .failure(ImportFailure(message: "Koleksiyon çok büyük; en fazla \(ImportReviewer.maxImportBytes / 1_048_576) MB içe aktarılır."))
-        }
-        do {
-            let existingNames = workspace.collections.map(\.name) + reservedNames
-            let outcome: CollectionPorting.ImportOutcome
-            switch source {
-            case .dev2kit:
-                outcome = try CollectionPorting.importDev2Kit(data, existingNames: existingNames)
-            case .postman:
-                outcome = try CollectionPorting.importPostman(data, existingNames: existingNames)
-            }
-            let review = ImportReviewer.review(collection: outcome.collection, notes: outcome.warnings, context: importContext)
-            return .success(PreparedImport(review: review, wasRenamed: outcome.wasRenamed))
-        } catch {
-            return .failure(ImportFailure(message: "İçe aktarma başarısız: \(error.localizedDescription)"))
-        }
-    }
-
-    /// Onaylanan koleksiyonları ekler; kesin engelli istekler dışarıda kalır.
-    /// Kullanıcıya gösterilecek özet metnini döner.
-    @discardableResult
-    func commitImport(_ items: [PreparedImport]) -> String {
-        var lines: [String] = []
-        for item in items {
-            let collection = item.review.importableCollection
-            let skipped = item.review.blockedCount
-            if collection.requests.isEmpty, skipped > 0 {
-                lines.append("\"\(collection.name)\" aktarılmadı: tüm istekler güvenlik nedeniyle engellendi.")
-                continue
-            }
-            workspace.collections.append(collection)
-            lines.append("\"\(collection.name)\" içe aktarıldı (\(collection.requests.count) istek).")
-            if skipped > 0 {
-                lines.append("\(skipped) istek güvenlik nedeniyle aktarılmadı.")
-            }
-            if item.wasRenamed {
-                lines.append("İsim çakıştığı için \"\(collection.name)\" olarak eklendi.")
-            }
-            lines.append(contentsOf: item.review.notes.map { "⚠︎ \($0)" })
-        }
-        persist()
-        return lines.joined(separator: "\n")
-    }
-
-    func exportCollection(_ id: UUID) {
-        guard let collection = workspace.collections.first(where: { $0.id == id }) else { return }
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [.json]
-        panel.nameFieldStringValue = "\(collection.name).dev2kit.json"
-        panel.title = "Koleksiyonu Dışa Aktar"
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        do {
-            try CollectionPorting.exportData(collection).write(to: url)
-            portingMessage = "\"\(collection.name)\" dışa aktarıldı.\nSecret değerleri dosyada YOK; yalnızca {{secret:isim}} referansları var."
-        } catch {
-            portingMessage = "Dışa aktarma başarısız: \(error.localizedDescription)"
-        }
-    }
-
-    func addEnvironment() -> UUID {
-        let environment = EnvironmentModel()
-        workspace.environments.append(environment)
-        if workspace.activeEnvironmentID == nil {
-            workspace.activeEnvironmentID = environment.id
-        }
-        persist()
-        return environment.id
-    }
-
-    func deleteEnvironment(_ id: UUID) {
-        workspace.environments.removeAll { $0.id == id }
-        if workspace.activeEnvironmentID == id {
-            workspace.activeEnvironmentID = workspace.environments.first?.id
-        }
-        persist()
-    }
-
-    func environmentBinding(_ id: UUID) -> Binding<EnvironmentModel>? {
-        guard let index = workspace.environments.firstIndex(where: { $0.id == id }) else { return nil }
-        let fallback = workspace.environments[index]
-        return Binding(
-            // Index saklanmaz: environment silinince eski index başka kaydı ezerdi.
-            get: {
-                self.workspace.environments.first { $0.id == id } ?? fallback
-            },
-            set: { newValue in
-                guard let current = self.workspace.environments.firstIndex(where: { $0.id == id }) else { return }
-                self.workspace.environments[current] = newValue
-                self.persistSoon()
-            }
-        )
-    }
-
     /// Öneri listesi için: aktif environment değişken adları + "secret:isim" girdileri.
     func templateSuggestions(matching token: String) -> [String] {
-        var options: [String] = activeEnvironment?.variables
-            .filter { $0.enabled && !$0.key.isEmpty }
-            .map(\.key) ?? []
-        options += activeEnvironment?.tokenVariables.map(\.trimmedName).filter { !$0.isEmpty && !options.contains($0) } ?? []
-        options += secretNames.map { "secret:\($0)" }
-        let query = token.trimmingCharacters(in: .whitespaces).lowercased()
-        let filtered = query.isEmpty
-            ? options
-            : options.filter { $0.lowercased().contains(query) }
-        return Array(filtered.prefix(8))
-    }
-
-    func curlCommand(for request: RequestModel, includeSecrets: Bool) -> String {
-        // Token değişkenleri: bellekte geçerli token varsa o, yoksa değişken adı yazılır.
-        var environment = activeEnvironment
-        var store = secretStore
-        if let active = activeEnvironment, !active.tokenVariables.isEmpty {
-            var overrides: [String: String] = [:]
-            for variable in active.tokenVariables {
-                let cached = tokenCache[tokenKey(variable, in: active)]
-                overrides[variable.secretName] = cached.flatMap { $0.isExpired() ? nil : $0.accessToken }
-                    ?? "{{\(variable.trimmedName)}}"
-            }
-            environment = TokenVariables.environmentForSend(active)
-            store = OverlaySecretStore(base: secretStore, overrides: overrides)
-        }
-        do {
-            return try CurlExporter.export(
-                request,
-                environment: environment,
-                secretStore: store,
-                includeSecrets: includeSecrets
-            )
-        } catch {
-            return "# cURL üretilemedi: \(error.localizedDescription)"
-        }
+        TemplateSuggestions.options(
+            environment: activeEnvironment,
+            secretNames: secretNames,
+            matching: token
+        )
     }
 
     /// Yapısal değişiklikler (ekle/sil/sırala/içe aktar) için anında yazım.

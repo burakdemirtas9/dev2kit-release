@@ -361,6 +361,17 @@ struct BodyEditor: View {
 
         var id: String { rawValue }
 
+        /// Biçimlendirme için Core karşılığı; `text` biçimlendirilmez.
+        var beautifierKind: Beautifier.Kind? {
+            switch self {
+            case .text: return nil
+            case .json: return .json
+            case .xml: return .xml
+            case .html: return .html
+            case .javascript: return .javascript
+            }
+        }
+
         var contentType: String {
             switch self {
             case .text: return "text/plain"
@@ -552,20 +563,8 @@ struct BodyEditor: View {
     private func beautify() {
         do {
             let source = rawContent.wrappedValue
-            let formatted: String
-            switch rawType.wrappedValue {
-            case .json:
-                formatted = try JSONFormatter.beautify(source)
-            case .xml:
-                formatted = try MarkupFormatter.beautify(source, flavor: .xml)
-            case .html:
-                formatted = try MarkupFormatter.beautify(source, flavor: .html)
-            case .javascript:
-                formatted = try ScriptFormatter.beautify(source)
-            case .text:
-                return
-            }
-            rawContent.wrappedValue = formatted
+            guard let kind = rawType.wrappedValue.beautifierKind else { return }
+            rawContent.wrappedValue = try Beautifier.beautify(source, as: kind)
             formatError = nil
         } catch {
             var message = error.localizedDescription
