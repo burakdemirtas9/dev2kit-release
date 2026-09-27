@@ -59,6 +59,8 @@ private struct RequestTab: View {
     let isPreview: Bool
     let isDirty: Bool
     @State private var hovering = false
+    /// Çift tıklamayı kendimiz ölçüyoruz; bkz. `onTapGesture`.
+    @State private var lastTapAt: Date?
 
     var body: some View {
         HStack(spacing: 6) {
@@ -106,8 +108,22 @@ private struct RequestTab: View {
         }
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
-        .onTapGesture(count: 2) { appState.pinTab(request.id) }
-        .onTapGesture { appState.selectedRequestID = request.id }
+        // TEK gesture: tek tık ANINDA seçer, çift tık sekmeyi kalıcı yapar.
+        //
+        // Neden iki ayrı `onTapGesture` değil: `count: 2` ile birlikte
+        // tanımlanınca SwiftUI tek tıklamayı "ikinci tık gelecek mi" diye
+        // çift tıklama süresi kadar bekletiyor. Sekmeye basınca hissedilen
+        // gecikme buydu — iş yükü değil, bekleme.
+        .onTapGesture {
+            let now = Date()
+            let isDouble = lastTapAt.map { now.timeIntervalSince($0) <= NSEvent.doubleClickInterval } ?? false
+            lastTapAt = now
+            if isDouble {
+                appState.pinTab(request.id)
+            } else {
+                appState.selectedRequestID = request.id
+            }
+        }
         .help(isPreview ? "\(request.name) — önizleme; çift tıklayınca kalıcı olur" : request.name)
         .contextMenu {
             if isPreview {
