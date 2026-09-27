@@ -203,7 +203,7 @@ struct SidebarView: View {
     @State private var renameTargetID: UUID?
     @State private var renameText = ""
     @State private var deleteTarget: CollectionModel?
-    @State private var deleteRequestTarget: RequestModel?
+    @State private var deleteRequestTargets: Set<UUID> = []
     @State private var draggingCollectionID: UUID?
     @FocusState private var searchFocused: Bool
 
@@ -219,12 +219,13 @@ struct SidebarView: View {
     /// arama yazmaya başlayınca düzenlediği istek kapanırdı. İstek silme gibi
     /// gerçek temizleme yolları `selectedRequestID`'yi doğrudan set ettiği
     /// için onlar etkilenmez.
-    private var listSelection: Binding<UUID?> {
+    /// `order`: görünen isteklerin sırası; aktif istek buna göre belirlenir.
+    private func listSelection(order: [UUID]) -> Binding<Set<UUID>> {
         Binding(
-            get: { appState.selectedRequestID },
+            get: { appState.selectedRequestIDs },
             set: { newValue in
-                guard let newValue else { return }
-                appState.selectedRequestID = newValue
+                guard !newValue.isEmpty else { return }
+                appState.applySelection(newValue, order: order)
             }
         )
     }
@@ -295,7 +296,9 @@ struct SidebarView: View {
         // Kirli istekler render başına TEK kez hesaplanır; satırlar ve
         // başlıklar bu kümeye bakar (bkz. AppState.dirtyRequestIDs).
         let dirty = appState.dirtyRequestIDs
-        List(selection: listSelection) {
+        // ⇧/⌘ ile seçilen aralığın hangi uçta bittiğini bilmek için görünen sıra.
+        let visibleOrder = matches.flatMap { $0.requests.map(\.id) }
+        List(selection: listSelection(order: visibleOrder)) {
             if appState.isSearching, matches.isEmpty {
                 Text("\"\(appState.searchQuery)\" için eşleşme yok")
                     .font(.callout)
@@ -328,35 +331,46 @@ struct SidebarView: View {
                         // akışında (bkz. SidebarDoubleClick) — gesture buraya
                         // bağlanınca tek tıklamayı yutuyor.
                         .contextMenu {
-                            Button {
-                                appState.duplicateRequest(request.id)
-                            } label: {
-                                Label("Çoğalt", systemImage: "plus.square.on.square")
+                            // Sağ tıklanan satır seçimin içindeyse işlem TÜM
+                            // seçime, dışındaysa yalnızca o satıra uygulanır.
+                            let picked = MultiSelection.targets(
+                                forContextMenuOn: request.id,
+                                selection: appState.selectedRequestIDs
+                            )
+                            let isMultiple = picked.count > 1
+                            if !isMultiple {
+                                Button {
+                                    appState.duplicateRequest(request.id)
+                                } label: {
+                                    Label("Çoğalt", systemImage: "plus.square.on.square")
+                                }
                             }
                             let targets = appState.workspace.regularCollections.filter { $0.id != collection.id }
                             if !targets.isEmpty {
                                 Menu {
                                     ForEach(targets) { target in
                                         Button(target.name) {
-                                            appState.moveRequest(request.id, toCollection: target.id)
+                                            appState.moveRequests(picked, toCollection: target.id)
                                         }
                                     }
                                 } label: {
-                                    Label("Şuraya Taşı", systemImage: "folder")
+                                    Label(isMultiple ? "\(picked.count) İsteği Şuraya Taşı" : "Şuraya Taşı",
+                                          systemImage: "folder")
                                 }
                             }
                             if !collection.isUngrouped {
                                 Button {
-                                    appState.removeFromCollection(request.id)
+                                    appState.removeFromCollection(picked)
                                 } label: {
-                                    Label("Koleksiyondan Çıkar", systemImage: "tray")
+                                    Label(isMultiple ? "\(picked.count) İsteği Koleksiyondan Çıkar" : "Koleksiyondan Çıkar",
+                                          systemImage: "tray")
                                 }
                             }
                             Divider()
                             Button(role: .destructive) {
-                                deleteRequestTarget = request
+                                deleteRequestTargets = picked
                             } label: {
-                                Label("Sil…", systemImage: "trash")
+                                Label(isMultiple ? "\(picked.count) İsteği Sil…" : "Sil…", systemImage: "trash")
                             }
                         }
                         .opacity(isDimmed(collection.id) ? 0.35 : 1)
@@ -484,6 +498,11 @@ struct SidebarView: View {
                 }
             }
         }
+        // ⌫: seçili istekleri sil. Kalıcı işlem olduğu için onay kutusundan geçer.
+        .onDeleteCommand {
+            guard !appState.selectedRequestIDs.isEmpty else { return }
+            deleteRequestTargets = appState.selectedRequestIDs
+        }
         // Başlıklar dışında bir yere bırakılırsa sürükleme durumunu temizle;
         // sıralama zaten hover sırasında canlı yapıldı.
         .onDrop(of: [.text], isTargeted: nil) { _ in
@@ -569,21 +588,23 @@ struct SidebarView: View {
             Text("\"\(deleteTarget?.name ?? "")\" ve içindeki \(deleteTarget?.requests.count ?? 0) istek kalıcı olarak silinecek.")
         }
         .alert(
-            "İsteği Sil",
+            deleteRequestTargets.count > 1 ? "İstekleri Sil" : "İsteği Sil",
             isPresented: Binding(
-                get: { deleteRequestTarget != nil },
-                set: { if !$0 { deleteRequestTarget = nil } }
+                get: { !deleteRequestTargets.isEmpty },
+                set: { if !$0 { deleteRequestTargets = [] } }
             )
         ) {
             Button("Sil", role: .destructive) {
-                if let target = deleteRequestTarget {
-                    appState.deleteRequest(target.id)
-                }
-                deleteRequestTarget = nil
+                appState.deleteRequests(deleteRequestTargets)
+                deleteRequestTargets = []
             }
-            Button("Vazgeç", role: .cancel) { deleteRequestTarget = nil }
+            Button("Vazgeç", role: .cancel) { deleteRequestTargets = [] }
         } message: {
-            Text("\"\(deleteRequestTarget?.name ?? "")\" kalıcı olarak silinecek.")
+            if deleteRequestTargets.count == 1, let id = deleteRequestTargets.first {
+                Text("\"\(appState.request(withID: id)?.name ?? "")\" kalıcı olarak silinecek.")
+            } else {
+                Text("\(deleteRequestTargets.count) istek kalıcı olarak silinecek.")
+            }
         }
         .frame(minWidth: 220)
     }

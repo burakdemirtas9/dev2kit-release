@@ -50,9 +50,27 @@ final class AppState {
     var selectedRequestID: UUID? {
         didSet {
             guard selectedRequestID != oldValue else { return }
-            if let id = selectedRequestID { openTab(id) }
+            if let id = selectedRequestID {
+                openTab(id)
+                // Tekil seçim yapan yollar (yeni istek, çoğalt, arama sonucu…)
+                // çoklu seçimi de sıfırlar; aktif istek zaten kümedeyse dokunulmaz.
+                if !selectedRequestIDs.contains(id) { selectedRequestIDs = [id] }
+            }
             saveTabs()
         }
+    }
+
+    /// Sidebar'da seçili tüm istekler (⇧ aralık, ⌘ tek tek).
+    /// Toplu silme/taşıma bu kümeye uygulanır; detayda açık olan
+    /// `selectedRequestID` kümenin içinden seçilir (bkz. `MultiSelection`).
+    private(set) var selectedRequestIDs: Set<UUID> = []
+
+    /// Listeden gelen yeni seçim kümesini uygular.
+    /// `order`: görünen isteklerin sırası — aktif istek buna göre belirlenir.
+    func applySelection(_ ids: Set<UUID>, order: [UUID]) {
+        let active = MultiSelection.active(current: selectedRequestID, selection: ids, order: order)
+        selectedRequestIDs = ids
+        selectedRequestID = active
     }
 
     // MARK: - Sekmeler
@@ -586,21 +604,41 @@ final class AppState {
 
     /// İsteği başka bir koleksiyona taşır (hedefin sonuna eklenir).
     func moveRequest(_ id: UUID, toCollection targetID: UUID) {
-        guard let location = locateRequest(id),
-              let target = workspace.collections.firstIndex(where: { $0.id == targetID }),
-              target != location.collection else { return }
-        var request = workspace.collections[location.collection].requests.remove(at: location.request)
-        let existing = workspace.collections[target].requests.map(\.name)
-        request.name = (try? CollectionPorting.resolveName(request.name, suffix: "taşınan", existingNames: existing).0)
-            ?? request.name
-        workspace.collections[target].requests.append(request)
-        selectedRequestID = request.id
+        moveRequests([id], toCollection: targetID)
+    }
+
+    /// Seçili istekleri başka bir koleksiyona taşır; kaynak sıraları korunur.
+    /// Ad çakışması tek istekteki kuralla aynı: "isim taşınan", "isim taşınan 2"…
+    func moveRequests(_ ids: Set<UUID>, toCollection targetID: UUID) {
+        guard !ids.isEmpty,
+              let target = workspace.collections.firstIndex(where: { $0.id == targetID }) else { return }
+        var moved: [RequestModel] = []
+        for index in workspace.collections.indices where index != target {
+            let picked = workspace.collections[index].requests.filter { ids.contains($0.id) }
+            guard !picked.isEmpty else { continue }
+            workspace.collections[index].requests.removeAll { ids.contains($0.id) }
+            moved.append(contentsOf: picked)
+        }
+        guard !moved.isEmpty else { return }
+        for var request in moved {
+            let existing = workspace.collections[target].requests.map(\.name)
+            request.name = (try? CollectionPorting.resolveName(request.name, suffix: "taşınan", existingNames: existing).0)
+                ?? request.name
+            workspace.collections[target].requests.append(request)
+        }
+        // Taşınanlar seçili kalsın: kullanıcı nereye gittiklerini görsün.
+        selectedRequestIDs = Set(moved.map(\.id))
+        selectedRequestID = moved.last?.id
         persist()
     }
 
     /// İsteği koleksiyonsuz bölüme taşır.
     func removeFromCollection(_ id: UUID) {
-        moveRequest(id, toCollection: workspace.ensureUngroupedCollection())
+        removeFromCollection([id])
+    }
+
+    func removeFromCollection(_ ids: Set<UUID>) {
+        moveRequests(ids, toCollection: workspace.ensureUngroupedCollection())
     }
 
     /// Dışarıdan gelen (curl vb.) isteği koleksiyona ekler ve seçer.
@@ -785,11 +823,18 @@ final class AppState {
     }
 
     func deleteRequest(_ id: UUID) {
+        deleteRequests([id])
+    }
+
+    /// Seçili isteklerin tamamını siler. Tek yazım, tek geri bildirim.
+    func deleteRequests(_ ids: Set<UUID>) {
+        guard !ids.isEmpty else { return }
         for index in workspace.collections.indices {
-            workspace.collections[index].requests.removeAll { $0.id == id }
+            workspace.collections[index].requests.removeAll { ids.contains($0.id) }
         }
-        closeTab(id)
-        if selectedRequestID == id { selectedRequestID = nil }
+        ids.forEach { closeTab($0) }
+        selectedRequestIDs.subtract(ids)
+        if let id = selectedRequestID, ids.contains(id) { selectedRequestID = nil }
         persist()
     }
 
