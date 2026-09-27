@@ -85,10 +85,16 @@ struct RequestDetailView: View {
         }
         .safeAreaInset(edge: .top, spacing: 0) {
             HStack(spacing: 8) {
+                // Genişlik SINIRLI: `fixedSize` ile ad kadar yer isteyince
+                // `windowResizability(.contentMinSize)` bunu pencerenin asgari
+                // ölçüsü sayıp uzun adlı istek seçildiğinde pencereyi büyütüyor
+                // ve kaydırıyordu (900 -> 1288 punto ölçüldü). Sekme değişimi
+                // bu yüzden de sıçramalı görünüyordu.
                 TextField("İstek adı", text: $request.name)
                     .textFieldStyle(.plain)
                     .font(.headline)
-                    .fixedSize(horizontal: true, vertical: false)
+                    .lineLimit(1)
+                    .frame(maxWidth: 360, alignment: .leading)
 
                 if appState.isDirty(request.id) {
                     Button {

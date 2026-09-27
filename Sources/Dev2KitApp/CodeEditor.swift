@@ -55,26 +55,51 @@ enum SyntaxHighlighter {
         }
     }
 
-    /// Bu eşiğin üstünde sözdizimi kuralları çalıştırılmaz: tüm metinde regex
-    /// taraması her tuş vuruşunda yapıldığı için büyük gövdelerde yazmayı
-    /// kilitliyordu. Metin yine okunur, sadece renklendirilmez.
-    static let highlightLimit = 100_000
+    /// Renklendirme YALNIZCA görünen bölgede yapılır.
+    ///
+    /// Ölçüm (release): 55.000 karakterlik bir JSON'u baştan sona boyamak
+    /// 11,6 ms sürüyordu ve bu iş her sekme değişiminde iki kez (gövde +
+    /// yanıt) ana thread'de koşuyordu — sekme geçişindeki takılma buydu.
+    /// Ekranda 40-50 satır varken tüm belgeyi boyamanın karşılığı yok;
+    /// maliyet artık belge boyutundan bağımsız.
+    ///
+    /// Yan etki: bölge sınırını aşan yapılar (çok satırlı yorum gibi) kırpılmış
+    /// görünebilir. Bölge satır başlarına genişletilerek etkisi küçültülüyor.
+    static let margin = 2_000
 
-    static func highlight(_ storage: NSTextStorage, language: CodeLanguage, font: NSFont) {
-        let fullRange = NSRange(location: 0, length: storage.length)
+    /// Yazı tipi ve temel renk tüm belgeye bir kez uygulanır; metin değişince
+    /// çağrılır. Renklendirmenin kendisi ayrı (bkz. `colorize`).
+    static func applyBaseAttributes(_ storage: NSTextStorage, font: NSFont) {
+        let full = NSRange(location: 0, length: storage.length)
         storage.beginEditing()
-        storage.setAttributes([.font: font, .foregroundColor: Theme.editorText], range: fullRange)
-        guard storage.length <= highlightLimit else {
-            storage.endEditing()
-            return
-        }
-        for rule in rules(for: language) {
-            rule.regex.enumerateMatches(in: storage.string, range: fullRange) { match, _, _ in
+        storage.setAttributes([.font: font, .foregroundColor: Theme.editorText], range: full)
+        storage.endEditing()
+    }
+
+    /// Verilen aralığı (satır sınırlarına genişleterek) renklendirir.
+    static func colorize(_ storage: NSTextStorage, language: CodeLanguage, range: NSRange) {
+        let rules = rules(for: language)
+        guard !rules.isEmpty, storage.length > 0 else { return }
+        let target = expand(range, in: storage.string)
+        storage.beginEditing()
+        storage.setAttributes([.foregroundColor: Theme.editorText], range: target)
+        for rule in rules {
+            rule.regex.enumerateMatches(in: storage.string, range: target) { match, _, _ in
                 guard let match, match.range(at: rule.group).location != NSNotFound else { return }
                 storage.addAttribute(.foregroundColor, value: rule.color, range: match.range(at: rule.group))
             }
         }
         storage.endEditing()
+    }
+
+    /// Görünen aralığı iki yana `margin` kadar açar ve satır sınırlarına oturtur:
+    /// kaydırırken kenarda yarım boyanmış satır görünmesin.
+    private static func expand(_ range: NSRange, in text: String) -> NSRange {
+        let length = (text as NSString).length
+        let start = max(0, range.location - margin)
+        let end = min(length, range.location + range.length + margin)
+        guard start < end else { return NSRange(location: 0, length: 0) }
+        return (text as NSString).lineRange(for: NSRange(location: start, length: end - start))
     }
 }
 
@@ -110,7 +135,10 @@ struct CodeEditor: NSViewRepresentable {
         scrollView.drawsBackground = false
         textView.textContainerInset = NSSize(width: 4, height: 8)
         textView.string = text
-        context.coordinator.highlight(textView)
+        context.coordinator.textChanged(textView)
+        // Kaydırdıkça yeni görünen bölge boyanır.
+        scrollView.contentView.postsBoundsChangedNotifications = true
+        context.coordinator.observeScrolling(of: scrollView, textView: textView)
         return scrollView
     }
 
@@ -121,43 +149,69 @@ struct CodeEditor: NSViewRepresentable {
         if textView.string != text {
             // Programatik değişim (ör. Beautify): metni değiştir, yeniden boya.
             textView.string = text
-            context.coordinator.highlight(textView)
+            context.coordinator.textChanged(textView)
         } else if context.coordinator.lastLanguage != language {
-            context.coordinator.highlight(textView)
+            context.coordinator.textChanged(textView)
         }
     }
 
     final class Coordinator: NSObject, NSTextViewDelegate {
         var parent: CodeEditor
         var lastLanguage: CodeLanguage?
-        private var highlightWorkItem: DispatchWorkItem?
+        private var scrollObserver: NSObjectProtocol?
 
         init(_ parent: CodeEditor) {
             self.parent = parent
         }
 
         deinit {
-            highlightWorkItem?.cancel()
+            if let scrollObserver { NotificationCenter.default.removeObserver(scrollObserver) }
         }
 
         func textDidChange(_ notification: Notification) {
             guard let textView = notification.object as? NSTextView else { return }
             parent.text = textView.string
-            // Hızlı yazarken her tuşta tüm metni yeniden boyamak yerine
-            // yazım durduğunda bir kez boya (imleç ve kaydırma da korunur).
-            highlightWorkItem?.cancel()
-            let work = DispatchWorkItem { [weak self, weak textView] in
-                guard let self, let textView else { return }
-                self.highlight(textView)
-            }
-            highlightWorkItem = work
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12, execute: work)
+            // ANINDA boyanır, gecikme yok. Eskiden 120 ms ertelenirdi: tüm belge
+            // taranacağı için her tuşta yapılamazdı. Yapıştırılan JSON önce
+            // renksiz görünüp sonra renklenmesinin sebebi buydu. Artık iş
+            // yalnızca görünen bölge kadar (~1,5 ms), ertelemeye gerek yok.
+            colorizeVisible(textView)
         }
 
-        func highlight(_ textView: NSTextView) {
+        /// Metin (ya da dil) değişti: temel biçim tüm belgeye, renk görünen bölgeye.
+        func textChanged(_ textView: NSTextView) {
             lastLanguage = parent.language
             guard let storage = textView.textStorage else { return }
-            SyntaxHighlighter.highlight(storage, language: parent.language, font: CodeEditor.font)
+            SyntaxHighlighter.applyBaseAttributes(storage, font: CodeEditor.font)
+            colorizeVisible(textView)
+        }
+
+        func colorizeVisible(_ textView: NSTextView) {
+            guard let storage = textView.textStorage else { return }
+            SyntaxHighlighter.colorize(storage, language: parent.language, range: visibleRange(of: textView))
+        }
+
+        /// Ekranda duran karakter aralığı. Yerleşim yalnızca bu dikdörtgen için
+        /// zorlanır, belgenin tamamı için değil.
+        private func visibleRange(of textView: NSTextView) -> NSRange {
+            guard let layoutManager = textView.layoutManager,
+                  let container = textView.textContainer else {
+                return NSRange(location: 0, length: textView.string.utf16.count)
+            }
+            let glyphs = layoutManager.glyphRange(forBoundingRect: textView.visibleRect, in: container)
+            return layoutManager.characterRange(forGlyphRange: glyphs, actualGlyphRange: nil)
+        }
+
+        func observeScrolling(of scrollView: NSScrollView, textView: NSTextView) {
+            guard scrollObserver == nil else { return }
+            scrollObserver = NotificationCenter.default.addObserver(
+                forName: NSView.boundsDidChangeNotification,
+                object: scrollView.contentView,
+                queue: .main
+            ) { [weak self, weak textView] _ in
+                guard let self, let textView else { return }
+                MainActor.assumeIsolated { self.colorizeVisible(textView) }
+            }
         }
     }
 }
