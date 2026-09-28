@@ -8,6 +8,7 @@ struct ResponseView: View {
     @State private var copied = false
     @State private var fileSaveError: String?
     @State private var showingNetwork = false
+    @State private var showingTiming = false
 
     enum Tab: String, CaseIterable {
         case body = "Body"
@@ -217,8 +218,24 @@ struct ResponseView: View {
             Text("\(response.statusCode)")
                 .font(.system(.body, design: .monospaced)).bold()
                 .foregroundStyle(response.isSuccess ? Theme.up : (response.statusCode < 500 ? Theme.warning : Theme.down))
-            Text(String(format: "%.0f ms", response.duration * 1000))
-                .foregroundStyle(.secondary)
+            if let timing = response.timing {
+                Button {
+                    showingTiming = true
+                } label: {
+                    Text(String(format: "%.0f ms", response.duration * 1000))
+                        .foregroundStyle(.secondary)
+                        .iconHitTarget(20)
+                }
+                .buttonStyle(.plain)
+                .help("Sürenin aşamalara dağılımı: DNS, TCP, TLS, bekleme, indirme")
+                .accessibilityLabel("Yanıt süresi kırılımı")
+                .popover(isPresented: $showingTiming, arrowEdge: .bottom) {
+                    ResponseTimingPopover(timing: timing)
+                }
+            } else {
+                Text(String(format: "%.0f ms", response.duration * 1000))
+                    .foregroundStyle(.secondary)
+            }
             Text(ByteCountFormatter.string(fromByteCount: Int64(response.body.count), countStyle: .binary))
                 .foregroundStyle(.secondary)
             if let network = response.network {

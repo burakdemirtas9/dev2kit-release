@@ -16,6 +16,8 @@ public struct ResponseData: Sendable {
     /// Bağlantının teknik künyesi (protokol, adresler, TLS, sertifika).
     /// Opsiyonel: metrikler gelmemiş olabilir, eski kayıtlarda hiç yok.
     public let network: NetworkInfo?
+    /// Sürenin aşamalara dağılımı (DNS, TCP, TLS, bekleme, indirme).
+    public let timing: ResponseTiming?
 
     public init(
         statusCode: Int,
@@ -25,7 +27,8 @@ public struct ResponseData: Sendable {
         finalURL: URL?,
         redirects: [RedirectStep] = [],
         redirectStop: RedirectGuard.Decision.StopReason? = nil,
-        network: NetworkInfo? = nil
+        network: NetworkInfo? = nil,
+        timing: ResponseTiming? = nil
     ) {
         self.statusCode = statusCode
         self.headers = headers
@@ -35,6 +38,7 @@ public struct ResponseData: Sendable {
         self.redirects = redirects
         self.redirectStop = redirectStop
         self.network = network
+        self.timing = timing
     }
 
     public var bodyText: String? { String(data: body, encoding: .utf8) }
@@ -203,7 +207,8 @@ public final class RequestEngine: @unchecked Sendable {
             finalURL: http.url,
             redirects: tracker.steps,
             redirectStop: tracker.stopReason,
-            network: networkInfo(from: tracker, host: http.url?.host ?? urlRequest.url?.host)
+            network: networkInfo(from: tracker, host: http.url?.host ?? urlRequest.url?.host),
+            timing: tracker.responseTiming
         )
     }
 

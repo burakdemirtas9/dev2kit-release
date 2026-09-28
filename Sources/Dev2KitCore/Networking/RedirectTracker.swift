@@ -21,6 +21,7 @@ final class RedirectTracker: NSObject, URLSessionTaskDelegate, @unchecked Sendab
     /// Bağlantı künyesi: metrikler ve sunucu sertifikası iki ayrı callback'ten
     /// gelir, ikisi de burada birleşir.
     private var network = NetworkInfo()
+    private var timing: ResponseTiming?
 
     init(
         policy: RedirectPolicy,
@@ -88,6 +89,30 @@ final class RedirectTracker: NSObject, URLSessionTaskDelegate, @unchecked Sendab
         }
         network.isReusedConnection = transaction.isReusedConnection
         network.isProxyConnection = transaction.isProxyConnection
+
+        // Zaman kırılımı: aşamalara bölme kuralı Core'da (ResponseTiming),
+        // burada yalnızca tarihler aktarılıyor.
+        timing = ResponseTiming.make(
+            taskStart: metrics.taskInterval.start,
+            taskEnd: metrics.taskInterval.end,
+            fetchStart: transaction.fetchStartDate,
+            domainLookupStart: transaction.domainLookupStartDate,
+            domainLookupEnd: transaction.domainLookupEndDate,
+            connectStart: transaction.connectStartDate,
+            connectEnd: transaction.connectEndDate,
+            secureConnectionStart: transaction.secureConnectionStartDate,
+            secureConnectionEnd: transaction.secureConnectionEndDate,
+            requestStart: transaction.requestStartDate,
+            requestEnd: transaction.requestEndDate,
+            responseStart: transaction.responseStartDate,
+            responseEnd: transaction.responseEndDate,
+            isReusedConnection: transaction.isReusedConnection
+        )
+    }
+
+    var responseTiming: ResponseTiming? {
+        lock.lock(); defer { lock.unlock() }
+        return timing
     }
 
     var networkInfo: NetworkInfo? {
