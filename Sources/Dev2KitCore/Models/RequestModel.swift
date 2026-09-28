@@ -10,6 +10,17 @@ public enum HTTPMethod: String, Codable, CaseIterable, Identifiable, Sendable {
     case options = "OPTIONS"
 
     public var id: String { rawValue }
+
+    /// Bu metot gövde taşıyabilir mi.
+    ///
+    /// HTTP'nin kendisi GET gövdesini yasaklamaz (Elasticsearch `_search` gibi
+    /// API'ler kullanır) ama URLSession göndermez. Ölçüldü — macOS 26 /
+    /// Darwin 27, CFNetwork 3896, yerel dinleyiciye karşı: GET + gövde
+    /// `-1103` ("kaynak en fazla büyüklüğü aşıyor") ile HİÇ ağa çıkmıyor.
+    /// `httpBody`, `httpBodyStream` ve `upload(for:from:)` yollarının üçü de
+    /// aynı hatayı veriyor. HEAD, OPTIONS, DELETE, POST, PUT ve PATCH gövdeyi
+    /// telde taşıyor (aynı ölçümde doğrulandı).
+    public var allowsBody: Bool { self != .get }
 }
 
 /// Header/query satırı. `enabled` ile satır silinmeden devre dışı bırakılabilir.

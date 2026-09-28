@@ -58,6 +58,8 @@ public enum RequestEngineError: Error, LocalizedError {
     case securityBlocked([SecurityFinding])
     /// Onay bekleyen güvenlik uyarıları: istek gönderilmedi.
     case needsApproval([SecurityFinding])
+    /// Metot gövde taşıyamıyor (bkz. `HTTPMethod.allowsBody`).
+    case bodyNotAllowed(HTTPMethod)
 
     public var errorDescription: String? {
         switch self {
@@ -67,6 +69,15 @@ public enum RequestEngineError: Error, LocalizedError {
         case .notHTTPResponse: return "Sunucudan HTTP yanıtı alınamadı."
         case .notAuthorized(let name):
             return "\"\(name)\" için henüz token yok. Auth sekmesinden \"Yetkilendir\" ile giriş yap."
+        case .bodyNotAllowed(let method):
+            // Sistem hatası ("kaynak en fazla büyüklüğü aşıyor") ne olduğunu
+            // anlatmıyor; kullanıcıya ne yapacağını söylemek gerekiyor.
+            return """
+            \(method.rawValue) isteği gövde taşıyamıyor: macOS'un ağ katmanı \
+            (URLSession) gövdeli bir \(method.rawValue) göndermeyi reddediyor, \
+            istek ağa hiç çıkmıyor. Metodu POST yap ya da gövdeyi Query \
+            sekmesine taşı.
+            """
         }
     }
 }
@@ -304,7 +315,7 @@ public final class RequestEngine: @unchecked Sendable {
         case .raw(let content, let contentType):
             let data = Data(try resolver.resolve(content).utf8)
             guard !data.isEmpty else { return }
-            setBody(data, contentType: contentType.isEmpty ? nil : contentType,
+            try setBody(data, contentType: contentType.isEmpty ? nil : contentType,
                     on: &request, method: model.method)
 
         case .formURLEncoded(let fields):
@@ -313,7 +324,7 @@ public final class RequestEngine: @unchecked Sendable {
                 .filter { $0.enabled && !$0.key.isEmpty }
                 .map { URLQueryItem(name: try resolver.resolve($0.key), value: try resolver.resolve($0.value)) }
             guard let query = components.percentEncodedQuery, !query.isEmpty else { return }
-            setBody(Data(query.utf8), contentType: "application/x-www-form-urlencoded",
+            try setBody(Data(query.utf8), contentType: "application/x-www-form-urlencoded",
                     on: &request, method: model.method)
 
         case .multipartForm(let fields):
@@ -331,7 +342,7 @@ public final class RequestEngine: @unchecked Sendable {
                 data.append(Data("\(try resolver.resolve(field.value))\r\n".utf8))
             }
             data.append(Data("--\(boundary)--\r\n".utf8))
-            setBody(data, contentType: "multipart/form-data; boundary=\(boundary)",
+            try setBody(data, contentType: "multipart/form-data; boundary=\(boundary)",
                     on: &request, method: model.method)
         }
     }
@@ -376,21 +387,23 @@ public final class RequestEngine: @unchecked Sendable {
         return resolved.isEmpty ? nil : resolved
     }
 
+    /// Gövdeyi isteğe bağlar.
+    ///
+    /// Eskiden GET/HEAD/OPTIONS için `httpBodyStream` kullanılıyordu ("URLSession
+    /// httpBody'yi sessizce düşürür" varsayımıyla). Yerel bir dinleyiciye karşı
+    /// ölçüldü (macOS 26 / Darwin 27): HEAD ve OPTIONS düz `httpBody` ile
+    /// gövdeyi telde taşıyor, GET ise her üç yolda da reddediliyor. Yani özel
+    /// durum gereksizdi; GET ise zaten baştan durdurulmalı.
     private func setBody(
         _ data: Data,
         contentType: String?,
         on request: inout URLRequest,
         method: HTTPMethod
-    ) {
-        switch method {
-        case .get, .head, .options:
-            // URLSession bu metotlarda httpBody'yi sessizce düşürür;
-            // body'nin gerçekten gönderilmesi için stream kullanılır.
-            request.httpBodyStream = InputStream(data: data)
-            request.setValue("\(data.count)", forHTTPHeaderField: "Content-Length")
-        default:
-            request.httpBody = data
+    ) throws {
+        guard method.allowsBody else {
+            throw RequestEngineError.bodyNotAllowed(method)
         }
+        request.httpBody = data
         // Headers sekmesinde elle girilen Content-Type her zaman kazanır.
         if request.value(forHTTPHeaderField: "Content-Type") == nil, let contentType {
             request.setValue(contentType, forHTTPHeaderField: "Content-Type")

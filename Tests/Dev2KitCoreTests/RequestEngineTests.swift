@@ -85,15 +85,15 @@ final class RequestEngineTests: XCTestCase {
         XCTAssertEqual(request.value(forHTTPHeaderField: "Content-Type"), "text/plain")
     }
 
-    func testGetBodySentViaStream() throws {
-        // URLSession GET'te httpBody'yi düşürdüğü için stream kullanılır.
+    func testGetBodyIsRejected() throws {
+        // ESKİ HALİ: "URLSession GET'te httpBody'yi düşürür, stream kullanılır"
+        // varsayımıyla stream kuruluyordu ve bu test onu doğruluyordu. Yerel
+        // dinleyiciye karşı ölçünce görüldü ki stream de gitmiyor: GET + gövde
+        // -1103 ile ağa HİÇ çıkmıyor. Test artık ölçülen davranışı tutuyor.
+        // Ayrıntı ve diğer metotlar: MethodBodyTests.
         var model = RequestModel(method: .get, url: "https://api.example.com")
         model.body = .raw(content: "sorgu", contentType: "text/plain")
-        let request = try engine.buildURLRequest(model, resolver: resolver())
-        XCTAssertNil(request.httpBody)
-        XCTAssertNotNil(request.httpBodyStream)
-        XCTAssertEqual(request.value(forHTTPHeaderField: "Content-Length"), "\(Data("sorgu".utf8).count)")
-        XCTAssertEqual(request.value(forHTTPHeaderField: "Content-Type"), "text/plain")
+        XCTAssertThrowsError(try engine.buildURLRequest(model, resolver: resolver()))
     }
 
     func testFormURLEncodedBody() throws {
