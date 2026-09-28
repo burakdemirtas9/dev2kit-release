@@ -29,6 +29,28 @@ public enum MarkupFormatter {
         "link", "meta", "param", "source", "track", "wbr",
     ]
 
+    /// HTML'de bir etiket AÇILINCA örtük olarak kapanan kardeşleri.
+    ///
+    /// `<li>bir<li>iki` geçerli HTML'dir: ikinci `<li>` birinciyi kapatır.
+    /// Bu tablo olmadan ikinci madde birincinin İÇİNE girintileniyordu.
+    ///
+    /// Sınır: `<p>`nin bir blok element (`<div>`, `<table>`…) açılınca da
+    /// kapandığı kural burada YOK — tam HTML ayrıştırma modeli gerektirir ve
+    /// girintiden başka bir şeyi etkilemez.
+    private static let closedByOpening: [String: Set<String>] = [
+        "li": ["li"],
+        "p": ["p"],
+        "dt": ["dt", "dd"],
+        "dd": ["dt", "dd"],
+        "tr": ["tr", "td", "th"],
+        "td": ["td", "th"],
+        "th": ["td", "th"],
+        "option": ["option"],
+        "thead": ["thead", "tbody", "tfoot"],
+        "tbody": ["thead", "tbody", "tfoot"],
+        "tfoot": ["thead", "tbody", "tfoot"],
+    ]
+
     private enum Token {
         case open(raw: String, name: String)
         case close(raw: String, name: String)
@@ -161,6 +183,12 @@ public enum MarkupFormatter {
                 index += 1
 
             case .open(let raw, let name):
+                // Örtük kapanış: <li> açılınca açık duran <li> kapanmış sayılır.
+                if flavor == .html, let closes = closedByOpening[name.lowercased()] {
+                    while let top = stack.last, closes.contains(top.lowercased()) {
+                        stack.removeLast()
+                    }
+                }
                 // HTML'de void elementler kapanmaz: derinliği artırma.
                 if flavor == .html, voidElements.contains(name.lowercased()) {
                     emit(raw)

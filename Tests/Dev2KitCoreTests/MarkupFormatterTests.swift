@@ -100,3 +100,65 @@ final class MarkupFormatterTests: XCTestCase {
         XCTAssertTrue(result.hasPrefix("<!DOCTYPE html>"))
     }
 }
+
+/// HTML'de örtük kapanışlar: `<li>bir<li>iki` geçerlidir ve ikinci madde
+/// birincinin içine girintilenmemeli.
+extension MarkupFormatterTests {
+    private func html(_ text: String) -> String {
+        (try? MarkupFormatter.beautify(text, flavor: .html)) ?? "BİÇİMLENDİRİLEMEDİ"
+    }
+
+    func testUnclosedListItemsStaySiblings() {
+        // Asıl mesele girinti DERİNLİĞİ: iki madde kardeş, biri diğerinin
+        // içinde değil. Metnin kendi satırına inmesi sorun değil, maddenin
+        // içeriği zaten orası.
+        let output = html("<ul><li>bir<li>iki</ul>")
+        XCTAssertEqual(output, """
+        <ul>
+          <li>
+            bir
+          <li>
+            iki
+        </ul>
+        """)
+    }
+
+    func testUnclosedParagraphsStaySiblings() {
+        let output = html("<div><p>bir<p>iki</div>")
+        XCTAssertEqual(output, """
+        <div>
+          <p>
+            bir
+          <p>
+            iki
+        </div>
+        """)
+    }
+
+    func testUnclosedTableCellsStaySiblings() {
+        let output = html("<tr><td>a<td>b</tr>")
+        XCTAssertEqual(output, """
+        <tr>
+          <td>
+            a
+          <td>
+            b
+        </tr>
+        """)
+    }
+
+    func testExplicitlyClosedItemsAreUnaffected() {
+        let output = html("<ul><li>bir</li><li>iki</li></ul>")
+        XCTAssertEqual(output, """
+        <ul>
+          <li>bir</li>
+          <li>iki</li>
+        </ul>
+        """)
+    }
+
+    func testXMLIsNotAffectedByHTMLImplicitRules() {
+        // XML'de <li> diye bir kural yok; kapatılmamış etiket hatadır.
+        XCTAssertThrowsError(try MarkupFormatter.beautify("<ul><li>bir<li>iki</ul>", flavor: .xml))
+    }
+}
