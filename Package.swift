@@ -30,5 +30,13 @@ let package = Package(
             dependencies: ["Dev2KitCore"],
             path: "Tests/Dev2KitCoreTests"
         ),
+        // Arayüz katmanı testleri. `AppState` uzun süre test edilmiyordu ve
+        // bunun bedeli ödendi: bir refactor uygulamayı açılışta çökertti,
+        // Core'daki 488 testin hiçbiri yakalamadı.
+        .testTarget(
+            name: "Dev2KitAppTests",
+            dependencies: ["Dev2KitApp", "Dev2KitCore"],
+            path: "Tests/Dev2KitAppTests"
+        ),
     ]
 )
