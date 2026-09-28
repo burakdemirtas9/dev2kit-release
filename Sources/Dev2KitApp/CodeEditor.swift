@@ -8,10 +8,21 @@ enum CodeLanguage: Equatable {
     case markup      // XML / HTML
     case javascript
 
-    /// Süslü/köşeli parantezle katlanabilir mi. Markup etiketlerle çalışır,
-    /// bu ayrıştırıcı ona uymaz.
+    /// Katlanabilir mi ve hangi tarayıcıyla.
+    ///
+    /// JSON/JS parantezle, XML-HTML etiketle katlanır; düz metinde katlanacak
+    /// bir yapı yok. Tarayıcı seçimi burada duruyor ki dil eklendiğinde
+    /// derleyici eksik kalan yeri göstersin.
+    func foldableRegions(in text: String) -> [FoldRegion] {
+        switch self {
+        case .json, .javascript: return JSONFolding.regions(in: text)
+        case .markup: return MarkupFolding.regions(in: text)
+        case .plain: return []
+        }
+    }
+
     var supportsFolding: Bool {
-        self == .json || self == .javascript
+        self != .plain
     }
 
     /// Core'daki tür tahmininin arayüz karşılığı. XML ve HTML aynı
@@ -260,7 +271,7 @@ struct CodeEditor: NSViewRepresentable {
         var search: EditorSearchController?
         private var matches: [NSRange] = []
         private var currentMatch: Int?
-        private var regions: [JSONFolding.Region] = []
+        private var regions: [FoldRegion] = []
         private var foldedLines: Set<Int> = []
         /// Katlanan aralıkları çizimden düşüren delege (ayrı sınıf: testli).
         let foldingDelegate = FoldingLayoutDelegate()
@@ -332,9 +343,7 @@ struct CodeEditor: NSViewRepresentable {
         /// kullanıcıyı şaşırtır, kaybolan aralıkları takip etmek de kırılgandır.
         func refreshRegions(_ textView: NSTextView) {
             guard let gutter, let controller else { return }
-            regions = parent.language.supportsFolding
-                ? JSONFolding.regions(in: textView.string)
-                : []
+            regions = parent.language.foldableRegions(in: textView.string)
             if parent.isEditable, !foldedLines.isEmpty {
                 foldedLines.removeAll()
             } else {
@@ -359,7 +368,7 @@ struct CodeEditor: NSViewRepresentable {
 
         func collapseAll(in textView: NSTextView) {
             // Yalnızca en dıştakiler: içerdekileri kapatmanın görünür etkisi yok.
-            foldedLines = Set(JSONFolding.outermost(regions).map(\.openLine))
+            foldedLines = Set(FoldRegion.outermost(regions).map(\.openLine))
             applyFolding(textView)
         }
 

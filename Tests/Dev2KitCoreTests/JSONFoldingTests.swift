@@ -63,13 +63,13 @@ final class JSONFoldingTests: XCTestCase {
     func testRegionLookupByLine() {
         let json = text("{", "  \"list\": [", "    1", "  ]", "}")
         let regions = JSONFolding.regions(in: json)
-        XCTAssertEqual(JSONFolding.region(startingAt: 1, in: regions)?.kind, .array)
-        XCTAssertNil(JSONFolding.region(startingAt: 2, in: regions))
+        XCTAssertEqual(FoldRegion.region(startingAt: 1, in: regions)?.kind, .array)
+        XCTAssertNil(FoldRegion.region(startingAt: 2, in: regions))
     }
 
     func testOutermostSkipsNestedRegions() {
         let json = text("{", "  \"list\": [", "    1", "  ]", "}")
-        let outermost = JSONFolding.outermost(JSONFolding.regions(in: json))
+        let outermost = FoldRegion.outermost(JSONFolding.regions(in: json))
         XCTAssertEqual(outermost.count, 1)
         XCTAssertEqual(outermost.first?.kind, .object)
     }
@@ -78,7 +78,7 @@ final class JSONFoldingTests: XCTestCase {
         let json = text("{", "  \"a\": {", "    \"x\": 1", "  },", "  \"b\": {", "    \"y\": 2", "  }", "}")
         let regions = JSONFolding.regions(in: json)
         XCTAssertEqual(regions.count, 3)
-        XCTAssertEqual(JSONFolding.outermost(regions).count, 1, "dış nesne hepsini kapsıyor")
+        XCTAssertEqual(FoldRegion.outermost(regions).count, 1, "dış nesne hepsini kapsıyor")
     }
 
     func testArrayOfObjects() {
