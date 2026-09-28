@@ -89,6 +89,17 @@ struct Dev2KitApp: App {
                 appState.focusSearch()
             }
             .keyboardShortcut("f", modifiers: .command)
+            // ⌘F zaten sidebar aramasında. Editör aramaları iki AYRI komut:
+            // gövde ve yanıt birbirinden bağımsız arandığı için "odaktaki
+            // editörde ara" gibi bir tahmin yapmak yanlış panele yazdırır.
+            Button("Gövdede Ara") {
+                appState.openBodySearch()
+            }
+            .keyboardShortcut("f", modifiers: [.command, .option])
+            Button("Yanıtta Ara") {
+                appState.openResponseSearch()
+            }
+            .keyboardShortcut("f", modifiers: [.command, .shift])
         }
         CommandMenu("İstek") {
             ForEach(Array(EditorTab.allCases.enumerated()), id: \.element) { index, tab in

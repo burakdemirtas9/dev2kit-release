@@ -176,6 +176,23 @@ final class AppState {
         searchQuery = ""
     }
 
+    // MARK: - Editör araması
+    //
+    // Gövde ve yanıt editörleri kendi aramalarını kendileri yönetir
+    // (`EditorSearchController`); burada yalnızca menü komutunun onlara
+    // ulaşması için sayaç tutuluyor. Sidebar aramasıyla aynı desen: sayaç,
+    // çubuk zaten açıkken tekrar kısayola basmayı da gözlemlenebilir kılar.
+    private(set) var bodySearchRequest = 0
+    private(set) var responseSearchRequest = 0
+
+    func openBodySearch() {
+        bodySearchRequest += 1
+    }
+
+    func openResponseSearch() {
+        responseSearchRequest += 1
+    }
+
     /// Her satır için ayrı ayrı sorulduğundan ucuz tutuldu: `tokens(from:)`
     /// ile aynı sonucu verir (yalnızca boşluktan oluşan sorgu arama sayılmaz)
     /// ama dizi ayırmaz.

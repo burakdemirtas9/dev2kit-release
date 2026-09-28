@@ -12,6 +12,8 @@ struct ResponseView: View {
     @State private var showingSize = false
     @State private var copiedCorrelationID = false
     @StateObject private var folding = CodeFoldingController()
+    /// Yanıtın KENDİ araması; istek gövdesindeki aramadan bağımsızdır.
+    @StateObject private var search = EditorSearchController()
 
     enum Tab: String, CaseIterable {
         case body = "Body"
@@ -72,8 +74,9 @@ struct ResponseView: View {
                     // Sekmeler ortada kalsın; katlama düğmeleri sağ uçta durur.
                     HStack {
                         Spacer()
-                        // Katlama yalnızca gövde sekmesinde anlamlı.
+                        // Arama ve katlama yalnızca gövde sekmesinde anlamlı.
                         if selectedTab == .body {
+                            SearchToggleButton(search: search)
                             FoldButtons(folding: folding)
                         }
                     }
@@ -96,11 +99,17 @@ struct ResponseView: View {
 
                 switch selectedTab {
                 case .body:
+                    if search.isPresented {
+                        EditorSearchBar(search: search)
+                            .padding(.horizontal, 8)
+                            .padding(.bottom, 6)
+                    }
                     CodeEditor(
                         text: .constant(display.prettyText),
                         language: display.language,
                         isEditable: false,
-                        folding: folding
+                        folding: folding,
+                        search: search
                     )
                     .background(Theme.editorBackground)
                 case .headers:
@@ -127,6 +136,17 @@ struct ResponseView: View {
                 if selectedTab == .redirects, response.redirects.isEmpty, response.redirectStop == nil {
                     selectedTab = .body
                 }
+            }
+            .onChange(of: appState.responseSearchRequest) {
+                // Menüdeki "Yanıtta Ara" (⇧⌘F). Arama gövdede yapıldığı için
+                // başka sekmedeysek oraya geçilir.
+                selectedTab = .body
+                search.open()
+            }
+            .onChange(of: selectedTab) {
+                // Başlık/yönlendirme sekmesinde aranacak editör yok; çubuk
+                // açık kalırsa hiçbir şey yapmayan bir kutu gibi görünür.
+                if selectedTab != .body { search.close() }
             }
             .task(id: copied) {
                 guard copied else { return }

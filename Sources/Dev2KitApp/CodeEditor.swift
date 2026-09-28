@@ -151,6 +151,8 @@ struct CodeEditor: NSViewRepresentable {
     var isEditable: Bool = true
     /// Verilirse satır numaraları ve katlama okları görünür.
     var folding: CodeFoldingController?
+    /// Verilirse arama çubuğu bu editörü arayabilir.
+    var search: EditorSearchController?
 
     static let font = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
 
@@ -203,6 +205,27 @@ struct CodeEditor: NSViewRepresentable {
             }
         }
 
+        if let search {
+            context.coordinator.search = search
+            search.apply = { [weak coordinator = context.coordinator] in
+                coordinator?.runSearch(in: textView)
+            }
+            search.move = { [weak coordinator = context.coordinator] forward in
+                coordinator?.stepSearch(forward: forward, in: textView)
+            }
+            search.clear = { [weak coordinator = context.coordinator] in
+                coordinator?.clearSearch(in: textView)
+            }
+            // Sekme değiştirince (Body <-> Headers) editör baştan kuruluyor;
+            // açık bir arama varsa vurgular geri gelmeli. Burada doğrudan
+            // çağırmak SwiftUI güncellemesinin İÇİNDE @Published yazmak olurdu.
+            if search.isActive {
+                DispatchQueue.main.async { [weak coordinator = context.coordinator] in
+                    coordinator?.runSearch(in: textView, reveal: false)
+                }
+            }
+        }
+
         context.coordinator.textChanged(textView)
         // Kaydırdıkça yeni görünen bölge boyanır.
         scrollView.contentView.postsBoundsChangedNotifications = true
@@ -233,6 +256,10 @@ struct CodeEditor: NSViewRepresentable {
         /// Gutter ve katlama durumu yalnızca `folding` verildiğinde kurulur.
         var gutter: EditorGutter?
         var controller: CodeFoldingController?
+        /// Arama yalnızca `search` verildiğinde çalışır.
+        var search: EditorSearchController?
+        private var matches: [NSRange] = []
+        private var currentMatch: Int?
         private var regions: [JSONFolding.Region] = []
         private var foldedLines: Set<Int> = []
         /// Katlanan aralıkları çizimden düşüren delege (ayrı sınıf: testli).
@@ -263,7 +290,7 @@ struct CodeEditor: NSViewRepresentable {
             // Renklendirmenin aksine bu iş METİN BOYUTUYLA büyüyor (ölçüm:
             // 82 KB'de 3,4 ms, 858 KB'de 15,4 ms), yani her tuşta yapılamaz.
             // Yazım durduğunda bir kez koşar.
-            scheduleRegionRefresh(textView)
+            scheduleHeavyRefresh(textView)
         }
 
         /// Metin (ya da dil) değişti: temel biçim tüm belgeye, renk görünen bölgeye.
@@ -273,17 +300,28 @@ struct CodeEditor: NSViewRepresentable {
             SyntaxHighlighter.applyBaseAttributes(storage, font: CodeEditor.font)
             colorizeVisible(textView)
             refreshRegions(textView)
+            // Metin dışarıdan değişmiş olabilir (Beautify, yeni yanıt): eski
+            // eşleşmeler artık yanlış yeri gösteriyor. Ertelenerek yapılıyor,
+            // çünkü buraya SwiftUI güncellemesinin içinden de giriliyor ve
+            // orada @Published yazmak güncelleme döngüsü açar.
+            scheduleHeavyRefresh(textView)
         }
 
         // MARK: - Katlama
 
-        /// Gutter tazelemesini yazım durduktan sonra tek sefere indirir.
-        private func scheduleRegionRefresh(_ textView: NSTextView) {
-            guard gutter != nil else { return }
+        /// Metin boyutuyla büyüyen işleri (katlanabilir bölge taraması ve
+        /// arama) yazım durduktan sonra TEK sefere indirir.
+        ///
+        /// Arama burada eşleşmeyi seçmez (`reveal: false`): kullanıcı editörde
+        /// yazarken imleci en yakın eşleşmeye kaydırmak yazdığı yeri elinden
+        /// almak olurdu. Yalnızca sayı ve vurgular tazelenir.
+        private func scheduleHeavyRefresh(_ textView: NSTextView) {
+            guard gutter != nil || search?.isActive == true else { return }
             regionWork?.cancel()
             let work = DispatchWorkItem { [weak self, weak textView] in
                 guard let self, let textView else { return }
-                self.refreshRegions(textView)
+                if self.gutter != nil { self.refreshRegions(textView) }
+                if self.search?.isActive == true { self.runSearch(in: textView, reveal: false) }
             }
             regionWork = work
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: work)
@@ -345,11 +383,112 @@ struct CodeEditor: NSViewRepresentable {
             // çizmiyordu: katlanmış satırda kapanış parantezi ekrana gelmiyordu.
             textView.needsDisplay = true
             gutter?.needsDisplay = true
+            // Yerleşim geçersizleştiği için geçici öznitelikler (arama
+            // vurguları) silindi; yeniden konuyor.
+            applySearchHighlights(textView)
         }
 
         func colorizeVisible(_ textView: NSTextView) {
             guard let storage = textView.textStorage else { return }
             SyntaxHighlighter.colorize(storage, language: parent.language, range: visibleRange(of: textView))
+            // Kaydırınca yeni görünen satırlardaki eşleşmeler de boyanmalı.
+            applySearchHighlights(textView)
+        }
+
+        // MARK: - Arama
+
+        /// Sorguyu uygular. `reveal` açıkken bulunan eşleşme seçilip ekrana
+        /// getirilir; kapalıyken yalnızca sayı ve vurgular tazelenir.
+        func runSearch(in textView: NSTextView, reveal shouldReveal: Bool = true) {
+            guard let search else { return }
+            guard search.isActive else {
+                clearSearch(in: textView)
+                return
+            }
+            let result = TextSearch.find(search.query, in: textView.string, options: search.options)
+            matches = result.ranges
+            // Belgenin başına dönmek yerine imlecin olduğu yerden devam:
+            // yazarken bakılan yer kaybolmasın.
+            currentMatch = TextSearch.firstIndex(
+                atOrAfter: textView.selectedRange().location,
+                in: matches
+            )
+            search.report(result, currentIndex: currentMatch)
+            if shouldReveal {
+                reveal(in: textView)
+            } else {
+                applySearchHighlights(textView)
+            }
+        }
+
+        func stepSearch(forward: Bool, in textView: NSTextView) {
+            guard let search, !matches.isEmpty else { return }
+            currentMatch = TextSearch.step(from: currentMatch, count: matches.count, forward: forward)
+            search.reportCursor(currentMatch)
+            reveal(in: textView)
+        }
+
+        func clearSearch(in textView: NSTextView) {
+            matches = []
+            currentMatch = nil
+            applySearchHighlights(textView)
+        }
+
+        private func reveal(in textView: NSTextView) {
+            if let index = currentMatch, matches.indices.contains(index) {
+                let range = matches[index]
+                expandFolds(containing: range, in: textView)
+                textView.setSelectedRange(range)
+                textView.scrollRangeToVisible(range)
+            }
+            applySearchHighlights(textView)
+        }
+
+        /// Eşleşme katlanmış bir bloğun içindeyse blok açılır. Açılmazsa
+        /// "17 sonuç" yazıp ekranda hiçbir şey göstermemiş oluruz.
+        private func expandFolds(containing range: NSRange, in textView: NSTextView) {
+            guard !foldedLines.isEmpty else { return }
+            let hiding = regions.filter {
+                foldedLines.contains($0.openLine) && NSLocationInRange(range.location, $0.hiddenRange)
+            }
+            guard !hiding.isEmpty else { return }
+            for region in hiding { foldedLines.remove(region.openLine) }
+            applyFolding(textView)
+        }
+
+        /// Vurgular metin depolamasına DEĞİL, yerleşim yöneticisinin geçici
+        /// özniteliklerine yazılır. İki sebep: depolamaya dokunmak
+        /// düzenlenebilir gövdede metni değişmiş saydırır, ve renklendirme
+        /// zaten aynı `foregroundColor` özniteliğini kullandığı için ikisi
+        /// birbirini ezerdi.
+        ///
+        /// Boyama yalnızca görünen aralıkta (docs/UI-KURALLARI.md 5): 2.000
+        /// eşleşmenin tamamını boyamanın ekranda karşılığı yok.
+        private func applySearchHighlights(_ textView: NSTextView) {
+            guard let layoutManager = textView.layoutManager else { return }
+            let full = NSRange(location: 0, length: (textView.string as NSString).length)
+            layoutManager.removeTemporaryAttribute(.backgroundColor, forCharacterRange: full)
+            layoutManager.removeTemporaryAttribute(.foregroundColor, forCharacterRange: full)
+            guard !matches.isEmpty else { return }
+
+            let visible = visibleRange(of: textView)
+            for (index, range) in matches.enumerated()
+            where NSIntersectionRange(range, visible).length > 0 {
+                if index == currentMatch {
+                    layoutManager.addTemporaryAttributes(
+                        [
+                            .backgroundColor: Theme.searchCurrentMatch,
+                            .foregroundColor: Theme.searchCurrentMatchText,
+                        ],
+                        forCharacterRange: range
+                    )
+                } else {
+                    layoutManager.addTemporaryAttributes(
+                        [.backgroundColor: Theme.searchMatch],
+                        forCharacterRange: range
+                    )
+                }
+            }
         }
 
         /// Ekranda duran karakter aralığı. Yerleşim yalnızca bu dikdörtgen için

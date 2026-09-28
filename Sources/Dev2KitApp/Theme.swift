@@ -14,10 +14,14 @@ import Dev2KitCore
 ///   gf-dark-text #f3f0fe · gf-dark-muted #aa9cd5
 enum Theme {
     /// Light/dark moda göre otomatik değişen renk.
-    private static func dynamicColor(light: String, dark: String) -> NSColor {
+    ///
+    /// Saydamlık BURADA veriliyor, dışarıda `withAlphaComponent` ile değil:
+    /// dinamik renkte o çağrı rengi çözüp sabitliyor ve mod değişince yanlış
+    /// tonda kalıyor.
+    private static func dynamicColor(light: String, dark: String, alpha: CGFloat = 1) -> NSColor {
         NSColor(name: nil) { appearance in
             let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-            return NSColor(hex: isDark ? dark : light)
+            return NSColor(hex: isDark ? dark : light).withAlphaComponent(alpha)
         }
     }
 
@@ -38,6 +42,16 @@ enum Theme {
     static let editorText = dynamicColor(light: "#0e0e0e", dark: "#f3f0fe")
     /// Editör zemini: gf-bg-soft / gf-dark-bg-2.
     static let editorBackgroundNS = dynamicColor(light: "#fafafa", dark: "#130d2e")
+
+    // MARK: Arama vurgusu
+    /// Bulunan tüm eşleşmeler. Saydam mor ton: altındaki sözdizimi rengi
+    /// okunur kalsın, vurgu yalnızca "burada bir eşleşme var" desin.
+    static let searchMatch = dynamicColor(light: "#5d3ebc", dark: "#aa9cd5", alpha: 0.28)
+    /// Üzerinde durulan eşleşme. Dolu sarı: diğerlerinden bir bakışta ayrılsın.
+    static let searchCurrentMatch = dynamicColor(light: "#e3bd49", dark: "#ffd300")
+    /// Dolu sarının üstündeki yazı. Sözdizimi rengi (ör. sarı string) sarı
+    /// zeminde kaybolduğu için yalnızca bu eşleşmede metin rengi sabitlenir.
+    static let searchCurrentMatchText = NSColor(hex: "#0e0e0e")
 
     // MARK: SwiftUI renkleri
     static let accent = Color(nsColor: dynamicColor(light: "#5d3ebc", dark: "#aa9cd5"))

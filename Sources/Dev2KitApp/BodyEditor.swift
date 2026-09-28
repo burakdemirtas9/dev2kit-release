@@ -9,12 +9,15 @@ import Dev2KitCore
 /// `BodyDrafts`'ta, biçimlendirme `Beautifier`'da. Bu dosyada yalnızca
 /// gösterim ve kullanıcıya dönen mesaj var.
 struct BodyEditor: View {
+    @Environment(AppState.self) private var appState
     @Binding var body_: RequestBody
     @State private var formatError: String?
     /// Tip başına son içerik. Yalnızca bu istek görünürken yaşar; diske
     /// yazılmaz — kaydedilen gövde her zaman o an seçili olandır.
     @State private var drafts = BodyDrafts()
     @StateObject private var folding = CodeFoldingController()
+    /// Gövdenin KENDİ araması; yanıttaki aramadan bağımsızdır.
+    @StateObject private var search = EditorSearchController()
 
     init(body: Binding<RequestBody>) {
         self._body_ = body
@@ -89,9 +92,21 @@ struct BodyEditor: View {
             // şerit olarak okuyup "satır numarası alanı araç çubuğuna taşmış"
             // gibi görüyordu.
             Divider()
+            if search.isPresented, body_.kind == .raw {
+                EditorSearchBar(search: search)
+            }
             editor
         }
         .padding(10)
+        .onChange(of: body_.kind) {
+            // Raw dışındaki tiplerde aranacak metin editörü yok.
+            if body_.kind != .raw { search.close() }
+        }
+        .onChange(of: appState.bodySearchRequest) {
+            // Menüdeki "Gövdede Ara" (⌥⌘F).
+            guard body_.kind == .raw else { return }
+            search.open()
+        }
     }
 
     private var toolbar: some View {
@@ -112,6 +127,7 @@ struct BodyEditor: View {
                 .fixedSize()
 
                 Spacer()
+                SearchToggleButton(search: search)
                 FoldButtons(folding: folding)
                 beautifyButton
             } else {
@@ -145,7 +161,12 @@ struct BodyEditor: View {
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .raw:
-            CodeEditor(text: rawContent, language: CodeLanguage(rawKind.wrappedValue), folding: folding)
+            CodeEditor(
+                text: rawContent,
+                language: CodeLanguage(rawKind.wrappedValue),
+                folding: folding,
+                search: search
+            )
                 .background(Theme.editorBackground)
                 .overlay(alignment: .topLeading) {
                     if rawContent.wrappedValue.isEmpty {
