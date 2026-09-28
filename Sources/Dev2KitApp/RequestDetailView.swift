@@ -9,21 +9,128 @@ struct RequestDetailView: View {
     @State private var showingOptions = false
     @State private var showingRevertConfirm = false
 
+    private static let responseHeightKey = "responseHeight"
+    private static let minTopHeight: CGFloat = 220
+    private static let minResponseHeight: CGFloat = 160
+    private static let splitSpace = "requestDetailSplit"
+
+    /// Yanıt panelinin yüksekliği. İlk açılışta yarı yarıya, sonrasında
+    /// kullanıcının bıraktığı yer.
+    @State private var responseHeight: CGFloat = {
+        let stored = UserDefaults.standard.double(forKey: RequestDetailView.responseHeightKey)
+        return stored >= RequestDetailView.minResponseHeight ? CGFloat(stored) : 0
+    }()
+    @State private var isHoveringDivider = false
+
+    /// Pencereye sığdırılmış yanıt yüksekliği.
+    private func effectiveResponseHeight(total: CGFloat) -> CGFloat {
+        let upper = max(Self.minResponseHeight, total - Self.minTopHeight - Self.dividerThickness)
+        let wanted = responseHeight > 0 ? responseHeight : total * 0.45
+        return min(max(wanted, Self.minResponseHeight), upper)
+    }
+
+    private static let dividerThickness: CGFloat = 9
+
+    /// Dikey bölme ELDE yapılıyor, `VSplitView` ile değil.
+    ///
+    /// `VSplitView` (NSSplitView) yanıt paneli küçüldüğünde boşalan yeri üst
+    /// panele vermiyor, iki paneli birden aşağı itip TEPEDE boşluk bırakıyordu:
+    /// sekme çubuğuyla istek adı arasında bir şerit. Ölçüldü:
+    /// yanıt 273 -> 160 punto küçülünce üst panel y=85'ten y=198'e kaydı,
+    /// aradaki 113 punto tam olarak küçülme miktarıydı. Aralıklı olmasının
+    /// sebebi de bu: ancak yanıt paneli asgarisine inince ortaya çıkıyor.
+    /// `maxHeight: .infinity` eklemek çözmedi (y=146 ve y=296'ya kaydığı
+    /// yeniden ölçüldü). Sidebar ayracı da aynı gerekçeyle elde yapılmıştı.
     var body: some View {
-        VSplitView {
+        GeometryReader { geometry in
             VStack(spacing: 0) {
-                requestBar
-                Divider()
-                editorTabs
+                VStack(spacing: 0) {
+                    requestBar
+                    Divider()
+                    editorTabs
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .clipped()
+
+                splitter(total: geometry.size.height)
+
+                ResponseView()
+                    .frame(height: effectiveResponseHeight(total: geometry.size.height))
+                    .frame(maxWidth: .infinity)
             }
-            .frame(maxWidth: .infinity, minHeight: 220, maxHeight: .infinity, alignment: .top)
-            ResponseView()
-                .frame(maxWidth: .infinity, minHeight: 160)
+            .coordinateSpace(name: Self.splitSpace)
+            // Sürüklerken örtük animasyon yüksekliği "kovalayınca" titriyor.
+            .animation(nil, value: responseHeight)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
+    private func splitter(total: CGFloat) -> some View {
+        ZStack {
+            Color.clear
+                .frame(height: Self.dividerThickness)
+                .contentShape(Rectangle())
+            Rectangle()
+                .fill(Color(nsColor: .separatorColor))
+                .frame(height: 1)
+        }
+        // push/pop dengesiz kalırsa imleç yığını bozuluyor; bayrakla eşleşiyor.
+        .onHover { hovering in
+            guard hovering != isHoveringDivider else { return }
+            isHoveringDivider = hovering
+            if hovering {
+                NSCursor.resizeUpDown.push()
+            } else {
+                NSCursor.pop()
+            }
+        }
+        .onDisappear {
+            if isHoveringDivider {
+                isHoveringDivider = false
+                NSCursor.pop()
+            }
+        }
+        // Konteynerdeki mutlak konum kullanılıyor: translation, ayraç
+        // sürüklendikçe kendi koordinat uzayı kaydığı için geri besleme
+        // yapıp titremeye yol açıyor (sidebar ayracında da böyle).
+        .gesture(
+            DragGesture(minimumDistance: 1, coordinateSpace: .named(Self.splitSpace))
+                .onChanged { value in
+                    let upper = max(Self.minResponseHeight, total - Self.minTopHeight - Self.dividerThickness)
+                    responseHeight = min(max(total - value.location.y, Self.minResponseHeight), upper)
+                }
+                .onEnded { _ in
+                    UserDefaults.standard.set(Double(responseHeight), forKey: Self.responseHeightKey)
+                }
+        )
+    }
+
+    /// Ad satırı ve denetim satırı alt alta.
+    ///
+    /// Ad satırı eskiden `requestBar`'ın üstüne `safeAreaInset(edge: .top)` ile
+    /// konuyordu. Sadeleştirildi: ad satırı bir güvenli alan değil, sıradan bir
+    /// başlık. (Yerleşim boşluğu hatasının sebebi bu DEĞİLDİ; o `VSplitView`'dan
+    /// geliyordu — yukarıdaki nota bak.)
     private var requestBar: some View {
+        VStack(spacing: 0) {
+            titleRow
+            controlsRow
+        }
+        .confirmationDialog(
+            "Son gönderilen hale dönülsün mü?",
+            isPresented: $showingRevertConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Geri Dön", role: .destructive) {
+                appState.revertToLastSent(request.id)
+            }
+            Button("Vazgeç", role: .cancel) {}
+        } message: {
+            Text("Son gönderimden sonra yaptığın düzenlemeler silinecek. Bu işlem geri alınamaz.")
+        }
+    }
+
+    private var controlsRow: some View {
         HStack(spacing: 8) {
             Picker("", selection: $request.method) {
                 ForEach(HTTPMethod.allCases) { method in
@@ -79,55 +186,41 @@ struct RequestDetailView: View {
             }
         }
         .padding(10)
-        .background(alignment: .topLeading) {
-            // İstek adı düzenlenebilir başlık olarak üstte küçük durur.
-            EmptyView()
-        }
-        .safeAreaInset(edge: .top, spacing: 0) {
-            HStack(spacing: 8) {
-                // Genişlik SINIRLI: `fixedSize` ile ad kadar yer isteyince
-                // `windowResizability(.contentMinSize)` bunu pencerenin asgari
-                // ölçüsü sayıp uzun adlı istek seçildiğinde pencereyi büyütüyor
-                // ve kaydırıyordu (900 -> 1288 punto ölçüldü). Sekme değişimi
-                // bu yüzden de sıçramalı görünüyordu.
-                TextField("İstek adı", text: $request.name)
-                    .textFieldStyle(.plain)
-                    .font(.headline)
-                    .lineLimit(1)
-                    .frame(maxWidth: 360, alignment: .leading)
+    }
 
-                if appState.isDirty(request.id) {
-                    Button {
-                        showingRevertConfirm = true
-                    } label: {
-                        Label("son gönderilenden farklı", systemImage: "circle.fill")
-                            .font(.caption)
-                            .labelStyle(DirtyLabelStyle())
-                            .frame(minHeight: 20)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .help("Bu istek en son gönderildiği halden farklı — tıklayıp o hale dönebilirsin")
+    /// İstek adı ve kayıt durumu.
+    private var titleRow: some View {
+        HStack(spacing: 8) {
+            // Genişlik SINIRLI: `fixedSize` ile ad kadar yer isteyince
+            // `windowResizability(.contentMinSize)` bunu pencerenin asgari
+            // ölçüsü sayıp uzun adlı istek seçildiğinde pencereyi büyütüyor
+            // ve kaydırıyordu (900 -> 1288 punto ölçüldü). Sekme değişimi
+            // bu yüzden de sıçramalı görünüyordu.
+            TextField("İstek adı", text: $request.name)
+                .textFieldStyle(.plain)
+                .font(.headline)
+                .lineLimit(1)
+                .frame(maxWidth: 360, alignment: .leading)
+
+            if appState.isDirty(request.id) {
+                Button {
+                    showingRevertConfirm = true
+                } label: {
+                    Label("son gönderilenden farklı", systemImage: "circle.fill")
+                        .font(.caption)
+                        .labelStyle(DirtyLabelStyle())
+                        .frame(minHeight: 20)
+                        .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+                .help("Bu istek en son gönderildiği halden farklı — tıklayıp o hale dönebilirsin")
+            }
 
-                Spacer()
-                saveStatus
-            }
-            .padding(.horizontal, 12)
-            .padding(.top, 8)
+            Spacer()
+            saveStatus
         }
-        .confirmationDialog(
-            "Son gönderilen hale dönülsün mü?",
-            isPresented: $showingRevertConfirm,
-            titleVisibility: .visible
-        ) {
-            Button("Geri Dön", role: .destructive) {
-                appState.revertToLastSent(request.id)
-            }
-            Button("Vazgeç", role: .cancel) {}
-        } message: {
-            Text("Son gönderimden sonra yaptığın düzenlemeler silinecek. Bu işlem geri alınamaz.")
-        }
+        .padding(.horizontal, 12)
+        .padding(.top, 8)
     }
 
     /// Otomatik kaydın görünür hali.
