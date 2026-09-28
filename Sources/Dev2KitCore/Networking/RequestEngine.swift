@@ -18,6 +18,8 @@ public struct ResponseData: Sendable {
     public let network: NetworkInfo?
     /// Sürenin aşamalara dağılımı (DNS, TCP, TLS, bekleme, indirme).
     public let timing: ResponseTiming?
+    /// Tel üzerindeki boyutlar (istek/yanıt, başlık/gövde ayrımıyla).
+    public let size: TransferSize?
 
     public init(
         statusCode: Int,
@@ -28,7 +30,8 @@ public struct ResponseData: Sendable {
         redirects: [RedirectStep] = [],
         redirectStop: RedirectGuard.Decision.StopReason? = nil,
         network: NetworkInfo? = nil,
-        timing: ResponseTiming? = nil
+        timing: ResponseTiming? = nil,
+        size: TransferSize? = nil
     ) {
         self.statusCode = statusCode
         self.headers = headers
@@ -39,6 +42,7 @@ public struct ResponseData: Sendable {
         self.redirectStop = redirectStop
         self.network = network
         self.timing = timing
+        self.size = size
     }
 
     public var bodyText: String? { String(data: body, encoding: .utf8) }
@@ -208,7 +212,8 @@ public final class RequestEngine: @unchecked Sendable {
             redirects: tracker.steps,
             redirectStop: tracker.stopReason,
             network: networkInfo(from: tracker, host: http.url?.host ?? urlRequest.url?.host),
-            timing: tracker.responseTiming
+            timing: tracker.responseTiming,
+            size: tracker.size
         )
     }
 

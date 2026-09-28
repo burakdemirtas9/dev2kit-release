@@ -22,6 +22,7 @@ final class RedirectTracker: NSObject, URLSessionTaskDelegate, @unchecked Sendab
     /// gelir, ikisi de burada birleşir.
     private var network = NetworkInfo()
     private var timing: ResponseTiming?
+    private var transferSize = TransferSize()
 
     init(
         policy: RedirectPolicy,
@@ -72,6 +73,18 @@ final class RedirectTracker: NSObject, URLSessionTaskDelegate, @unchecked Sendab
     func urlSession(_ session: URLSession, task: URLSessionTask, didFinishCollecting metrics: URLSessionTaskMetrics) {
         guard let transaction = metrics.transactionMetrics.last else { return }
         lock.lock(); defer { lock.unlock() }
+
+        // Boyut TÜM işlemlerin toplamı: yönlendirme varsa her adımda da veri
+        // gidip geldi, kullanıcıya gerçekte ne kadar taşındığı gösterilir.
+        transferSize = metrics.transactionMetrics.reduce(TransferSize()) { total, step in
+            total + TransferSize(
+                requestHeaders: step.countOfRequestHeaderBytesSent,
+                requestBody: step.countOfRequestBodyBytesSent,
+                responseHeaders: step.countOfResponseHeaderBytesReceived,
+                responseBody: step.countOfResponseBodyBytesReceived,
+                responseBodyDecoded: step.countOfResponseBodyBytesAfterDecoding
+            )
+        }
         network.httpVersion = transaction.networkProtocolName
         network.localAddress = NetworkInfo.address(
             host: transaction.localAddress,
@@ -113,6 +126,11 @@ final class RedirectTracker: NSObject, URLSessionTaskDelegate, @unchecked Sendab
     var responseTiming: ResponseTiming? {
         lock.lock(); defer { lock.unlock() }
         return timing
+    }
+
+    var size: TransferSize? {
+        lock.lock(); defer { lock.unlock() }
+        return transferSize.isEmpty ? nil : transferSize
     }
 
     var networkInfo: NetworkInfo? {

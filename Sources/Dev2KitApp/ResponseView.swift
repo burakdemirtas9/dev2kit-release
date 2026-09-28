@@ -9,6 +9,8 @@ struct ResponseView: View {
     @State private var fileSaveError: String?
     @State private var showingNetwork = false
     @State private var showingTiming = false
+    @State private var showingSize = false
+    @State private var copiedCorrelationID = false
 
     enum Tab: String, CaseIterable {
         case body = "Body"
@@ -118,6 +120,11 @@ struct ResponseView: View {
                 try? await Task.sleep(for: .seconds(1.5))
                 copied = false
             }
+            .task(id: copiedCorrelationID) {
+                guard copiedCorrelationID else { return }
+                try? await Task.sleep(for: .seconds(1.5))
+                copiedCorrelationID = false
+            }
             .alert(
                 "Dosyaya kaydedilemedi",
                 isPresented: Binding(
@@ -212,6 +219,31 @@ struct ResponseView: View {
         .listStyle(.inset)
     }
 
+    /// İzleme kimliği rozeti. Tıklayınca panoya kopyalar — log sistemine
+    /// (Kibana) bu kimlikle gidiliyor, elle seçip kopyalamak zahmetli.
+    /// Pano kuralı bozulmuyor: kopyalama yalnızca kullanıcı tıklayınca olur.
+    private func correlationBadge(_ correlation: CorrelationID.Match) -> some View {
+        Button {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(correlation.value, forType: .string)
+            copiedCorrelationID = true
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: copiedCorrelationID ? "checkmark" : "number")
+                Text(copiedCorrelationID ? "Kopyalandı" : CorrelationID.shortened(correlation.value))
+                    .font(.system(.caption, design: .monospaced))
+            }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(Color.secondary.opacity(0.15), in: Capsule())
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.secondary)
+        .help("\(correlation.headerName): \(correlation.value)\nTıkla, panoya kopyalansın")
+        .accessibilityLabel("İzleme kimliğini kopyala")
+    }
+
     private func statusBar(_ display: AppState.ResponseDisplay) -> some View {
         let response = display.data
         return HStack(spacing: 16) {
@@ -236,8 +268,27 @@ struct ResponseView: View {
                 Text(String(format: "%.0f ms", response.duration * 1000))
                     .foregroundStyle(.secondary)
             }
-            Text(ByteCountFormatter.string(fromByteCount: Int64(response.body.count), countStyle: .binary))
-                .foregroundStyle(.secondary)
+            if let size = response.size {
+                Button {
+                    showingSize = true
+                } label: {
+                    Text(ResponseSizePopover.bytes(size.responseTotal))
+                        .foregroundStyle(.secondary)
+                        .iconHitTarget(20)
+                }
+                .buttonStyle(.plain)
+                .help("İstek ve yanıt boyutu: başlıklar ve gövde ayrı")
+                .accessibilityLabel("Boyut ayrıntısı")
+                .popover(isPresented: $showingSize, arrowEdge: .bottom) {
+                    ResponseSizePopover(size: size)
+                }
+            } else {
+                Text(ByteCountFormatter.string(fromByteCount: Int64(response.body.count), countStyle: .binary))
+                    .foregroundStyle(.secondary)
+            }
+            if let correlation = CorrelationID.find(in: response.headers) {
+                correlationBadge(correlation)
+            }
             if let network = response.network {
                 Button {
                     showingNetwork = true
