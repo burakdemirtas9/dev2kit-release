@@ -17,6 +17,7 @@ struct ResponseView: View {
 
     enum Tab: String, CaseIterable {
         case body = "Body"
+        case preview = "Önizleme"
         case headers = "Headers"
         case redirects = "Yönlendirme"
     }
@@ -82,12 +83,18 @@ struct ResponseView: View {
                     }
                     Picker("", selection: $selectedTab) {
                     ForEach(Tab.allCases, id: \.self) { tab in
-                        if tab == .redirects {
+                        switch tab {
+                        case .redirects:
                             // Zincir yoksa sekmeyi hiç gösterme.
                             if !response.redirects.isEmpty || response.redirectStop != nil {
                                 Text("\(tab.rawValue) (\(response.redirects.count))").tag(tab)
                             }
-                        } else {
+                        case .preview:
+                            // Önizlenecek bir şey yoksa (JSON, düz metin) gösterme.
+                            if display.previewKind != nil {
+                                Text(tab.rawValue).tag(tab)
+                            }
+                        default:
                             Text(tab.rawValue).tag(tab)
                         }
                     }
@@ -112,6 +119,16 @@ struct ResponseView: View {
                         search: search
                     )
                     .background(Theme.editorBackground)
+                case .preview:
+                    if let previewKind = display.previewKind {
+                        ResponsePreviewView(
+                            kind: previewKind,
+                            payload: response.body,
+                            // HAM metin: biçimlendirilmiş HTML'de eklenen
+                            // girinti <pre> gibi boşluğa duyarlı içeriği bozar.
+                            text: response.bodyText
+                        )
+                    }
                 case .headers:
                     // Aynı başlık birden çok kez gelebilir (Set-Cookie);
                     // id olarak isim kullanmak SwiftUI'da çakışma yaratıyordu.
@@ -132,8 +149,11 @@ struct ResponseView: View {
                 }
             }
             .onChange(of: display.data.finalURL) {
-                // Yeni yanıtta zincir yoksa sekme boşta kalmasın.
-                if selectedTab == .redirects, response.redirects.isEmpty, response.redirectStop == nil {
+                // Yeni yanıtta o sekmenin karşılığı yoksa boşta kalmasın.
+                let redirectsGone = selectedTab == .redirects
+                    && response.redirects.isEmpty && response.redirectStop == nil
+                let previewGone = selectedTab == .preview && display.previewKind == nil
+                if redirectsGone || previewGone {
                     selectedTab = .body
                 }
             }

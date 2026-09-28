@@ -365,6 +365,9 @@ final class AppState {
         let data: ResponseData
         let prettyText: String
         let language: CodeLanguage
+        /// Önizlenebiliyorsa türü. Gövdenin ilk byte'larına bakmak her
+        /// render'da yapılacak iş değil; tür tespitiyle birlikte bir kez.
+        let previewKind: ResponsePreview.Kind?
     }
 
     // FileSecretStore: imzasız dev binary'si Keychain'i her rebuild'de parola
@@ -739,7 +742,8 @@ final class AppState {
         return ResponseDisplay(
             data: response,
             prettyText: Beautifier.beautifiedOrOriginal(text, as: kind),
-            language: CodeLanguage(kind)
+            language: CodeLanguage(kind),
+            previewKind: ResponsePreview.kind(contentType: contentType, body: response.body)
         )
     }
 
