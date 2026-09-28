@@ -7,6 +7,7 @@ struct ResponseView: View {
     @State private var selectedTab: Tab = .body
     @State private var copied = false
     @State private var fileSaveError: String?
+    @State private var showingNetwork = false
 
     enum Tab: String, CaseIterable {
         case body = "Body"
@@ -220,6 +221,21 @@ struct ResponseView: View {
                 .foregroundStyle(.secondary)
             Text(ByteCountFormatter.string(fromByteCount: Int64(response.body.count), countStyle: .binary))
                 .foregroundStyle(.secondary)
+            if let network = response.network {
+                Button {
+                    showingNetwork = true
+                } label: {
+                    Image(systemName: "network")
+                        .iconHitTarget(20)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .help("Bağlantı künyesi: protokol, adresler, TLS ve sertifika")
+                .accessibilityLabel("Bağlantı künyesi")
+                .popover(isPresented: $showingNetwork, arrowEdge: .bottom) {
+                    NetworkPopover(info: network)
+                }
+            }
             if !response.redirects.isEmpty {
                 Label("\(response.redirects.count) yönlendirme", systemImage: "arrow.triangle.turn.up.right.diamond")
                     .font(.caption)

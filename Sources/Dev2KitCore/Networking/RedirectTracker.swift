@@ -18,6 +18,9 @@ final class RedirectTracker: NSObject, URLSessionTaskDelegate, @unchecked Sendab
     private let lock = NSLock()
     private var recorded: [RedirectStep] = []
     private var stop: RedirectGuard.Decision.StopReason?
+    /// Bağlantı künyesi: metrikler ve sunucu sertifikası iki ayrı callback'ten
+    /// gelir, ikisi de burada birleşir.
+    private var network = NetworkInfo()
 
     init(
         policy: RedirectPolicy,
@@ -41,6 +44,14 @@ final class RedirectTracker: NSObject, URLSessionTaskDelegate, @unchecked Sendab
     ) {
         switch challenge.protectionSpace.authenticationMethod {
         case NSURLAuthenticationMethodServerTrust:
+            // Sunucunun sunduğu sertifikayı künye için al. Doğrulamayı bu
+            // kayıt etkilemez; yalnızca kullanıcıya gösterilir.
+            if let trust = challenge.protectionSpace.serverTrust,
+               let chain = SecTrustCopyCertificateChain(trust) as? [SecCertificate],
+               let leaf = chain.first {
+                let summary = CertificateLoader.details(of: leaf)
+                lock.lock(); network.certificate = summary; lock.unlock()
+            }
             let (disposition, credential) = TLSChallengeHandler.serverTrust(
                 challenge: challenge,
                 profile: tlsProfile
@@ -52,6 +63,36 @@ final class RedirectTracker: NSObject, URLSessionTaskDelegate, @unchecked Sendab
         default:
             completionHandler(.performDefaultHandling, nil)
         }
+    }
+
+    /// Bağlantı künyesi. URLSession bunu istek bittikten sonra bir kez verir;
+    /// yönlendirme varsa SON işlemin metrikleri alınır — kullanıcıya gösterilen
+    /// yanıt oradan geldi.
+    func urlSession(_ session: URLSession, task: URLSessionTask, didFinishCollecting metrics: URLSessionTaskMetrics) {
+        guard let transaction = metrics.transactionMetrics.last else { return }
+        lock.lock(); defer { lock.unlock() }
+        network.httpVersion = transaction.networkProtocolName
+        network.localAddress = NetworkInfo.address(
+            host: transaction.localAddress,
+            port: transaction.localPort
+        )
+        network.remoteAddress = NetworkInfo.address(
+            host: transaction.remoteAddress,
+            port: transaction.remotePort
+        )
+        if let version = transaction.negotiatedTLSProtocolVersion {
+            network.tlsProtocol = NetworkInfo.tlsProtocolName(version.rawValue)
+        }
+        if let suite = transaction.negotiatedTLSCipherSuite {
+            network.cipherName = NetworkInfo.cipherName(suite.rawValue)
+        }
+        network.isReusedConnection = transaction.isReusedConnection
+        network.isProxyConnection = transaction.isProxyConnection
+    }
+
+    var networkInfo: NetworkInfo? {
+        lock.lock(); defer { lock.unlock() }
+        return network.isEmpty ? nil : network
     }
 
     var steps: [RedirectStep] {

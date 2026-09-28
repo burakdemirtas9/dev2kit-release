@@ -101,4 +101,43 @@ public enum CertificateLoader {
     public static func summary(of certificate: SecCertificate) -> String {
         (SecCertificateCopySubjectSummary(certificate) as String?) ?? "(isimsiz sertifika)"
     }
+
+    /// Sertifikanın künyesi: CN, sağlayıcı CN ve son geçerlilik tarihi.
+    ///
+    /// Alanlar tek tek opsiyonel: bazı sertifikalarda CN yok (yalnızca SAN),
+    /// bazılarında sağlayıcı adı farklı alanlarda taşınıyor. Okunamayan alanı
+    /// uydurmak yerine boş bırakıyoruz.
+    public static func details(of certificate: SecCertificate) -> CertificateSummary {
+        var commonName: CFString?
+        SecCertificateCopyCommonName(certificate, &commonName)
+
+        let values = SecCertificateCopyValues(certificate, nil, nil) as? [CFString: Any]
+        return CertificateSummary(
+            commonName: commonName as String?,
+            issuerCommonName: issuerCommonName(from: values),
+            validUntil: validUntil(from: values)
+        )
+    }
+
+    /// sağlayıcı adı, X.509 issuer alanındaki CN girdisinden okunur.
+    private static func issuerCommonName(from values: [CFString: Any]?) -> String? {
+        guard let issuer = values?[kSecOIDX509V1IssuerName] as? [CFString: Any],
+              let entries = issuer[kSecPropertyKeyValue] as? [[CFString: Any]] else { return nil }
+        // Girdiler OID ile etiketli; CN'in OID'i 2.5.4.3.
+        let commonNameOID = "2.5.4.3"
+        for entry in entries {
+            guard let label = entry[kSecPropertyKeyLabel] as? String, label == commonNameOID,
+                  let value = entry[kSecPropertyKeyValue] as? String else { continue }
+            return value
+        }
+        return nil
+    }
+
+    /// Son geçerlilik tarihi. Security framework bunu 2001 başlangıçlı
+    /// (CFAbsoluteTime) saniye olarak veriyor.
+    private static func validUntil(from values: [CFString: Any]?) -> Date? {
+        guard let notAfter = values?[kSecOIDX509V1ValidityNotAfter] as? [CFString: Any],
+              let seconds = notAfter[kSecPropertyKeyValue] as? Double else { return nil }
+        return Date(timeIntervalSinceReferenceDate: seconds)
+    }
 }

@@ -13,6 +13,9 @@ public struct ResponseData: Sendable {
     public let redirects: [RedirectStep]
     /// Zincir bir politika nedeniyle kesildiyse sebebi.
     public let redirectStop: RedirectGuard.Decision.StopReason?
+    /// Bağlantının teknik künyesi (protokol, adresler, TLS, sertifika).
+    /// Opsiyonel: metrikler gelmemiş olabilir, eski kayıtlarda hiç yok.
+    public let network: NetworkInfo?
 
     public init(
         statusCode: Int,
@@ -21,7 +24,8 @@ public struct ResponseData: Sendable {
         duration: TimeInterval,
         finalURL: URL?,
         redirects: [RedirectStep] = [],
-        redirectStop: RedirectGuard.Decision.StopReason? = nil
+        redirectStop: RedirectGuard.Decision.StopReason? = nil,
+        network: NetworkInfo? = nil
     ) {
         self.statusCode = statusCode
         self.headers = headers
@@ -30,6 +34,7 @@ public struct ResponseData: Sendable {
         self.finalURL = finalURL
         self.redirects = redirects
         self.redirectStop = redirectStop
+        self.network = network
     }
 
     public var bodyText: String? { String(data: body, encoding: .utf8) }
@@ -108,6 +113,38 @@ public final class RequestEngine: @unchecked Sendable {
     /// okumamak için burada tutulur; değişince AppState yeniler.
     public var trustStoreCertificates: [SecCertificate] = []
 
+    /// Host başına son görülen sunucu sertifikası.
+    ///
+    /// Sertifika yalnızca TLS el sıkışmasında görülür; bağlantı havuzdan
+    /// yeniden kullanıldığında el sıkışma olmaz ve künye sertifikasız kalırdı.
+    /// İlk bağlantıda görülen künye burada saklanıp sonraki yanıtlara eklenir.
+    /// Yalnızca gösterim içindir — doğrulama her seferinde gerçek zincirle yapılır.
+    private let certificateLock = NSLock()
+    private var certificateCache: [String: CertificateSummary] = [:]
+
+    private func rememberCertificate(_ summary: CertificateSummary, for host: String) {
+        certificateLock.lock(); defer { certificateLock.unlock() }
+        certificateCache[host] = summary
+    }
+
+    private func knownCertificate(for host: String) -> CertificateSummary? {
+        certificateLock.lock(); defer { certificateLock.unlock() }
+        return certificateCache[host]
+    }
+
+    /// Künyeyi tamamlar: el sıkışma olmadıysa (yeniden kullanılan bağlantı)
+    /// sertifika host önbelleğinden gelir.
+    private func networkInfo(from tracker: RedirectTracker, host: String?) -> NetworkInfo? {
+        guard var info = tracker.networkInfo else { return nil }
+        guard let host else { return info }
+        if let captured = info.certificate {
+            rememberCertificate(captured, for: host)
+        } else if let known = knownCertificate(for: host) {
+            info.certificate = known
+        }
+        return info
+    }
+
     /// - Parameters:
     ///   - hostPolicy: Yönetici host politikası. Bilerek varsayılan değersiz:
     ///     her çağıran politikayı açıkça vermek zorunda, unutulup atlanamasın.
@@ -165,7 +202,8 @@ public final class RequestEngine: @unchecked Sendable {
             duration: seconds,
             finalURL: http.url,
             redirects: tracker.steps,
-            redirectStop: tracker.stopReason
+            redirectStop: tracker.stopReason,
+            network: networkInfo(from: tracker, host: http.url?.host ?? urlRequest.url?.host)
         )
     }
 
