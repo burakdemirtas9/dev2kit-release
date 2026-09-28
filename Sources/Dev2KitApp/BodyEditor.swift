@@ -14,6 +14,7 @@ struct BodyEditor: View {
     /// Tip başına son içerik. Yalnızca bu istek görünürken yaşar; diske
     /// yazılmaz — kaydedilen gövde her zaman o an seçili olandır.
     @State private var drafts = BodyDrafts()
+    @StateObject private var folding = CodeFoldingController()
 
     init(body: Binding<RequestBody>) {
         self._body_ = body
@@ -83,6 +84,11 @@ struct BodyEditor: View {
                     .foregroundStyle(Theme.down)
                     .lineLimit(2)
             }
+            // Ayraç: gutter ile üstündeki segmentli denetim aynı x'te başlıyor
+            // ve aynı griyi taşıyor; arada çizgi olmayınca göz ikisini tek bir
+            // şerit olarak okuyup "satır numarası alanı araç çubuğuna taşmış"
+            // gibi görüyordu.
+            Divider()
             editor
         }
         .padding(10)
@@ -106,6 +112,7 @@ struct BodyEditor: View {
                 .fixedSize()
 
                 Spacer()
+                FoldButtons(folding: folding)
                 beautifyButton
             } else {
                 Spacer()
@@ -138,14 +145,16 @@ struct BodyEditor: View {
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .raw:
-            CodeEditor(text: rawContent, language: CodeLanguage(rawKind.wrappedValue))
+            CodeEditor(text: rawContent, language: CodeLanguage(rawKind.wrappedValue), folding: folding)
                 .background(Theme.editorBackground)
                 .overlay(alignment: .topLeading) {
                     if rawContent.wrappedValue.isEmpty {
                         Text("{ \"ornek\": \"{{degisken}} destekler\" }")
                             .foregroundStyle(.tertiary)
                             .font(.system(.body, design: .monospaced))
-                            .padding(.top, 8).padding(.leading, 5)
+                            // Şeridin altında kalmasın: genişliği editör bildiriyor.
+                            .padding(.top, 8)
+                            .padding(.leading, folding.gutterWidth + 5)
                             .allowsHitTesting(false)
                     }
                 }

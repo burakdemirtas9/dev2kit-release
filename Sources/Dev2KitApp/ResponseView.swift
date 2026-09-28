@@ -11,6 +11,7 @@ struct ResponseView: View {
     @State private var showingTiming = false
     @State private var showingSize = false
     @State private var copiedCorrelationID = false
+    @StateObject private var folding = CodeFoldingController()
 
     enum Tab: String, CaseIterable {
         case body = "Body"
@@ -67,7 +68,16 @@ struct ResponseView: View {
             VStack(spacing: 0) {
                 statusBar(display)
                 Divider()
-                Picker("", selection: $selectedTab) {
+                ZStack {
+                    // Sekmeler ortada kalsın; katlama düğmeleri sağ uçta durur.
+                    HStack {
+                        Spacer()
+                        // Katlama yalnızca gövde sekmesinde anlamlı.
+                        if selectedTab == .body {
+                            FoldButtons(folding: folding)
+                        }
+                    }
+                    Picker("", selection: $selectedTab) {
                     ForEach(Tab.allCases, id: \.self) { tab in
                         if tab == .redirects {
                             // Zincir yoksa sekmeyi hiç gösterme.
@@ -79,7 +89,9 @@ struct ResponseView: View {
                         }
                     }
                 }
-                .pickerStyle(.segmented)
+                    .pickerStyle(.segmented)
+                    .fixedSize()
+                }
                 .padding(8)
 
                 switch selectedTab {
@@ -87,7 +99,8 @@ struct ResponseView: View {
                     CodeEditor(
                         text: .constant(display.prettyText),
                         language: display.language,
-                        isEditable: false
+                        isEditable: false,
+                        folding: folding
                     )
                     .background(Theme.editorBackground)
                 case .headers:

@@ -8,6 +8,12 @@ enum CodeLanguage: Equatable {
     case markup      // XML / HTML
     case javascript
 
+    /// Süslü/köşeli parantezle katlanabilir mi. Markup etiketlerle çalışır,
+    /// bu ayrıştırıcı ona uymaz.
+    var supportsFolding: Bool {
+        self == .json || self == .javascript
+    }
+
     /// Core'daki tür tahmininin arayüz karşılığı. XML ve HTML aynı
     /// renklendirme kurallarını kullandığı için ikisi de `markup`.
     init(_ kind: Beautifier.Kind) {
@@ -115,12 +121,36 @@ enum SyntaxHighlighter {
     }
 }
 
+/// Editörün katlama durumunu SwiftUI tarafından yönetmek için köprü.
+///
+/// Neden ayrı nesne: "tümünü kapat" düğmesi editörün DIŞINDA (araç çubuğunda)
+/// duruyor. Binding ile komut göndermek yerine, editör kendini buraya kaydeder
+/// ve düğme doğrudan çağırır — komutun "tüketilmesi" gibi bir durum kalmaz.
+@MainActor
+final class CodeFoldingController: ObservableObject {
+    /// Katlanabilir bölge var mı — düğmeler yoksa hiç gösterilmez.
+    @Published fileprivate(set) var isAvailable = false
+    @Published fileprivate(set) var hasFolded = false
+    /// Satır numarası şeridinin genişliği. Editörün üstüne yerleştirilen
+    /// şeyler (ör. boş gövdedeki örnek metin) şeridin altında kalmasın diye
+    /// arayüze bildiriliyor; genişlik satır sayısının basamağına göre değişir.
+    @Published fileprivate(set) var gutterWidth: CGFloat = 0
+
+    fileprivate var collapse: (() -> Void)?
+    fileprivate var expand: (() -> Void)?
+
+    func collapseAll() { collapse?() }
+    func expandAll() { expand?() }
+}
+
 /// Sözdizimi renklendirmeli, düz metin kod editörü.
 /// SwiftUI TextEditor renklendirme desteklemediği için NSTextView sarılır.
 struct CodeEditor: NSViewRepresentable {
     @Binding var text: String
     let language: CodeLanguage
     var isEditable: Bool = true
+    /// Verilirse satır numaraları ve katlama okları görünür.
+    var folding: CodeFoldingController?
 
     static let font = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
 
@@ -147,6 +177,32 @@ struct CodeEditor: NSViewRepresentable {
         scrollView.drawsBackground = false
         textView.textContainerInset = NSSize(width: 4, height: 8)
         textView.string = text
+
+        if let folding {
+            // Gutter: satır numaraları + katlama okları.
+            let gutter = EditorGutter(scrollView: scrollView, textView: textView)
+            gutter.onToggleFold = { [weak coordinator = context.coordinator] line in
+                coordinator?.toggleFold(line: line, in: textView)
+            }
+            scrollView.verticalRulerView = gutter
+            scrollView.hasVerticalRuler = true
+            scrollView.rulersVisible = true
+            // Ruler kendi ayraç çizgisini kendi sınırlarının DIŞINA taşıyordu:
+            // çizgi istek adının altından başlayıp üstteki satırların üzerinden
+            // geçiyordu. Katman kırpması bunu editörün içinde tutuyor.
+            scrollView.wantsLayer = true
+            scrollView.layer?.masksToBounds = true
+            textView.layoutManager?.delegate = context.coordinator.foldingDelegate
+            context.coordinator.gutter = gutter
+            context.coordinator.controller = folding
+            folding.collapse = { [weak coordinator = context.coordinator] in
+                coordinator?.collapseAll(in: textView)
+            }
+            folding.expand = { [weak coordinator = context.coordinator] in
+                coordinator?.expandAll(in: textView)
+            }
+        }
+
         context.coordinator.textChanged(textView)
         // Kaydırdıkça yeni görünen bölge boyanır.
         scrollView.contentView.postsBoundsChangedNotifications = true
@@ -167,16 +223,28 @@ struct CodeEditor: NSViewRepresentable {
         }
     }
 
+    /// `@MainActor`: bu sınıfın tüm çağrıları AppKit'ten gelir (delegate'ler,
+    /// gutter tıklaması, SwiftUI güncellemesi) — hepsi ana thread'dedir.
+    @MainActor
     final class Coordinator: NSObject, NSTextViewDelegate {
         var parent: CodeEditor
         var lastLanguage: CodeLanguage?
         private var scrollObserver: NSObjectProtocol?
+        /// Gutter ve katlama durumu yalnızca `folding` verildiğinde kurulur.
+        var gutter: EditorGutter?
+        var controller: CodeFoldingController?
+        private var regions: [JSONFolding.Region] = []
+        private var foldedLines: Set<Int> = []
+        /// Katlanan aralıkları çizimden düşüren delege (ayrı sınıf: testli).
+        let foldingDelegate = FoldingLayoutDelegate()
+        private var regionWork: DispatchWorkItem?
 
         init(_ parent: CodeEditor) {
             self.parent = parent
         }
 
         deinit {
+            regionWork?.cancel()
             if let scrollObserver { NotificationCenter.default.removeObserver(scrollObserver) }
         }
 
@@ -188,6 +256,14 @@ struct CodeEditor: NSViewRepresentable {
             // renksiz görünüp sonra renklenmesinin sebebi buydu. Artık iş
             // yalnızca görünen bölge kadar (~1,5 ms), ertelemeye gerek yok.
             colorizeVisible(textView)
+            // Satır numaraları ve katlanabilir bölgeler de tazelenmeli: metin
+            // yalnızca kurulumda hesaplanıyordu, yazarak/yapıştırarak gelen
+            // gövdede gutter tek satırda kalıyordu.
+            //
+            // Renklendirmenin aksine bu iş METİN BOYUTUYLA büyüyor (ölçüm:
+            // 82 KB'de 3,4 ms, 858 KB'de 15,4 ms), yani her tuşta yapılamaz.
+            // Yazım durduğunda bir kez koşar.
+            scheduleRegionRefresh(textView)
         }
 
         /// Metin (ya da dil) değişti: temel biçim tüm belgeye, renk görünen bölgeye.
@@ -196,6 +272,79 @@ struct CodeEditor: NSViewRepresentable {
             guard let storage = textView.textStorage else { return }
             SyntaxHighlighter.applyBaseAttributes(storage, font: CodeEditor.font)
             colorizeVisible(textView)
+            refreshRegions(textView)
+        }
+
+        // MARK: - Katlama
+
+        /// Gutter tazelemesini yazım durduktan sonra tek sefere indirir.
+        private func scheduleRegionRefresh(_ textView: NSTextView) {
+            guard gutter != nil else { return }
+            regionWork?.cancel()
+            let work = DispatchWorkItem { [weak self, weak textView] in
+                guard let self, let textView else { return }
+                self.refreshRegions(textView)
+            }
+            regionWork = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: work)
+        }
+
+        /// Metin değişince katlanabilir bölgeler yeniden bulunur.
+        /// Düzenlenebilir editörde katlar açılır: gizli metnin içine yazmak
+        /// kullanıcıyı şaşırtır, kaybolan aralıkları takip etmek de kırılgandır.
+        func refreshRegions(_ textView: NSTextView) {
+            guard let gutter, let controller else { return }
+            regions = parent.language.supportsFolding
+                ? JSONFolding.regions(in: textView.string)
+                : []
+            if parent.isEditable, !foldedLines.isEmpty {
+                foldedLines.removeAll()
+            } else {
+                // Artık bölge başlatmayan satırların katı düşer.
+                foldedLines = foldedLines.filter { line in regions.contains { $0.openLine == line } }
+            }
+            gutter.foldableLines = Set(regions.map(\.openLine))
+            gutter.refresh(text: textView.string)
+            // Yalnızca gerçekten değiştiyse yayınla: her tazelemede yayın
+            // yapmak SwiftUI güncellemesi içinde güncelleme tetikliyor.
+            if controller.gutterWidth != gutter.ruleThickness {
+                controller.gutterWidth = gutter.ruleThickness
+            }
+            controller.isAvailable = !regions.isEmpty
+            applyFolding(textView)
+        }
+
+        func toggleFold(line: Int, in textView: NSTextView) {
+            if foldedLines.contains(line) { foldedLines.remove(line) } else { foldedLines.insert(line) }
+            applyFolding(textView)
+        }
+
+        func collapseAll(in textView: NSTextView) {
+            // Yalnızca en dıştakiler: içerdekileri kapatmanın görünür etkisi yok.
+            foldedLines = Set(JSONFolding.outermost(regions).map(\.openLine))
+            applyFolding(textView)
+        }
+
+        func expandAll(in textView: NSTextView) {
+            foldedLines.removeAll()
+            applyFolding(textView)
+        }
+
+        private func applyFolding(_ textView: NSTextView) {
+            foldingDelegate.hiddenRanges = regions
+                .filter { foldedLines.contains($0.openLine) }
+                .map(\.hiddenRange)
+            gutter?.foldedLines = foldedLines
+            controller?.hasFolded = !foldedLines.isEmpty
+
+            guard let layoutManager = textView.layoutManager else { return }
+            let full = NSRange(location: 0, length: (textView.string as NSString).length)
+            layoutManager.invalidateGlyphs(forCharacterRange: full, changeInLength: 0, actualCharacterRange: nil)
+            layoutManager.invalidateLayout(forCharacterRange: full, actualCharacterRange: nil)
+            // Yerleşim doğru olsa da görünüm eski alanı koruyup yeniden
+            // çizmiyordu: katlanmış satırda kapanış parantezi ekrana gelmiyordu.
+            textView.needsDisplay = true
+            gutter?.needsDisplay = true
         }
 
         func colorizeVisible(_ textView: NSTextView) {
