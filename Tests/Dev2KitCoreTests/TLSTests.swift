@@ -367,3 +367,28 @@ final class TLSRejectionOriginTests: XCTestCase {
     }
 }
 
+/// Host kalıbı olmayan profil hiçbir şey yapmaz — ve bunu söylemek gerekir.
+final class ProfileScopeTests: XCTestCase {
+    func testProfileWithNoPatternsAppliesToNothing() {
+        let profile = TLSProfile(name: "p", hostPatterns: [], caCertificatePath: "/tmp/ca.pem")
+        XCTAssertTrue(profile.appliesToNothing)
+        XCTAssertFalse(profile.applies(to: "api.firma.local"))
+    }
+
+    func testBlankPatternsCountAsNone() {
+        let profile = TLSProfile(name: "p", hostPatterns: ["", "   "])
+        XCTAssertTrue(profile.appliesToNothing)
+    }
+
+    func testOnlyInvalidPatternsCountAsNone() {
+        // Tek başına "*" kabul edilmiyor; geriye uygulanabilir kalıp kalmıyor.
+        let profile = TLSProfile(name: "p", hostPatterns: ["*"])
+        XCTAssertTrue(profile.appliesToNothing)
+    }
+
+    func testOneValidPatternIsEnough() {
+        let profile = TLSProfile(name: "p", hostPatterns: ["*", "api.firma.local"])
+        XCTAssertFalse(profile.appliesToNothing)
+        XCTAssertTrue(profile.applies(to: "api.firma.local"))
+    }
+}

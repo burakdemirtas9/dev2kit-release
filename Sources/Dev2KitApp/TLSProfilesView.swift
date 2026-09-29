@@ -79,6 +79,11 @@ struct TLSProfilesView: View {
                                     }
                                     // Eski dosyalarda CA'sız sabitleme kalmış
                                     // olabilir; listede de görünsün.
+                                    if profile.appliesToNothing {
+                                        Image(systemName: "exclamationmark.triangle.fill")
+                                            .font(.caption2).foregroundStyle(Theme.warning)
+                                            .help("Host kalıbı yok; profil hiçbir isteğe uygulanmıyor")
+                                    }
                                     if profile.pinsWithoutCA {
                                         Image(systemName: "exclamationmark.triangle.fill")
                                             .font(.caption2).foregroundStyle(Theme.warning)
@@ -144,6 +149,11 @@ private struct TLSProfileDetail: View {
                         Label("Geçersiz kalıp: \(profile.invalidPatterns.joined(separator: ", "))",
                               systemImage: "xmark.octagon.fill")
                             .font(.caption).foregroundStyle(Theme.down)
+                    }
+                    if profile.appliesToNothing {
+                        Label("Bu profil hiçbir host'a uygulanmıyor: geçerli kalıp yok.",
+                              systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption).foregroundStyle(Theme.warning)
                     }
                 }
 

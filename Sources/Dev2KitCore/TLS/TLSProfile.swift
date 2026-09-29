@@ -86,6 +86,15 @@ public struct TLSProfile: Codable, Identifiable, Hashable, Sendable {
         hostPatterns.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty && !HostPattern.isValid($0) }
     }
 
+    /// Profil hiçbir host'a uygulanamıyor: geçerli tek bir kalıbı yok.
+    ///
+    /// Sessiz bir tuzak: kullanıcı CA'yı seçiyor, seçenekleri işaretliyor,
+    /// ama Host'lar listesi boş kalınca profil HİÇBİR ŞEY yapmıyor ve
+    /// bunu söyleyen bir şey yok. Sahada tam olarak bu yaşandı.
+    public var appliesToNothing: Bool {
+        !hostPatterns.contains { HostPattern.isValid($0) }
+    }
+
     public func applies(to host: String) -> Bool {
         HostPattern.matchesAny(hostPatterns, host: host)
     }
