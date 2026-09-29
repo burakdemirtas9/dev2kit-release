@@ -75,6 +75,14 @@ struct TLSProfilesView: View {
                                     if !profile.invalidPatterns.isEmpty {
                                         Image(systemName: "exclamationmark.triangle.fill")
                                             .font(.caption2).foregroundStyle(Theme.down)
+                                            .help("Geçersiz host kalıbı var")
+                                    }
+                                    // Eski dosyalarda CA'sız sabitleme kalmış
+                                    // olabilir; listede de görünsün.
+                                    if profile.pinsWithoutCA {
+                                        Image(systemName: "exclamationmark.triangle.fill")
+                                            .font(.caption2).foregroundStyle(Theme.warning)
+                                            .help("Sabitleme işaretli ama CA seçilmemiş; uygulanmıyor")
                                     }
                                 }
                             }
@@ -145,11 +153,22 @@ private struct TLSProfileDetail: View {
                         prompt: "CA sertifikası seç (.pem / .crt / .der)",
                         types: ["pem", "crt", "cer", "der"]
                     )
+                    // CA yokken kapalı: sabitlenecek çıpa olmadan kutu bir
+                    // güvenlik özelliği vaat edip veremiyordu.
                     Toggle("Yalnızca bu CA kabul edilsin (sabitleme)", isOn: $profile.pinToCA)
                         .toggleStyle(.checkbox)
-                    Text(profile.pinToCA
-                         ? "Bu host için sistem kök sertifikaları geçersiz sayılır. Daha sıkı ama CA değişirse istekler durur."
-                         : "Sistem kökleri geçerli kalır; kurum CA'sı bunlara EK olarak kabul edilir.")
+                        .disabled(!profile.hasCA)
+                        .help(profile.hasCA ? "" : "Önce bir CA sertifikası seç")
+                    if profile.pinsWithoutCA {
+                        Label("Sabitleme uygulanmıyor: sabitlenecek bir CA seçilmemiş.",
+                              systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption).foregroundStyle(Theme.warning)
+                    }
+                    Text(!profile.hasCA
+                         ? "Sabitleme için önce bir CA sertifikası seç."
+                         : (profile.pinToCA
+                            ? "Bu host için sistem kök sertifikaları geçersiz sayılır — kurum güven deposu da dahil. Daha sıkı ama CA değişirse istekler durur."
+                            : "Sistem kökleri geçerli kalır; kurum CA'sı bunlara EK olarak kabul edilir."))
                         .font(.caption).foregroundStyle(.secondary)
                 }
 

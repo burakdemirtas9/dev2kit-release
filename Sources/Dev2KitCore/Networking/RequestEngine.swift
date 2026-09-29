@@ -357,7 +357,10 @@ public final class RequestEngine: @unchecked Sendable {
 
         var certificates: [SecCertificate] = []
         var identity: SecIdentity?
-        let pin = profile?.pinToCA ?? false
+        // CA seçilmemişken sabitleme ETKİSİZ sayılır (bkz. `pinsWithoutCA`):
+        // aksi halde sabitlenecek çıpa olmadan güven deposu da düşüyor ve
+        // CA'sı depodan gelen host'lar hata veriyordu.
+        let pin = profile?.isPinningEffective ?? false
 
         if let profile {
             if profile.hasCA {

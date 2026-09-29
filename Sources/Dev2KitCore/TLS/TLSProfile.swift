@@ -54,6 +54,19 @@ public struct TLSProfile: Codable, Identifiable, Hashable, Sendable {
     }
 
     public var hasCA: Bool { !caCertificatePath.trimmingCharacters(in: .whitespaces).isEmpty }
+
+    /// Sabitleme işaretli ama sabitlenecek CA yok.
+    ///
+    /// Bu haliyle kutu bir güvenlik özelliği VAAT EDİYOR ama veremiyor:
+    /// sabitlenecek çıpa olmadığı için doğrulama sistem köklerine düşer.
+    /// Dahası, sabitleme açıkken kurum güven deposu bilinçli olarak devre
+    /// dışı bırakıldığı için, CA'sı depodan gelen host'lar bu yüzden hata
+    /// vermeye başlıyordu. Arayüz bunu engeller, motor da etkisiz sayar.
+    public var pinsWithoutCA: Bool { pinToCA && !hasCA }
+
+    /// Sabitleme gerçekten uygulanabiliyor mu.
+    public var isPinningEffective: Bool { pinToCA && hasCA }
+
     public var hasClientCertificate: Bool {
         !clientCertificatePath.trimmingCharacters(in: .whitespaces).isEmpty
     }

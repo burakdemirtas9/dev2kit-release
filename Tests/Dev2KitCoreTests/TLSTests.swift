@@ -235,3 +235,33 @@ final class TrustStoreTests: XCTestCase {
         XCTAssertTrue(result.problems.contains { $0.contains("gecici-test-bozuk.pem") })
     }
 }
+
+/// CA seçilmemişken sabitleme: kutu bir güvenlik özelliği vaat ediyor ama
+/// veremiyor. Motor bunu etkisiz saymalı, yoksa güven deposu da düşüyordu.
+final class PinningWithoutCATests: XCTestCase {
+    private func profile(ca: String, pin: Bool) -> TLSProfile {
+        TLSProfile(hostPatterns: ["api.firma.com"], caCertificatePath: ca, pinToCA: pin)
+    }
+
+    func testPinningWithCAIsEffective() {
+        let subject = profile(ca: "/tmp/ca.pem", pin: true)
+        XCTAssertTrue(subject.isPinningEffective)
+        XCTAssertFalse(subject.pinsWithoutCA)
+    }
+
+    func testPinningWithoutCAIsReportedAndIneffective() {
+        let subject = profile(ca: "", pin: true)
+        XCTAssertTrue(subject.pinsWithoutCA)
+        XCTAssertFalse(subject.isPinningEffective)
+    }
+
+    func testWhitespaceOnlyPathCountsAsNoCA() {
+        XCTAssertTrue(profile(ca: "   ", pin: true).pinsWithoutCA)
+    }
+
+    func testPinningOffIsNeverAProblem() {
+        let subject = profile(ca: "", pin: false)
+        XCTAssertFalse(subject.pinsWithoutCA)
+        XCTAssertFalse(subject.isPinningEffective)
+    }
+}
