@@ -122,7 +122,7 @@ enum TLSChallengeHandler {
             var reason = TrustFailure.describe(checks) ?? explain(error)
             // Ad uyuşmazlığında asıl soru "peki sertifikada hangi adlar var".
             if checks.contains(TrustFailure.hostnameKey), let names {
-                reason += " — sunucunun sertifikası şu adlar için geçerli: \(names)"
+                reason += " — sunucunun GÖNDERDİĞİ sertifika şu adlar için geçerli: \(names)"
             }
             return (.cancelAuthenticationChallenge, nil, Rejection(
                 host: host, reason: reason, presentedNames: names
@@ -152,7 +152,14 @@ enum TLSChallengeHandler {
         return error.localizedDescription.isEmpty ? fallback : error.localizedDescription
     }
 
-    /// Sunucunun sunduğu sertifikanın geçerli olduğu adlar, tek satırda.
+    /// Sunucunun EL SIKIŞMADA GÖNDERDİĞİ sertifikanın künyesi: geçerli
+    /// olduğu adlar ve onu düzenleyen.
+    ///
+    /// Düzenleyen de yazılıyor çünkü kullanıcı bu adları kendi güven
+    /// deposuna koyduğu sertifikadan sanabiliyor. Düzenleyen public bir CA
+    /// ise ("DigiCert", "GlobalSign"…) karşıdaki makinenin iç servis değil
+    /// internete açık bir sunucu olduğu tek bakışta anlaşılıyor — sahada tam
+    /// olarak bu oldu.
     private static func presentedNames(of trust: SecTrust) -> String? {
         guard let chain = SecTrustCopyCertificateChain(trust) as? [SecCertificate],
               let leaf = chain.first
@@ -161,7 +168,11 @@ enum TLSChallengeHandler {
         guard !names.isEmpty else { return nil }
         // Uzun listelerde mesaj okunmaz hale gelmesin.
         let shown = names.prefix(8).joined(separator: ", ")
-        return names.count > 8 ? "\(shown) (+\(names.count - 8) tane daha)" : shown
+        var summary = names.count > 8 ? "\(shown) (+\(names.count - 8) tane daha)" : shown
+        if let issuer = CertificateLoader.details(of: leaf).issuerCommonName {
+            summary += " · düzenleyen: \(issuer)"
+        }
+        return summary
     }
 
     /// İstemci sertifikası (mTLS) sunumu.

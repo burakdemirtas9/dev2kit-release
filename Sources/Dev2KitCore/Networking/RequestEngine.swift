@@ -105,6 +105,12 @@ public final class RequestEngine: @unchecked Sendable {
         }
     }
 
+    // NOT: "bağlanılan IP adresini hata mesajına ekle" denendi ve ÇALIŞMIYOR.
+    // Ölçüldü: TLS el sıkışması başarısız olduğunda URLSession işlem
+    // metriklerini hiç vermiyor (hata anında da, 300 ms sonra da
+    // `networkInfo` boş). Adres ancak bağlantı kurulabilmiş isteklerde var,
+    // orada da zaten Network künyesinde gösteriliyor.
+
     /// Sunucu sertifikasıyla ilgili hata kodları. Bu hatalarda kullanıcıya
     /// sunucunun sertifikasının künyesi de gösteriliyor.
     static let tlsFailureCodes: Set<URLError.Code> = [
@@ -231,7 +237,10 @@ public final class RequestEngine: @unchecked Sendable {
             // gerekçeli bir red sessizce yutuluyor: kullanıcı ne hata ne yanıt
             // görüyor. Redde ait kayıt varsa gerçek sebep fırlatılır.
             if let rejection = tracker.rejection, rejection.isOurs {
-                throw RequestEngineError.tlsRejected(host: rejection.host, reason: rejection.reason)
+                throw RequestEngineError.tlsRejected(
+                    host: rejection.host,
+                    reason: rejection.reason
+                )
             }
             throw error   // gerçek iptal (⌘.) olduğu gibi geçer
         } catch let error as URLError where Self.tlsFailureCodes.contains(error.code) {
@@ -244,8 +253,8 @@ public final class RequestEngine: @unchecked Sendable {
             }
             throw RequestEngineError.tlsRejected(
                 host: host,
-                reason: "\(error.localizedDescription) Sunucunun sertifikası şu adlar için "
-                    + "geçerli: \(names)"
+                reason: "\(error.localizedDescription) Sunucunun GÖNDERDİĞİ sertifika şu adlar "
+                    + "için geçerli: \(names)"
             )
         }
         let elapsed = start.duration(to: .now)
