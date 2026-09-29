@@ -85,13 +85,26 @@ extension AppState {
     /// Host, hatanın `failingURL`'inden alınır: istek URL'i `{{degisken}}`
     /// içerebilir, çözülmüş hali yalnızca motorun elinde.
     func offerTLSSuggestion(for error: Error) {
-        guard let urlError = error as? URLError,
-              Self.tlsTrustFailureCodes.contains(urlError.code),
-              let host = urlError.failingURL?.host?.lowercased(),
+        guard let host = Self.tlsFailureHost(in: error)?.lowercased(),
               !declinedTLSSuggestionHosts.contains(host),
               let match = TLSPatternSuggestion.suggestion(for: host, in: workspace.tlsProfiles)
         else { return }
         tlsSuggestion = match
+    }
+
+    /// Hata TLS güven sorunuysa ilgili host. Değilse `nil`.
+    ///
+    /// İki kaynak var: sistem doğrulamasının verdiği `URLError` ve bizim
+    /// doğrulayıcımızın reddi (`tlsRejected`). İkincisi olmasa profili olan
+    /// host'larda öneri hiç çıkmazdı — oysa asıl ihtiyaç orada.
+    static func tlsFailureHost(in error: Error) -> String? {
+        if case RequestEngineError.tlsRejected(let host, _) = error {
+            return host
+        }
+        guard let urlError = error as? URLError,
+              tlsTrustFailureCodes.contains(urlError.code)
+        else { return nil }
+        return urlError.failingURL?.host
     }
 
     /// Kabul: TAM host profile yazılır ve kalıcı olur — Host Profilleri

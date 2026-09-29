@@ -22,6 +22,8 @@ final class RedirectTracker: NSObject, URLSessionTaskDelegate, @unchecked Sendab
     /// gelir, ikisi de burada birleşir.
     private var network = NetworkInfo()
     private var timing: ResponseTiming?
+    /// TLS reddi. `-999` ile düşen isteğin gerçek sebebini motora taşır.
+    private var tlsRejection: TLSChallengeHandler.Rejection?
     private var transferSize = TransferSize()
 
     init(
@@ -54,10 +56,13 @@ final class RedirectTracker: NSObject, URLSessionTaskDelegate, @unchecked Sendab
                 let summary = CertificateLoader.details(of: leaf)
                 lock.lock(); network.certificate = summary; lock.unlock()
             }
-            let (disposition, credential) = TLSChallengeHandler.serverTrust(
+            let (disposition, credential, rejection) = TLSChallengeHandler.serverTrust(
                 challenge: challenge,
                 profile: tlsProfile
             )
+            if let rejection {
+                lock.lock(); tlsRejection = rejection; lock.unlock()
+            }
             completionHandler(disposition, credential)
         case NSURLAuthenticationMethodClientCertificate:
             let (disposition, credential) = TLSChallengeHandler.clientCertificate(profile: tlsProfile)
@@ -136,6 +141,12 @@ final class RedirectTracker: NSObject, URLSessionTaskDelegate, @unchecked Sendab
     var networkInfo: NetworkInfo? {
         lock.lock(); defer { lock.unlock() }
         return network.isEmpty ? nil : network
+    }
+
+    /// TLS reddi varsa sebebi. Motor `-999`'u buna bakarak yorumluyor.
+    var rejection: TLSChallengeHandler.Rejection? {
+        lock.lock(); defer { lock.unlock() }
+        return tlsRejection
     }
 
     var steps: [RedirectStep] {

@@ -265,3 +265,66 @@ final class PinningWithoutCATests: XCTestCase {
         XCTAssertFalse(subject.isPinningEffective)
     }
 }
+
+/// TLS reddinin sessizce yutulmaması.
+///
+/// URLSession `cancelAuthenticationChallenge`'ı kullanıcı iptaliyle AYNI
+/// kodla (-999) raporluyor. Ayırt edilmezse güvenlik gerekçeli bir red
+/// "istek iptal edildi" sanılıp ekrana hiçbir şey yansımıyordu.
+final class TLSRejectionErrorTests: XCTestCase {
+    func testMessageNamesHostAndReason() {
+        let error = RequestEngineError.tlsRejected(
+            host: "api.firma.local",
+            reason: "kök sertifika bulunamadı"
+        )
+        let message = error.localizedDescription
+        XCTAssertTrue(message.contains("api.firma.local"), message)
+        XCTAssertTrue(message.contains("kök sertifika bulunamadı"), message)
+    }
+
+    func testMessageTellsWhatToDo() {
+        let message = RequestEngineError.tlsRejected(host: "h", reason: "r").localizedDescription
+        XCTAssertTrue(message.contains("Güven Deposu"), message)
+        XCTAssertTrue(message.contains("Host Profilleri"), message)
+    }
+
+    func testMessageStatesVerificationIsNeverSkipped() {
+        // Kullanıcı bu hatayı görünce arayacağı ilk şey "doğrulamayı kapat"
+        // seçeneği olur; mesaj öyle bir şey olmadığını PEŞİNEN söylemeli.
+        // (Alt dize aramakla yetinmek yanıltıcı: "atla" zaten "atlanmaz"
+        // içinde geçiyor.)
+        let message = RequestEngineError.tlsRejected(host: "h", reason: "r").localizedDescription
+        XCTAssertTrue(message.contains("atlanmaz"), message)
+    }
+}
+
+/// Güven hatasının gerekçesi anlaşılır olmalı.
+///
+/// Apple 1 Eylül 2020'den sonra düzenlenmiş SUNUCU sertifikalarında 398
+/// günden uzun geçerlilik kabul etmiyor ve hatayı "standartlarla uyumlu
+/// değil" diye veriyor — kullanıcıya hiçbir şey anlatmayan bir cümle.
+/// Ölçüldü: aynı kurum köküyle imzalı 300 günlük sertifika geçiyor,
+/// 10 yıllık `-67901` ile düşüyor.
+final class TLSRejectionReasonTests: XCTestCase {
+    private func osStatusError(_ code: OSStatus) -> CFError {
+        CFErrorCreate(nil, NSOSStatusErrorDomain as CFString, CFIndex(code), nil)
+    }
+
+    func testValidityPeriodIsExplainedInPlainWords() {
+        let reason = TLSChallengeHandler.explain(osStatusError(errSecCertificateValidityPeriodTooLong))
+        XCTAssertTrue(reason.contains("398"), reason)
+        XCTAssertTrue(reason.contains("sunucu sertifikas"), reason)
+        // Kökün süresiyle karıştırılmasın: kullanıcı yanlış sertifikayı değiştirmeye kalkmasın.
+        XCTAssertTrue(reason.lowercased().contains("kök"), reason)
+    }
+
+    func testOtherErrorsKeepSystemWording() {
+        let reason = TLSChallengeHandler.explain(osStatusError(errSecCertificateExpired))
+        XCTAssertFalse(reason.contains("398"), reason)
+        XCTAssertFalse(reason.isEmpty)
+    }
+
+    func testMissingErrorFallsBack() {
+        XCTAssertEqual(TLSChallengeHandler.explain(nil), "sertifika zinciri doğrulanamadı")
+    }
+}

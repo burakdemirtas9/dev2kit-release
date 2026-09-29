@@ -60,6 +60,8 @@ public enum RequestEngineError: Error, LocalizedError {
     case needsApproval([SecurityFinding])
     /// Metot gövde taşıyamıyor (bkz. `HTTPMethod.allowsBody`).
     case bodyNotAllowed(HTTPMethod)
+    /// TLS doğrulaması başarısız; bağlantı bizim tarafımızdan reddedildi.
+    case tlsRejected(host: String, reason: String)
 
     public var errorDescription: String? {
         switch self {
@@ -69,6 +71,14 @@ public enum RequestEngineError: Error, LocalizedError {
         case .notHTTPResponse: return "Sunucudan HTTP yanıtı alınamadı."
         case .notAuthorized(let name):
             return "\"\(name)\" için henüz token yok. Auth sekmesinden \"Yetkilendir\" ile giriş yap."
+        case .tlsRejected(let host, let reason):
+            return """
+            \(host) için TLS doğrulaması başarısız, bağlantı kurulmadı: \(reason)
+
+            Sertifika doğrulaması atlanmaz. Sunucunun zincirini imzalayan kök \
+            sertifikayı TLS > Güven Deposu'na ekle; sunucu istemci sertifikası \
+            istiyorsa TLS > Host Profilleri'nden tanımla.
+            """
         case .bodyNotAllowed(let method):
             // Sistem hatası ("kaynak en fazla büyüklüğü aşıyor") ne olduğunu
             // anlatmıyor; kullanıcıya ne yapacağını söylemek gerekiyor.
@@ -201,7 +211,20 @@ public final class RequestEngine: @unchecked Sendable {
             tlsProfile: tlsProfile
         )
         let start = ContinuousClock.now
-        let (data, response) = try await session(for: scope).data(for: urlRequest, delegate: tracker)
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session(for: scope).data(for: urlRequest, delegate: tracker)
+        } catch let error as URLError where error.code == .cancelled {
+            // URLSession, bizim `cancelAuthenticationChallenge`'ımızı kullanıcı
+            // iptaliyle AYNI kodla (-999) raporluyor. Ayırt etmezsek güvenlik
+            // gerekçeli bir red sessizce yutuluyor: kullanıcı ne hata ne yanıt
+            // görüyor. Redde ait kayıt varsa gerçek sebep fırlatılır.
+            if let rejection = tracker.rejection {
+                throw RequestEngineError.tlsRejected(host: rejection.host, reason: rejection.reason)
+            }
+            throw error   // gerçek iptal (⌘.) olduğu gibi geçer
+        }
         let elapsed = start.duration(to: .now)
 
         guard let http = response as? HTTPURLResponse else {
