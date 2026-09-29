@@ -186,27 +186,52 @@ public enum TrustStore {
 
     /// Basic Constraints uzantısından CA olup olmadığını çıkarır.
     /// Belirlenemezse `nil` döner — yanlış bilgi vermektense bilinmez demek yeğdir.
+    /// Sertifika bir CA mı. Belirlenemezse `nil`.
+    ///
+    /// **Basic Constraints uzantısı YOKSA cevap `false`**, `nil` değil.
+    /// RFC 5280'e göre bu uzantıyı taşımayan sertifika CA olarak
+    /// kullanılamaz. Eskiden burada `nil` dönüyordu ve en sık yapılan hata
+    /// tam da bu yüzden sessiz kalıyordu: kullanıcı CA yerine SUNUCU
+    /// sertifikasını güven deposuna koyuyor, uyarı çıkmıyor, istekler
+    /// anlaşılmaz şekilde düşüyordu. Sahada iki kurumun sertifikasında
+    /// ölçüldü: ikisinde de uzantı yok, ikisi de `nil` dönüyordu.
+    ///
+    /// Etiket karşılaştırması sistem dilinden etkilendiği için `keyUsage`
+    /// içindeki sertifika imzalama yetkisi de ayrı bir kanıt olarak okunur.
     static func isCA(_ certificate: SecCertificate) -> Bool? {
         guard let values = SecCertificateCopyValues(
             certificate,
-            [kSecOIDBasicConstraints] as CFArray,
+            [kSecOIDBasicConstraints, kSecOIDKeyUsage] as CFArray,
             nil
-        ) as? [String: Any],
-            let constraints = values[kSecOIDBasicConstraints as String] as? [String: Any],
-            let properties = constraints[kSecPropertyKeyValue as String] as? [[String: Any]]
-        else { return nil }
+        ) as? [String: Any] else { return nil }
 
-        for property in properties {
-            guard let label = property[kSecPropertyKeyLabel as String] as? String,
-                  let value = property[kSecPropertyKeyValue as String] as? String else { continue }
-            if label.localizedCaseInsensitiveContains("Certificate Authority")
-                || label.localizedCaseInsensitiveContains("Sertifika Yetkilisi") {
-                return value.localizedCaseInsensitiveContains("yes")
-                    || value.localizedCaseInsensitiveContains("evet")
-                    || value == "1"
+        guard let constraints = values[kSecOIDBasicConstraints as String] as? [String: Any] else {
+            // Uzantı yok: CA değil.
+            return false
+        }
+        if let properties = constraints[kSecPropertyKeyValue as String] as? [[String: Any]] {
+            for property in properties {
+                guard let label = property[kSecPropertyKeyLabel as String] as? String,
+                      let value = property[kSecPropertyKeyValue as String] as? String else { continue }
+                if label.localizedCaseInsensitiveContains("Certificate Authority")
+                    || label.localizedCaseInsensitiveContains("Sertifika Yetkilisi") {
+                    return value.localizedCaseInsensitiveContains("yes")
+                        || value.localizedCaseInsensitiveContains("evet")
+                        || value == "1"
+                }
             }
         }
-        return nil
+        // Etiket okunamadı: imzalama yetkisine bak.
+        return canSignCertificates(values)
+    }
+
+    /// `keyUsage` içinde sertifika imzalama biti var mı. Dilden bağımsız.
+    /// `kSecOIDKeyUsage` değeri bit maskesi olarak geliyor; `keyCertSign` 0x04.
+    private static func canSignCertificates(_ values: [String: Any]) -> Bool? {
+        guard let usage = values[kSecOIDKeyUsage as String] as? [String: Any],
+              let mask = usage[kSecPropertyKeyValue as String] as? NSNumber
+        else { return nil }
+        return mask.intValue & 0x04 != 0
     }
 
     static func expiry(of certificate: SecCertificate) -> Date? {
