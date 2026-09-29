@@ -170,6 +170,15 @@ private struct TLSProfileDetail: View {
                             ? "Bu host için sistem kök sertifikaları geçersiz sayılır — kurum güven deposu da dahil. Daha sıkı ama CA değişirse istekler durur."
                             : "Sistem kökleri geçerli kalır; kurum CA'sı bunlara EK olarak kabul edilir."))
                         .font(.caption).foregroundStyle(.secondary)
+
+                    Divider().padding(.vertical, 2)
+
+                    Toggle("Uzun geçerlilik süresini kabul et (398 gün sınırı aranmasın)", isOn: $profile.allowLongValidity)
+                        .toggleStyle(.checkbox)
+                    Text(profile.allowLongValidity
+                         ? "Yalnızca ömür üst sınırı gevşer. Zincir, imza, sertifika tarihleri ve host adı kontrolleri AYNEN zorunlu; bunlardan biri düşerse bağlantı yine reddedilir."
+                         : "Apple, 1 Eylül 2020'den sonra düzenlenmiş sunucu sertifikalarında 398 günden uzun geçerlilik kabul etmiyor. Kural public sertifikalar için; kendi test/kurum PKI'nda uzun ömürlü sertifika kullanıyorsan bunu aç.")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
 
                 section("İstemci Sertifikası (mTLS)") {

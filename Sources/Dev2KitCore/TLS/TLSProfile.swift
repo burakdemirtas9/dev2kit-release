@@ -17,6 +17,13 @@ public struct TLSProfile: Codable, Identifiable, Hashable, Sendable {
     /// Kapalıysa sistem kökleri de geçerli kalır — kurumsal proxy senaryosunda
     /// bazı host'lar proxy'den, bazıları doğrudan geldiği için varsayılan budur.
     public var pinToCA: Bool
+    /// Bu host'larda sertifikanın ömür üst sınırı (398 gün) aranmasın.
+    ///
+    /// Yalnızca ömür sınırı gevşer; zincir, imza, tarihler ve hostname
+    /// kontrolleri aynen zorunlu kalır (bkz. `TrustFailure`). Host'a bağlı
+    /// olması bilinçli: kural public WebPKI için var, kendi PKI'nda meşru
+    /// olan şey internetin tamamı için meşru değil.
+    public var allowLongValidity: Bool
     /// İstemci kimliği (.p12 / .pfx) dosya yolu.
     public var clientCertificatePath: String
     /// p12 parolası. `{{secret:isim}}` referansı kabul eder.
@@ -28,6 +35,7 @@ public struct TLSProfile: Codable, Identifiable, Hashable, Sendable {
         hostPatterns: [String] = [],
         caCertificatePath: String = "",
         pinToCA: Bool = false,
+        allowLongValidity: Bool = false,
         clientCertificatePath: String = "",
         clientCertificatePassword: String = ""
     ) {
@@ -36,6 +44,7 @@ public struct TLSProfile: Codable, Identifiable, Hashable, Sendable {
         self.hostPatterns = hostPatterns
         self.caCertificatePath = caCertificatePath
         self.pinToCA = pinToCA
+        self.allowLongValidity = allowLongValidity
         self.clientCertificatePath = clientCertificatePath
         self.clientCertificatePassword = clientCertificatePassword
     }
@@ -48,6 +57,7 @@ public struct TLSProfile: Codable, Identifiable, Hashable, Sendable {
             hostPatterns: try container.decodeIfPresent([String].self, forKey: .hostPatterns) ?? [],
             caCertificatePath: try container.decodeIfPresent(String.self, forKey: .caCertificatePath) ?? "",
             pinToCA: try container.decodeIfPresent(Bool.self, forKey: .pinToCA) ?? false,
+            allowLongValidity: try container.decodeIfPresent(Bool.self, forKey: .allowLongValidity) ?? false,
             clientCertificatePath: try container.decodeIfPresent(String.self, forKey: .clientCertificatePath) ?? "",
             clientCertificatePassword: try container.decodeIfPresent(String.self, forKey: .clientCertificatePassword) ?? ""
         )

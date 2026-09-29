@@ -408,6 +408,7 @@ public final class RequestEngine: @unchecked Sendable {
         let resolved = ResolvedTLSProfile(
             caCertificates: certificates,
             pinToCA: pin,
+            allowLongValidity: profile?.allowLongValidity ?? false,
             identity: identity
         )
         return resolved.isEmpty ? nil : resolved

@@ -10,11 +10,19 @@ public struct ResolvedTLSProfile: @unchecked Sendable {
     public let caCertificates: [SecCertificate]
     /// Yalnızca bu CA kabul edilsin mi (sertifika sabitleme).
     public let pinToCA: Bool
+    /// Ömür üst sınırı (398 gün) bu host'ta aranmasın mı.
+    public let allowLongValidity: Bool
     public let identity: SecIdentity?
 
-    public init(caCertificates: [SecCertificate], pinToCA: Bool, identity: SecIdentity?) {
+    public init(
+        caCertificates: [SecCertificate],
+        pinToCA: Bool,
+        allowLongValidity: Bool = false,
+        identity: SecIdentity?
+    ) {
         self.caCertificates = caCertificates
         self.pinToCA = pinToCA
+        self.allowLongValidity = allowLongValidity
         self.identity = identity
     }
 
@@ -76,11 +84,22 @@ enum TLSChallengeHandler {
         var error: CFError?
         // Değerlendirme sonucuna UYULUR. Başarısızsa bağlantı reddedilir.
         guard SecTrustEvaluateWithError(trust, &error) else {
+            // Tek istisna: kullanıcı bu host'lar için ömür sınırını açıkça
+            // muaf tuttuysa ve düşen TEK kontrol o sınırsa. Zincir, imza,
+            // tarihler ve hostname yine geçmiş olmak zorunda; bunlardan biri
+            // bile düşmüşse buraya girilmez (bkz. `TrustFailure`).
+            if profile.allowLongValidity, TrustFailure.isOnlyValidityPeriodLimit(trust) {
+                return (.useCredential, URLCredential(trust: trust), nil)
+            }
             // Sistemin gerekçesi kullanıcıya AYNEN aktarılır: "kök bulunamadı"
             // ile "ad eşleşmiyor" tamamen farklı çözümler gerektiriyor.
+            // Gerekçe önce düşen kontrollerden üretilir; sistem kodu tek bir
+            // sebep verdiği için yanıltabiliyor (ölçüldü: hostname'i yanlış
+            // olan uzun ömürlü sertifikada kod yine süre sınırını gösteriyor).
+            let checks = TrustFailure.failedChecks(in: TrustFailure.details(of: trust))
             return (.cancelAuthenticationChallenge, nil, Rejection(
                 host: host,
-                reason: explain(error)
+                reason: TrustFailure.describe(checks) ?? explain(error)
             ))
         }
         return (.useCredential, URLCredential(trust: trust), nil)
