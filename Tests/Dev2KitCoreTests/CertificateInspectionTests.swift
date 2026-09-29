@@ -2,7 +2,8 @@ import Security
 import XCTest
 @testable import Dev2KitCore
 
-/// Güven deposuna KONULAN şeyin gerçekten bir CA olup olmadığı.
+/// Güven deposuna KONULAN şeyin CA olup olmadığı ve sertifikanın hangi
+/// adlar için geçerli olduğu.
 ///
 /// Neden önemli: sahada en sık yapılan hata, CA yerine SUNUCU sertifikasını
 /// güven deposuna koymak. Eskiden  bu durumda  dönüyordu (Basic
@@ -30,6 +31,24 @@ final class CertificateInspectionTests: XCTestCase {
     func testServerCertificateIsNotACertificateAuthority() throws {
         // Basic Constraints uzantısı yok -> CA değil. Eskiden  dönüyordu.
         XCTAssertEqual(TrustStore.isCA(try leafCertificate), false)
+    }
+
+    // MARK: - Geçerli adlar
+
+    func testSubjectAlternativeNamesAreListed() throws {
+        let names = CertificateLoader.subjectNames(of: try leafCertificate)
+        XCTAssertEqual(names, ["ornek.test", "*.ornek.test", "10.0.0.1"])
+    }
+
+    func testCriticalFlagIsNotReportedAsAName() throws {
+        let names = CertificateLoader.subjectNames(of: try leafCertificate)
+        XCTAssertFalse(names.contains { $0.lowercased().contains("critical") }, "\(names)")
+        XCTAssertFalse(names.contains("No"), "\(names)")
+    }
+
+    func testFallsBackToCommonNameWhenNoSAN() throws {
+        // CA'nın SAN'ı yok; adı yine de gösterilebilmeli.
+        XCTAssertEqual(CertificateLoader.subjectNames(of: try caCertificate), ["dev2kit Test CA"])
     }
 
     // MARK: - Fixture'lar

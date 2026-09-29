@@ -119,6 +119,40 @@ public enum CertificateLoader {
         )
     }
 
+    /// Sertifikanın geçerli olduğu adlar (SAN girdileri).
+    ///
+    /// Neden gerekli: hostname uyuşmazlığında "adlar eşleşmiyor" demek
+    /// yetmiyor; kullanıcının asıl sorusu "peki hangi adlar var". Sunucunun
+    /// sunduğu sertifikanın adlarını göstermek, yanlış host mu yazıldığını
+    /// yoksa sertifikanın mı eksik olduğunu tek bakışta ayırt ettiriyor.
+    ///
+    /// SAN yoksa CN'e düşülür — modern doğrulama CN'i yok sayar ama burada
+    /// amaç doğrulamak değil, kullanıcıya ne olduğunu göstermek.
+    public static func subjectNames(of certificate: SecCertificate) -> [String] {
+        let values = SecCertificateCopyValues(
+            certificate,
+            [kSecOIDSubjectAltName] as CFArray,
+            nil
+        ) as? [String: Any]
+
+        if let san = values?[kSecOIDSubjectAltName as String] as? [String: Any],
+           let properties = san[kSecPropertyKeyValue as String] as? [[String: Any]] {
+            // "Critical" bir ad değil, uzantının bayrağı; dışarıda bırakılır.
+            let names = properties.compactMap { property -> String? in
+                guard let label = property[kSecPropertyKeyLabel as String] as? String,
+                      label != "Critical",
+                      let value = property[kSecPropertyKeyValue as String] as? String
+                else { return nil }
+                return value
+            }
+            if !names.isEmpty { return names }
+        }
+
+        var commonName: CFString?
+        SecCertificateCopyCommonName(certificate, &commonName)
+        return (commonName as String?).map { [$0] } ?? []
+    }
+
     /// sağlayıcı adı, X.509 issuer alanındaki CN girdisinden okunur.
     private static func issuerCommonName(from values: [CFString: Any]?) -> String? {
         guard let issuer = values?[kSecOIDX509V1IssuerName] as? [CFString: Any],

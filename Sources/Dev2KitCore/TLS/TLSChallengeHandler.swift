@@ -97,10 +97,12 @@ enum TLSChallengeHandler {
             // sebep verdiği için yanıltabiliyor (ölçüldü: hostname'i yanlış
             // olan uzun ömürlü sertifikada kod yine süre sınırını gösteriyor).
             let checks = TrustFailure.failedChecks(in: TrustFailure.details(of: trust))
-            return (.cancelAuthenticationChallenge, nil, Rejection(
-                host: host,
-                reason: TrustFailure.describe(checks) ?? explain(error)
-            ))
+            var reason = TrustFailure.describe(checks) ?? explain(error)
+            // Ad uyuşmazlığında asıl soru "peki sertifikada hangi adlar var".
+            if checks.contains(TrustFailure.hostnameKey), let names = presentedNames(of: trust) {
+                reason += " — sunucunun sertifikası şu adlar için geçerli: \(names)"
+            }
+            return (.cancelAuthenticationChallenge, nil, Rejection(host: host, reason: reason))
         }
         return (.useCredential, URLCredential(trust: trust), nil)
     }
@@ -124,6 +126,18 @@ enum TLSChallengeHandler {
                 + "sınır yalnızca sunucu sertifikasına uygulanır."
         }
         return error.localizedDescription.isEmpty ? fallback : error.localizedDescription
+    }
+
+    /// Sunucunun sunduğu sertifikanın geçerli olduğu adlar, tek satırda.
+    private static func presentedNames(of trust: SecTrust) -> String? {
+        guard let chain = SecTrustCopyCertificateChain(trust) as? [SecCertificate],
+              let leaf = chain.first
+        else { return nil }
+        let names = CertificateLoader.subjectNames(of: leaf)
+        guard !names.isEmpty else { return nil }
+        // Uzun listelerde mesaj okunmaz hale gelmesin.
+        let shown = names.prefix(8).joined(separator: ", ")
+        return names.count > 8 ? "\(shown) (+\(names.count - 8) tane daha)" : shown
     }
 
     /// İstemci sertifikası (mTLS) sunumu.
