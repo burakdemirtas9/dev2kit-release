@@ -46,7 +46,20 @@ enum TLSChallengeHandler {
     /// hata ne yanıt görüyor. (Sahada tam olarak bu yaşandı.)
     struct Rejection: Equatable, Sendable {
         let host: String
+        /// Bizim reddimizin gerekçesi. Sistem reddettiğinde boş olur —
+        /// o durumda karar bizim değil, elimizde yalnızca künye var.
         let reason: String
+        /// Sunucunun sunduğu sertifikanın geçerli olduğu adlar.
+        let presentedNames: String?
+
+        init(host: String, reason: String, presentedNames: String? = nil) {
+            self.host = host
+            self.reason = reason
+            self.presentedNames = presentedNames
+        }
+
+        /// Bağlantıyı biz mi reddettik.
+        var isOurs: Bool { !reason.isEmpty }
     }
 
     /// Sunucu sertifikası doğrulaması.
@@ -62,8 +75,16 @@ enum TLSChallengeHandler {
             ))
         }
         // Profil yoksa sistem davranışı: sistem kök sertifikalarıyla doğrula.
+        //
+        // Karar sistemde kalıyor ama sunucunun sertifikasının hangi adlar için
+        // geçerli olduğunu ŞİMDİ okuyoruz: sistem reddederse elimizde yalnızca
+        // "sertifika geçersiz" gibi bir cümle kalıyor ve kullanıcı neyi
+        // düzelteceğini bilemiyor. Maliyeti bir SAN okuması; güven
+        // değerlendirmesi tekrarlanmıyor.
         guard let profile, !profile.caCertificates.isEmpty else {
-            return (.performDefaultHandling, nil, nil)
+            return (.performDefaultHandling, nil, presentedNames(of: trust).map {
+                Rejection(host: host, reason: "", presentedNames: $0)
+            })
         }
 
         // Politikayı host ile birlikte kur: hostname doğrulaması korunur.
@@ -97,12 +118,15 @@ enum TLSChallengeHandler {
             // sebep verdiği için yanıltabiliyor (ölçüldü: hostname'i yanlış
             // olan uzun ömürlü sertifikada kod yine süre sınırını gösteriyor).
             let checks = TrustFailure.failedChecks(in: TrustFailure.details(of: trust))
+            let names = presentedNames(of: trust)
             var reason = TrustFailure.describe(checks) ?? explain(error)
             // Ad uyuşmazlığında asıl soru "peki sertifikada hangi adlar var".
-            if checks.contains(TrustFailure.hostnameKey), let names = presentedNames(of: trust) {
+            if checks.contains(TrustFailure.hostnameKey), let names {
                 reason += " — sunucunun sertifikası şu adlar için geçerli: \(names)"
             }
-            return (.cancelAuthenticationChallenge, nil, Rejection(host: host, reason: reason))
+            return (.cancelAuthenticationChallenge, nil, Rejection(
+                host: host, reason: reason, presentedNames: names
+            ))
         }
         return (.useCredential, URLCredential(trust: trust), nil)
     }

@@ -105,6 +105,16 @@ public final class RequestEngine: @unchecked Sendable {
         }
     }
 
+    /// Sunucu sertifikasıyla ilgili hata kodları. Bu hatalarda kullanıcıya
+    /// sunucunun sertifikasının künyesi de gösteriliyor.
+    static let tlsFailureCodes: Set<URLError.Code> = [
+        .serverCertificateUntrusted,
+        .serverCertificateHasBadDate,
+        .serverCertificateHasUnknownRoot,
+        .serverCertificateNotYetValid,
+        .secureConnectionFailed,
+    ]
+
     private let lock = NSLock()
     private var sessions: [Scope: URLSession] = [:]
 
@@ -220,10 +230,23 @@ public final class RequestEngine: @unchecked Sendable {
             // iptaliyle AYNI kodla (-999) raporluyor. Ayırt etmezsek güvenlik
             // gerekçeli bir red sessizce yutuluyor: kullanıcı ne hata ne yanıt
             // görüyor. Redde ait kayıt varsa gerçek sebep fırlatılır.
-            if let rejection = tracker.rejection {
+            if let rejection = tracker.rejection, rejection.isOurs {
                 throw RequestEngineError.tlsRejected(host: rejection.host, reason: rejection.reason)
             }
             throw error   // gerçek iptal (⌘.) olduğu gibi geçer
+        } catch let error as URLError where Self.tlsFailureCodes.contains(error.code) {
+            // Reddeden SİSTEM. Mesajı ("sertifika geçersiz") kullanıcıya neyi
+            // düzelteceğini söylemiyor; sunucunun sertifikasının hangi adlar
+            // için geçerli olduğunu ekliyoruz. Karar değişmiyor, yalnızca
+            // künye ekleniyor.
+            guard let names = tracker.rejection?.presentedNames, let host = urlRequest.url?.host else {
+                throw error
+            }
+            throw RequestEngineError.tlsRejected(
+                host: host,
+                reason: "\(error.localizedDescription) Sunucunun sertifikası şu adlar için "
+                    + "geçerli: \(names)"
+            )
         }
         let elapsed = start.duration(to: .now)
 

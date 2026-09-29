@@ -328,3 +328,42 @@ final class TLSRejectionReasonTests: XCTestCase {
         XCTAssertEqual(TLSChallengeHandler.explain(nil), "sertifika zinciri doğrulanamadı")
     }
 }
+
+/// Reddi KİMİN verdiği ayrılmalı.
+///
+/// Bizim reddimizde gerekçe bizde; sistem reddettiğinde karar bizim değil ve
+/// elimizde yalnızca sunucunun sertifikasının künyesi var. İkisi aynı yerden
+/// akıyor ama farklı mesaj üretiyor.
+final class TLSRejectionOriginTests: XCTestCase {
+    func testOurRejectionCarriesReason() {
+        let rejection = TLSChallengeHandler.Rejection(
+            host: "a.firma.local",
+            reason: "sertifikadaki adlar bu host ile eşleşmiyor"
+        )
+        XCTAssertTrue(rejection.isOurs)
+    }
+
+    func testSystemRejectionOnlyCarriesNames() {
+        let rejection = TLSChallengeHandler.Rejection(
+            host: "a.firma.local",
+            reason: "",
+            presentedNames: "*.firma.local"
+        )
+        XCTAssertFalse(rejection.isOurs)
+        XCTAssertEqual(rejection.presentedNames, "*.firma.local")
+    }
+
+    func testCertificateFailureCodesAreCovered() {
+        // Sunucu sertifikasıyla ilgili hatalarda künye eklenmeli.
+        for code in [URLError.Code.serverCertificateUntrusted,
+                     .serverCertificateHasBadDate,
+                     .serverCertificateHasUnknownRoot,
+                     .serverCertificateNotYetValid,
+                     .secureConnectionFailed] {
+            XCTAssertTrue(RequestEngine.tlsFailureCodes.contains(code), "\(code)")
+        }
+        // Zaman aşımı sertifika hatası değil; künye eklenmemeli.
+        XCTAssertFalse(RequestEngine.tlsFailureCodes.contains(.timedOut))
+    }
+}
+
