@@ -61,6 +61,60 @@ extension AppState {
         )
     }
 
+    // MARK: - Profil önerisi
+
+    /// Öneriyi doğuran hata kodları. Sunucu sertifikası doğrulanamadı ya da
+    /// sunucu istemci sertifikası istedi — ikisi de "bu host'un profili
+    /// eksik olabilir" demek.
+    ///
+    /// Ölçüldü: kendinden imzalı sertifika sunan yerel bir sunucuya istek
+    /// `-1202` (`serverCertificateUntrusted`) veriyor, `.cancelled` değil —
+    /// yani iptal dalına düşüp sessizce yutulmuyor.
+    static let tlsTrustFailureCodes: Set<URLError.Code> = [
+        .serverCertificateUntrusted,
+        .serverCertificateHasBadDate,
+        .serverCertificateHasUnknownRoot,
+        .serverCertificateNotYetValid,
+        .secureConnectionFailed,
+        .clientCertificateRequired,
+        .clientCertificateRejected,
+    ]
+
+    /// TLS hatası veren istek için profil önerisi arar.
+    ///
+    /// Host, hatanın `failingURL`'inden alınır: istek URL'i `{{degisken}}`
+    /// içerebilir, çözülmüş hali yalnızca motorun elinde.
+    func offerTLSSuggestion(for error: Error) {
+        guard let urlError = error as? URLError,
+              Self.tlsTrustFailureCodes.contains(urlError.code),
+              let host = urlError.failingURL?.host?.lowercased(),
+              !declinedTLSSuggestionHosts.contains(host),
+              let match = TLSPatternSuggestion.suggestion(for: host, in: workspace.tlsProfiles)
+        else { return }
+        tlsSuggestion = match
+    }
+
+    /// Kabul: TAM host profile yazılır ve kalıcı olur — Host Profilleri
+    /// ekranında görünür, oradan silinebilir. Gizli durum bırakmıyoruz.
+    /// İstek bilerek YENİDEN GÖNDERİLMEZ; kullanıcı ne olduğunu görsün.
+    func acceptTLSSuggestion() {
+        defer { tlsSuggestion = nil }
+        guard let match = tlsSuggestion,
+              let index = workspace.tlsProfiles.firstIndex(where: { $0.id == match.profileID }),
+              !workspace.tlsProfiles[index].hostPatterns.contains(match.hostToAdd)
+        else { return }
+        workspace.tlsProfiles[index].hostPatterns.append(match.hostToAdd)
+        syncTLSProfiles()
+        persist()
+    }
+
+    func declineTLSSuggestion() {
+        if let host = tlsSuggestion?.hostToAdd {
+            declinedTLSSuggestionHosts.insert(host)
+        }
+        tlsSuggestion = nil
+    }
+
     /// Motor kendi kopyasını tutar; profil değişince güncellenmeli.
     private func syncTLSProfiles() {
         engine.tlsProfiles = workspace.tlsProfiles

@@ -26,6 +26,8 @@ extension AppState {
         // Aynı isteğin önceki gönderimi hâlâ uçuyorsa iptal et.
         inFlight[id]?.cancel()
         setResponse(.loading, for: id)
+        // Önceki denemeden kalan öneri yeni istekle karışmasın.
+        tlsSuggestion = nil
         let environment = activeEnvironment
         let usedTokens = TokenVariables.referenced(by: request, environment: environment)
 
@@ -78,6 +80,9 @@ extension AppState {
                 self.setResponse(.needsApproval(findings), for: id)
             } catch {
                 self.setResponse(.failure(error.localizedDescription), for: id)
+                // TLS güven hatasıysa: host'a uyan profil yok ama benzeri
+                // varsa kullanıcıya eklemeyi teklif et.
+                self.offerTLSSuggestion(for: error)
                 self.recordHistory(request, outcome: .failed(message: error.localizedDescription), responseText: nil)
             }
             self.inFlight[id] = nil

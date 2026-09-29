@@ -34,11 +34,19 @@ struct ResponseView: View {
             ProgressView("Gönderiliyor…")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .failure(let message):
-            ContentUnavailableView(
-                "İstek başarısız",
-                systemImage: "exclamationmark.triangle",
-                description: Text(message)
-            )
+            VStack(spacing: 12) {
+                ContentUnavailableView(
+                    "İstek başarısız",
+                    systemImage: "exclamationmark.triangle",
+                    description: Text(message)
+                )
+                if let suggestion = appState.tlsSuggestion {
+                    TLSSuggestionBanner(match: suggestion)
+                        .frame(maxWidth: 520)
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 16)
+                }
+            }
         case .blocked(let findings):
             securityReview(
                 findings,

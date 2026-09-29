@@ -176,6 +176,26 @@ final class AppState {
         searchQuery = ""
     }
 
+    // MARK: - TLS profil önerisi
+    //
+    // Uzantılardan (`AppState+TLS`) yazıldığı için `private(set)` değil.
+
+    /// TLS güven hatasından sonra çıkan "şu profile eklensin mi" önerisi.
+    var tlsSuggestion: TLSPatternSuggestion.Match?
+
+    /// Bu oturumda reddedilen host'lar. DİSKE YAZILMAZ: "hayır" kararını
+    /// kalıcı saklamak, kullanıcı aylar sonra gerçekten eklemek istediğinde
+    /// ona bir daha teklif edilmemesi demek olurdu. Oturum içi susturma
+    /// dırdırı keser, kalıcı olumsuz kayıt tutmaz.
+    var declinedTLSSuggestionHosts: Set<String> = []
+
+    /// TLS ayarları penceresini açma isteği. Sidebar aramasındaki desenle aynı.
+    private(set) var tlsSettingsRequest = 0
+
+    func showTLSSettings() {
+        tlsSettingsRequest += 1
+    }
+
     // MARK: - Editör araması
     //
     // Gövde ve yanıt editörleri kendi aramalarını kendileri yönetir

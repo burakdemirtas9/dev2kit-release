@@ -135,6 +135,10 @@ struct ContentView: View {
         .sheet(isPresented: $showingTLS) {
             TLSProfilesView()
         }
+        // Yanıt panelindeki TLS öneri kutusundaki "Profili Aç" buraya bağlanır.
+        .onChange(of: appState.tlsSettingsRequest) {
+            showingTLS = true
+        }
         .alert("Hata", isPresented: .constant(state.saveError != nil)) {
             Button("Tamam") { state.saveError = nil }
         } message: {
