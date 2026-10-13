@@ -281,17 +281,17 @@ struct SidebarView: View {
                     showingImporter = true
                 }
                 Divider()
-                Button("cURL'den İstek…") {
+                Button("Feature-1C") {/// cURL'den İstek…
                     showingCurlImport = true
                 }
-                Button("Kibana Logundan İstek…") {
+                Button("Feature-2KL") {/// Kibana Logundan İstek…
                     showingKibanaImport = true
                 }
                 Divider()
-                Button("Swagger / OpenAPI Adresinden…") {
+                Button("Feature-3S") {/// Swagger / OpenAPI Adresinden…
                     showingOpenAPIImport = true
                 }
-                Button("Kaynak Koddan Giden İstekler…") {
+                Button("Feature-4C") {/// Kaynak Koddan Giden İstekler…
                     showingSourceImport = true
                 }
                 } label: {
