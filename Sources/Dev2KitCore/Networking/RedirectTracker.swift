@@ -38,8 +38,8 @@ final class RedirectTracker: NSObject, URLSessionTaskDelegate, @unchecked Sendab
         self.tlsProfile = tlsProfile
     }
 
-    /// TLS challenge'ları. Doğrulamayı atlayan bir yol yoktur; ayrıntı için
-    /// TLSChallengeHandler.
+    /// TLS challenge'ları. Doğrulama yalnızca kullanıcının açık anahtarıyla
+    /// atlanır; ayrıntı için TLSChallengeHandler.
     func urlSession(
         _ session: URLSession,
         task: URLSessionTask,

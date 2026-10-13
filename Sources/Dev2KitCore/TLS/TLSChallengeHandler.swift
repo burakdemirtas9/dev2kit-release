@@ -12,30 +12,40 @@ public struct ResolvedTLSProfile: @unchecked Sendable {
     public let pinToCA: Bool
     /// Ömür üst sınırı (398 gün) bu host'ta aranmasın mı.
     public let allowLongValidity: Bool
+    /// Sunucu sertifikası HİÇ doğrulanmasın mı (uygulama geneli kaçış kapısı,
+    /// bkz. `RequestEngine.skipCertificateValidation`).
+    public let skipValidation: Bool
     public let identity: SecIdentity?
 
     public init(
         caCertificates: [SecCertificate],
         pinToCA: Bool,
         allowLongValidity: Bool = false,
+        skipValidation: Bool = false,
         identity: SecIdentity?
     ) {
         self.caCertificates = caCertificates
         self.pinToCA = pinToCA
         self.allowLongValidity = allowLongValidity
+        self.skipValidation = skipValidation
         self.identity = identity
     }
 
-    public var isEmpty: Bool { caCertificates.isEmpty && identity == nil }
+    public var isEmpty: Bool { caCertificates.isEmpty && identity == nil && !skipValidation }
 }
+
+// TODO(showcase): geçici kaçış kapısı. İleride host bazlı hale getirilecek
+// ya da tamamen kaldırılacak — bkz. TODO.md "Sertifika doğrulama anahtarı".
 
 /// TLS kimlik doğrulama challenge'larını karşılar.
 ///
-/// **Burada "hepsini kabul et" yolu YOKTUR ve olmamalıdır.** Sertifika
-/// doğrulamasını atlayan bir kısayol (`URLCredential(trust:)` doğrudan dönmek),
-/// özelliği hiç eklememekten daha kötüdür: kullanıcı güvende sanırken değildir.
 /// Kurum CA'sı yalnızca EK GÜVEN ÇIPASI olarak eklenir, doğrulamanın kendisi
-/// her zaman çalışır ve sonucuna uyulur.
+/// çalışır ve sonucuna uyulur.
+///
+/// TEK İSTİSNA: kullanıcının uygulama genelinde açtığı "doğrulamayı kapat"
+/// anahtarı (`ResolvedTLSProfile.skipValidation`). Sessiz bir kısayol değil:
+/// açıkken araç çubuğunda ve her yanıtta görünür bir uyarı var, açılışta
+/// her zaman kapalı başlar. Bunun dışında "hepsini kabul et" yolu yoktur.
 enum TLSChallengeHandler {
     /// Bağlantının neden reddedildiği. `nil` ise reddedilmedi.
     ///
@@ -73,6 +83,11 @@ enum TLSChallengeHandler {
                 host: host,
                 reason: "Sunucu bir sertifika sunmadı."
             ))
+        }
+        // KAÇIŞ KAPISI: kullanıcı doğrulamayı kapattı. Değerlendirme hiç
+        // yapılmıyor; yanıttaki iz `ResponseData.certificateValidationSkipped`.
+        if profile?.skipValidation == true {
+            return (.useCredential, URLCredential(trust: trust), nil)
         }
         // Profil yoksa sistem davranışı: sistem kök sertifikalarıyla doğrula.
         //

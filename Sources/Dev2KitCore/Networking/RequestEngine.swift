@@ -20,6 +20,12 @@ public struct ResponseData: Sendable {
     public let timing: ResponseTiming?
     /// Tel üzerindeki boyutlar (istek/yanıt, başlık/gövde ayrımıyla).
     public let size: TransferSize?
+    /// Bu yanıtı getiren HTTPS bağlantısında sunucu sertifikası HİÇ
+    /// doğrulanmadı mı (kullanıcının kapattığı doğrulama anahtarı).
+    ///
+    /// Yanıtla birlikte taşınıyor: sonradan bakan biri o yanıtın doğrulanmış
+    /// bir kaynaktan gelip gelmediğini başka türlü bilemez.
+    public let certificateValidationSkipped: Bool
 
     public init(
         statusCode: Int,
@@ -31,7 +37,8 @@ public struct ResponseData: Sendable {
         redirectStop: RedirectGuard.Decision.StopReason? = nil,
         network: NetworkInfo? = nil,
         timing: ResponseTiming? = nil,
-        size: TransferSize? = nil
+        size: TransferSize? = nil,
+        certificateValidationSkipped: Bool = false
     ) {
         self.statusCode = statusCode
         self.headers = headers
@@ -43,6 +50,7 @@ public struct ResponseData: Sendable {
         self.network = network
         self.timing = timing
         self.size = size
+        self.certificateValidationSkipped = certificateValidationSkipped
     }
 
     public var bodyText: String? { String(data: body, encoding: .utf8) }
@@ -121,34 +129,66 @@ public final class RequestEngine: @unchecked Sendable {
         .secureConnectionFailed,
     ]
 
+    /// Oturum anahtarı: kapsam + doğrulama modu.
+    ///
+    /// Doğrulamasız istekler AYRI oturumdan gider. Aynı oturum kullanılsaydı
+    /// doğrulanmadan kurulan bağlantı havuzda kalır, anahtar kapatıldıktan
+    /// sonraki istek el sıkışma olmadan (yani doğrulama olmadan) onu yeniden
+    /// kullanırdı — üstelik yanıtta hiçbir uyarı olmadan. Ayrı oturum aynı
+    /// zamanda ayrı çerez kavanozu demek: doğrulamasız bağlantıda alınan
+    /// oturum çerezi doğrulamalı isteklere taşınmaz.
+    private struct SessionKey: Hashable {
+        let scope: Scope
+        let skipsValidation: Bool
+    }
+
     private let lock = NSLock()
-    private var sessions: [Scope: URLSession] = [:]
+    private var sessions: [SessionKey: URLSession] = [:]
 
     public init() {}
 
+    /// Sunucu sertifikası doğrulaması uygulama genelinde kapalı mı.
+    ///
+    /// Bilerek kalıcı DEĞİL: AppState açılışta her zaman `false` ile başlatır.
+    /// Açık unutulan bir anahtarın ertesi gün tüm istekleri korumasız
+    /// göndermesinin gereği yok.
+    // TODO(showcase): geçici kaçış kapısı. İleride host bazlı hale getirilecek
+    // ya da tamamen kaldırılacak — bkz. TODO.md "Sertifika doğrulama anahtarı".
+    public var skipCertificateValidation = false
+
     /// Kapsamın oturumu. `ephemeral` yapılandırma çerezleri YALNIZCA bellekte
     /// tutar; oturum kimlik bilgileri diske hiç yazılmaz, uygulama kapanınca gider.
-    private func session(for scope: Scope) -> URLSession {
+    private func session(for scope: Scope, skipsValidation: Bool = false) -> URLSession {
+        let key = SessionKey(scope: scope, skipsValidation: skipsValidation)
         lock.lock(); defer { lock.unlock() }
-        if let existing = sessions[scope] { return existing }
+        if let existing = sessions[key] { return existing }
         let config = URLSessionConfiguration.ephemeral
         config.httpCookieAcceptPolicy = .always
         config.httpShouldSetCookies = true
         config.urlCache = nil
         let session = URLSession(configuration: config)
-        sessions[scope] = session
+        sessions[key] = session
         return session
     }
 
-    /// Kapsamdaki çerezleri listeler (denetim ekranı için).
-    public func cookies(in scope: Scope) -> [HTTPCookie] {
-        session(for: scope).configuration.httpCookieStorage?.cookies ?? []
+    /// Kapsamın açılmış oturumları (doğrulamalı ve varsa doğrulamasız).
+    private func existingSessions(in scope: Scope) -> [URLSession] {
+        lock.lock(); defer { lock.unlock() }
+        return sessions.filter { $0.key.scope == scope }.map(\.value)
     }
 
-    /// Kapsamdaki tüm çerezleri siler ("oturumu kapat").
+    /// Kapsamdaki çerezleri listeler (denetim ekranı için). Doğrulamasız
+    /// oturumun kavanozu da dahil: denetim ekranında saklı çerez olmamalı.
+    public func cookies(in scope: Scope) -> [HTTPCookie] {
+        existingSessions(in: scope).flatMap { $0.configuration.httpCookieStorage?.cookies ?? [] }
+    }
+
+    /// Kapsamdaki tüm çerezleri siler ("oturumu kapat"), iki kavanozda da.
     public func clearCookies(in scope: Scope) {
-        guard let storage = session(for: scope).configuration.httpCookieStorage else { return }
-        storage.cookies?.forEach(storage.deleteCookie)
+        for session in existingSessions(in: scope) {
+            guard let storage = session.configuration.httpCookieStorage else { continue }
+            storage.cookies?.forEach(storage.deleteCookie)
+        }
     }
 
     /// Host bazlı TLS profilleri. Gönderimden önce çözülür ki dosya/parola
@@ -219,7 +259,14 @@ public final class RequestEngine: @unchecked Sendable {
         urlRequest.httpShouldHandleCookies = model.options.sendCookies
 
         let scope = Scope(environmentID: environment?.id)
-        let tlsProfile = try resolveTLSProfile(for: urlRequest.url, resolver: resolver)
+        // Gönderim boyunca tek değer: istek uçarken anahtar değişirse oturum
+        // ile yanıttaki iz birbirini tutmaz hale gelmesin.
+        let skipsValidation = skipCertificateValidation
+        let tlsProfile = try resolveTLSProfile(
+            for: urlRequest.url,
+            resolver: resolver,
+            skipValidation: skipsValidation
+        )
         let tracker = RedirectTracker(
             policy: model.options.redirect,
             credentialHeaders: RedirectGuard.credentialHeaders(for: model),
@@ -230,7 +277,8 @@ public final class RequestEngine: @unchecked Sendable {
         let data: Data
         let response: URLResponse
         do {
-            (data, response) = try await session(for: scope).data(for: urlRequest, delegate: tracker)
+            (data, response) = try await session(for: scope, skipsValidation: skipsValidation)
+                .data(for: urlRequest, delegate: tracker)
         } catch let error as URLError where error.code == .cancelled {
             // URLSession, bizim `cancelAuthenticationChallenge`'ımızı kullanıcı
             // iptaliyle AYNI kodla (-999) raporluyor. Ayırt etmezsek güvenlik
@@ -279,7 +327,10 @@ public final class RequestEngine: @unchecked Sendable {
             redirectStop: tracker.stopReason,
             network: networkInfo(from: tracker, host: http.url?.host ?? urlRequest.url?.host),
             timing: tracker.responseTiming,
-            size: tracker.size
+            size: tracker.size,
+            // Düz HTTP'de doğrulanacak sertifika yok; uyarı orada yanıltır.
+            certificateValidationSkipped: skipsValidation
+                && [urlRequest.url, http.url].contains { $0?.scheme?.lowercased() == "https" }
         )
     }
 
@@ -405,7 +456,8 @@ public final class RequestEngine: @unchecked Sendable {
     /// Host'a uyan profili bulup sertifikalarını yükler.
     private func resolveTLSProfile(
         for url: URL?,
-        resolver: VariableResolver
+        resolver: VariableResolver,
+        skipValidation: Bool
     ) throws -> ResolvedTLSProfile? {
         guard let host = url?.host else { return nil }
         let profile = TLSProfile.profile(for: host, in: tlsProfiles)
@@ -441,6 +493,7 @@ public final class RequestEngine: @unchecked Sendable {
             caCertificates: certificates,
             pinToCA: pin,
             allowLongValidity: profile?.allowLongValidity ?? false,
+            skipValidation: skipValidation,
             identity: identity
         )
         return resolved.isEmpty ? nil : resolved

@@ -176,6 +176,18 @@ final class AppState {
         searchQuery = ""
     }
 
+    // MARK: - Sertifika doğrulama anahtarı
+
+    /// Sunucu sertifikası doğrulaması uygulama genelinde kapalı mı.
+    ///
+    /// DİSKE YAZILMAZ: her açılışta kapalı başlar. Açık unutulan anahtar
+    /// ertesi gün tüm istekleri sessizce korumasız göndermesin.
+    // TODO(showcase): geçici kaçış kapısı. İleride host bazlı hale getirilecek
+    // ya da tamamen kaldırılacak — bkz. TODO.md "Sertifika doğrulama anahtarı".
+    var certificateValidationDisabled = false {
+        didSet { engine.skipCertificateValidation = certificateValidationDisabled }
+    }
+
     // MARK: - TLS profil önerisi
     //
     // Uzantılardan (`AppState+TLS`) yazıldığı için `private(set)` değil.

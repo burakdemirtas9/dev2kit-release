@@ -365,6 +365,12 @@ struct ResponseView: View {
                     NetworkPopover(info: network)
                 }
             }
+            if response.certificateValidationSkipped {
+                Label("Sertifika doğrulanmadı", systemImage: "exclamationmark.shield.fill")
+                    .font(.caption)
+                    .foregroundStyle(Theme.down)
+                    .help("Bu yanıt, sunucu sertifikası doğrulanmadan kurulan bir bağlantıdan geldi. Kaynağın gerçekten o sunucu olduğu garanti değil.")
+            }
             if !response.redirects.isEmpty {
                 Label("\(response.redirects.count) yönlendirme", systemImage: "arrow.triangle.turn.up.right.diamond")
                     .font(.caption)

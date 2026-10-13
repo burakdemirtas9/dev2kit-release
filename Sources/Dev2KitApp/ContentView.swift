@@ -103,6 +103,20 @@ struct ContentView: View {
                 }
                 .help("Oturum çerezlerini görüntüle ve temizle")
             }
+            // Doğrulama kapalıyken her an görünür olmalı: açık unutulursa
+            // kullanıcı bunu bir yanıta bakana kadar fark etmezdi.
+            if appState.certificateValidationDisabled {
+                ToolbarItem(placement: .automatic) {
+                    Button {
+                        appState.certificateValidationDisabled = false
+                    } label: {
+                        Label("Doğrulama kapalı", systemImage: "exclamationmark.shield.fill")
+                            .labelStyle(.titleAndIcon)
+                    }
+                    .foregroundStyle(Theme.down)
+                    .help("Sertifika doğrulaması tüm isteklerde KAPALI. Tıklayınca yeniden açılır.")
+                }
+            }
             ToolbarItem(placement: .automatic) {
                 Button {
                     showingTLS = true

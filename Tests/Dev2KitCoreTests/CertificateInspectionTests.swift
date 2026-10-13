@@ -53,7 +53,7 @@ final class CertificateInspectionTests: XCTestCase {
 
     // MARK: - Fixture'lar
 
-    private static let ca =
+    static let ca =
         "MIIBmzCCAUGgAwIBAgIUIEDk5a5SVk4bAQuc42HcGew2gjUwCgYIKoZIzj0EAwIwGjEYMBYGA1UE" +
         "AwwPZGV2MmtpdCBUZXN0IENBMCAXDTI2MDkyOTE5NDQxN1oYDzIxMjYwOTA1MTk0NDE3WjAaMRgw" +
         "FgYDVQQDDA9kZXYya2l0IFRlc3QgQ0EwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAATwziqUBd5a" +
@@ -63,7 +63,7 @@ final class CertificateInspectionTests: XCTestCase {
         "SAAwRQIgUxGRk/d4MjVjzsfUmdk42jqCiWwCAMO4CP9CIbMatBkCIQCsc0liF2FA57ESYnIYzr/E" +
         "/GbI9YtJ65/6mr9SGmmARg=="
 
-    private static let leaf =
+    static let leaf =
         "MIIBxDCCAWqgAwIBAgIULSDz97lFbj2J6cBT4vWo/nT8u4AwCgYIKoZIzj0EAwIwGjEYMBYGA1UE" +
         "AwwPZGV2MmtpdCBUZXN0IENBMCAXDTI2MDkyOTE5NDQxN1oYDzIxMjYwOTA1MTk0NDE3WjAVMRMw" +
         "EQYDVQQDDApvcm5lay50ZXN0MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEKPj26sdKQrUZp/CP" +

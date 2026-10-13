@@ -9,6 +9,7 @@ struct TLSProfilesView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var selectedID: UUID?
     @State private var tab: Tab = .trustStore
+    @State private var confirmingDisable = false
 
     enum Tab: String, CaseIterable {
         case trustStore = "Güven Deposu"
@@ -31,13 +32,8 @@ struct TLSProfilesView: View {
                 profilesSection
             }
 
-            HStack {
-                Label(
-                    "Sertifika doğrulaması hiçbir durumda atlanmaz. CA yalnızca EK güven çıpası olarak eklenir; \"doğrulamayı kapat\" seçeneği bilinçli olarak yoktur.",
-                    systemImage: "lock.shield"
-                )
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            HStack(alignment: .bottom) {
+                validationSection
                 Spacer()
                 Button("Kapat") { dismiss() }
                     .keyboardShortcut(.cancelAction)
@@ -48,6 +44,42 @@ struct TLSProfilesView: View {
         .onAppear {
             selectedID = appState.workspace.tlsProfiles.first?.id
             appState.reloadTrustStore()
+        }
+    }
+
+    // TODO(showcase): geçici kaçış kapısı. İleride host bazlı hale getirilecek
+    // ya da tamamen kaldırılacak — bkz. TODO.md "Sertifika doğrulama anahtarı".
+    private var validationSection: some View {
+        let disabled = appState.certificateValidationDisabled
+        return VStack(alignment: .leading, spacing: 4) {
+            Toggle("Sertifika doğrulamasını kapat (tüm istekler)", isOn: Binding(
+                get: { disabled },
+                set: { newValue in
+                    // Kapatmak onay ister; geri açmak (güvenli yön) istemez.
+                    if newValue { confirmingDisable = true } else { appState.certificateValidationDisabled = false }
+                }
+            ))
+            .toggleStyle(.switch)
+            .controlSize(.small)
+            Label(
+                disabled
+                    ? "Doğrulama KAPALI: sunucu sertifikası hiç kontrol edilmiyor. Uygulama yeniden açılınca kendiliğinden açılır."
+                    : "Sertifika doğrulaması açık. CA yalnızca EK güven çıpası olarak eklenir.",
+                systemImage: disabled ? "exclamationmark.shield.fill" : "lock.shield"
+            )
+            .font(.caption)
+            .foregroundStyle(disabled ? Theme.down : .secondary)
+        }
+        .confirmationDialog(
+            "Sertifika doğrulaması kapatılsın mı?",
+            isPresented: $confirmingDisable
+        ) {
+            Button("Doğrulamayı Kapat", role: .destructive) {
+                appState.certificateValidationDisabled = true
+            }
+            Button("Vazgeç", role: .cancel) {}
+        } message: {
+            Text("TÜM isteklerde sunucu sertifikası kontrol edilmez; araya giren biri herhangi bir sertifikayla bağlantıyı devralabilir. Yalnızca sertifikası yanlış yapılandırılmış iç ortamlar için kullan. Uygulama yeniden açılınca doğrulama kendiliğinden açılır.")
         }
     }
 
