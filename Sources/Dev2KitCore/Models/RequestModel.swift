@@ -93,6 +93,11 @@ public struct RequestModel: Codable, Identifiable, Hashable, Sendable {
     public var auth: AuthConfig
     /// Eski dosyalarda yok; okunurken varsayılana düşer.
     public var options: RequestOptions
+    /// Token Factory isteğiyse yanıttan hangi alanın hangi değişkene
+    /// yazılacağı. Yalnızca Token Factory koleksiyonunda anlam taşır; istek
+    /// taşınırsa ayar onunla gider ama başka yerde yok sayılır.
+    /// Tele çıkan bir şey değil: `isFunctionallyEqual` kapsamında DEĞİL.
+    public var tokenOutput: TokenOutput?
 
     public init(
         id: UUID = UUID(),
@@ -103,7 +108,8 @@ public struct RequestModel: Codable, Identifiable, Hashable, Sendable {
         queryParams: [KeyValueEntry] = [],
         body: RequestBody = .none,
         auth: AuthConfig = .none,
-        options: RequestOptions = .default
+        options: RequestOptions = .default,
+        tokenOutput: TokenOutput? = nil
     ) {
         self.id = id
         self.name = name
@@ -114,6 +120,7 @@ public struct RequestModel: Codable, Identifiable, Hashable, Sendable {
         self.body = body
         self.auth = auth
         self.options = options
+        self.tokenOutput = tokenOutput
     }
 
     /// İki isteğin TELE ÇIKAN kısmı aynı mı.
@@ -160,7 +167,8 @@ public struct RequestModel: Codable, Identifiable, Hashable, Sendable {
             queryParams: try container.decodeIfPresent([KeyValueEntry].self, forKey: .queryParams) ?? [],
             body: try container.decodeIfPresent(RequestBody.self, forKey: .body) ?? .none,
             auth: try container.decodeIfPresent(AuthConfig.self, forKey: .auth) ?? .none,
-            options: try container.decodeIfPresent(RequestOptions.self, forKey: .options) ?? .default
+            options: try container.decodeIfPresent(RequestOptions.self, forKey: .options) ?? .default,
+            tokenOutput: try container.decodeIfPresent(TokenOutput.self, forKey: .tokenOutput)
         )
     }
 }

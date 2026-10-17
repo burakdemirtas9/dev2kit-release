@@ -44,14 +44,31 @@ public struct CollectionModel: Codable, Identifiable, Hashable, Sendable {
     /// koleksiyon olarak tutulur ki seçme, taşıma, arama, geçmiş gibi tüm
     /// istek işlemleri iki ayrı yol olmadan çalışsın.
     public var isUngrouped: Bool
+    /// Token Factory: değişkenlere token üreten isteklerin kabı. Koleksiyonsuz
+    /// kap ile aynı gerekçeyle koleksiyon olarak tutulur (editör, sekme,
+    /// kaydetme, kopyalama tek yoldan çalışsın); arayüzde sol panelin en
+    /// altında ayrı bölüm olarak görünür, koleksiyon listesinde değil.
+    /// Yeniden adlandırılmaz, silinmez, dışa aktarılmaz, taşıma hedefi olmaz.
+    public var isTokenFactory: Bool
 
     public static let ungroupedName = "Koleksiyonsuz"
+    public static let tokenFactoryName = "Token Factory"
 
-    public init(id: UUID = UUID(), name: String = "Yeni Koleksiyon", requests: [RequestModel] = [], isUngrouped: Bool = false) {
+    /// Kullanıcının yönetebildiği sıradan bir koleksiyon mu.
+    public var isRegular: Bool { !isUngrouped && !isTokenFactory }
+
+    public init(
+        id: UUID = UUID(),
+        name: String = "Yeni Koleksiyon",
+        requests: [RequestModel] = [],
+        isUngrouped: Bool = false,
+        isTokenFactory: Bool = false
+    ) {
         self.id = id
         self.name = name
         self.requests = requests
         self.isUngrouped = isUngrouped
+        self.isTokenFactory = isTokenFactory
     }
 
     public init(from decoder: Decoder) throws {
@@ -61,7 +78,8 @@ public struct CollectionModel: Codable, Identifiable, Hashable, Sendable {
             name: try container.decode(String.self, forKey: .name),
             requests: try container.decode([RequestModel].self, forKey: .requests),
             // Bu alan eklenmeden önce yazılmış dosyalarda ve dışa aktarımlarda yok.
-            isUngrouped: try container.decodeIfPresent(Bool.self, forKey: .isUngrouped) ?? false
+            isUngrouped: try container.decodeIfPresent(Bool.self, forKey: .isUngrouped) ?? false,
+            isTokenFactory: try container.decodeIfPresent(Bool.self, forKey: .isTokenFactory) ?? false
         )
     }
 }
@@ -120,9 +138,24 @@ public struct WorkspaceModel: Codable, Sendable {
         return ungrouped.id
     }
 
-    /// Kullanıcının oluşturduğu koleksiyonlar (koleksiyonsuz kap hariç).
+    /// Kullanıcının oluşturduğu koleksiyonlar (koleksiyonsuz kap ve Token
+    /// Factory hariç).
     public var regularCollections: [CollectionModel] {
-        collections.filter { !$0.isUngrouped }
+        collections.filter(\.isRegular)
+    }
+
+    /// Token Factory kabı; yoksa listenin SONUNA eklenir (arayüzde zaten
+    /// ayrı bölümde, sıranın kullanıcıya etkisi yok).
+    public mutating func ensureTokenFactoryCollection() -> UUID {
+        if let existing = collections.first(where: \.isTokenFactory) { return existing.id }
+        let factory = CollectionModel(name: CollectionModel.tokenFactoryName, isTokenFactory: true)
+        collections.append(factory)
+        return factory.id
+    }
+
+    /// Token Factory'deki istekler (kap yoksa boş).
+    public var tokenFactoryRequests: [RequestModel] {
+        collections.first(where: \.isTokenFactory)?.requests ?? []
     }
 
     /// Silinmiş isteklerin referans noktalarını atar; dosya şişmesin.

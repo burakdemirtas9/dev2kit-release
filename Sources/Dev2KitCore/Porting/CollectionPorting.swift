@@ -136,8 +136,9 @@ public enum CollectionPorting {
         copy.id = UUID()
         copy.name = name
         // İçe aktarılan her şey normal koleksiyondur; dosyadaki işaret ikinci
-        // bir "Koleksiyonsuz" kabı oluşturmasın.
+        // bir "Koleksiyonsuz" ya da "Token Factory" kabı oluşturmasın.
         copy.isUngrouped = false
+        copy.isTokenFactory = false
         copy.requests = copy.requests.map { request in
             var fresh = request
             fresh.id = UUID()

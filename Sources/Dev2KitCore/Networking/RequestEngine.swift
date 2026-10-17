@@ -109,7 +109,11 @@ public final class RequestEngine: @unchecked Sendable {
     public struct Scope: Hashable, Sendable {
         let key: String
         public init(environmentID: UUID?) {
-            self.key = environmentID?.uuidString ?? "default"
+            // Token Factory, environment seçili değilken token'ı taşımak için
+            // geçici bir environment kuruyor; o da "environment yok" sayılır,
+            // yoksa token kullanan istekler ayrı bir çerez kavanozuna düşerdi.
+            let bound = environmentID == TokenFactory.unboundEnvironmentID ? nil : environmentID
+            self.key = bound?.uuidString ?? "default"
         }
     }
 

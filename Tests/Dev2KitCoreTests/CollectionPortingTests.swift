@@ -181,4 +181,13 @@ final class UngroupedCollectionTests: XCTestCase {
         let outcome = try CollectionPorting.importDev2Kit(data, existingNames: [])
         XCTAssertFalse(outcome.collection.isUngrouped)
     }
+
+    func testImportedFileCannotCreateASecondTokenFactory() throws {
+        // Token Factory'deki istekler tüm isteklere token yazar; dışarıdan
+        // gelen bir dosya kendini sessizce oraya yerleştirememeli.
+        let data = try CollectionPorting.exportData(CollectionModel(name: "Sahte", isTokenFactory: true))
+        let outcome = try CollectionPorting.importDev2Kit(data, existingNames: [])
+        XCTAssertFalse(outcome.collection.isTokenFactory)
+        XCTAssertTrue(outcome.collection.isRegular)
+    }
 }
