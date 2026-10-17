@@ -27,6 +27,17 @@ struct ContentView: View {
         return min(max(sidebarWidth, Self.minSidebarWidth), upper)
     }
 
+    /// macOS 26 yan yana duran araç çubuğu düğmelerini tek bir cam kapsülde
+    /// grupluyor; tema seçicisi Picker olunca Environment'lar ve Geçmiş ile
+    /// birleşiyordu. Sabit ayırıcı her birini kendi düğmesi olarak tutar.
+    /// Eski sürümlerde gruplama yok, ayırıcı da yok.
+    @ToolbarContentBuilder
+    private var toolbarGroupBreak: some ToolbarContent {
+        if #available(macOS 26.0, *) {
+            ToolbarSpacer(.fixed)
+        }
+    }
+
     var body: some View {
         @Bindable var state = appState
         // Genişlik tamamen bizde: HSplitView/NavigationSplitView ayraç konumunu
@@ -69,19 +80,26 @@ struct ContentView: View {
                 }
                 .help("Environment oluştur ve düzenle")
             }
+            toolbarGroupBreak
             ToolbarItem(placement: .automatic) {
-                Menu {
-                    Picker("Görünüm", selection: $state.appearanceMode) {
-                        ForEach(AppearanceMode.allCases, id: \.self) { mode in
-                            Label(mode.label, systemImage: mode.icon).tag(mode)
-                        }
+                // Picker olarak kurulur: araç çubuğu "simge ve metin" modunda
+                // Menu'nun başlığını göstermiyordu (Label da, Menu(_:systemImage:)
+                // de denendi); Picker'ın başlığı etiket olarak çıkıyor.
+                Picker(selection: $state.appearanceMode) {
+                    ForEach(AppearanceMode.allCases, id: \.self) { mode in
+                        Label(mode.label, systemImage: mode.icon).tag(mode)
                     }
-                    .pickerStyle(.inline)
                 } label: {
                     Label("Görünüm", systemImage: appState.appearanceMode.icon)
                 }
+                .pickerStyle(.menu)
+                // Diğer araç çubuğu düğmeleri gibi dar kalsın: seçenekler
+                // zaten tıklayınca açılan listede.
+                .menuIndicator(.hidden)
+                .frame(width: 36)
                 .help("Açık/koyu görünüm")
             }
+            toolbarGroupBreak
             ToolbarItem(placement: .automatic) {
                 Button {
                     showingHistory = true

@@ -97,7 +97,13 @@ private struct RequestTab: View {
         .font(.callout)
         .padding(.horizontal, 10)
         .frame(height: 32)
-        .background(isSelected ? Theme.editorBackground : (hovering ? Color.primary.opacity(0.05) : .clear))
+        // `ignoresSafeAreaEdges: []`: renkli arka plan varsayılan olarak güvenli
+        // alana taşıyor; sekme çubuğu başlık çubuğunun hemen altında olduğu
+        // için seçili sekmenin rengi pencerenin tepesine kadar uzanıyordu.
+        .background(
+            isSelected ? Theme.editorBackground : (hovering ? Color.primary.opacity(0.05) : .clear),
+            ignoresSafeAreaEdges: []
+        )
         .overlay(alignment: .top) {
             if isSelected {
                 Rectangle().fill(Theme.accent).frame(height: 2)
