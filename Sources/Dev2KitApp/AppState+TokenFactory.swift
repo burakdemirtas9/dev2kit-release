@@ -124,12 +124,17 @@ extension AppState {
     /// geçerli bir değere bağlanır. Biri alınamazsa istek gönderilmez.
     func prepareTokens(
         _ sources: [TokenFactory.Source],
-        environment: EnvironmentModel?
+        environment: EnvironmentModel?,
+        forceRefresh: Bool = false
     ) async throws -> (EnvironmentModel?, SecretStore) {
         guard !sources.isEmpty else { return (environment, secretStore) }
         var overrides: [String: String] = [:]
         for source in sources {
-            overrides[source.secretName] = try await validToken(source, environment: environment).value
+            overrides[source.secretName] = try await validToken(
+                source,
+                environment: environment,
+                forceRefresh: forceRefresh
+            ).value
         }
         return (
             TokenFactory.environmentForSend(environment, sources: sources),
@@ -175,6 +180,29 @@ extension AppState {
             TokenFactory.environmentForSend(environment, sources: sources),
             OverlaySecretStore(base: secretStore, overrides: overrides)
         )
+    }
+
+    /// "Token'ı yenile ve tekrar gönder": isteğin GÜNCEL hali, token'lar
+    /// zorla yenilenerek yeniden gönderilir.
+    func refreshTokensAndResend(_ requestID: UUID) {
+        guard let request = request(withID: requestID) else { return }
+        send(request, refreshingTokens: true)
+    }
+
+    /// "Yine de gönder (token olmadan)": token alınamadıktan sonra isteğin
+    /// GÜNCEL hali Token Factory'ye gidilmeden gönderilir.
+    func sendWithoutTokens(_ requestID: UUID) {
+        guard let request = request(withID: requestID) else { return }
+        tokenAlert = nil
+        send(request, skippingTokens: true)
+    }
+
+    /// Öneriden ilgili Token Factory isteğine gider (token içeriğini kontrol et).
+    func openTokenRequest(producing variable: String) {
+        guard let source = tokenSources(for: activeEnvironment).first(where: { $0.variable == variable }) else { return }
+        selectedRequestID = source.request.id
+        pinTab(source.request.id)
+        editorTab = .token
     }
 
     func showTokenAlert(_ message: String, for requestID: UUID) {

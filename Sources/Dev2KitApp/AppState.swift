@@ -789,6 +789,14 @@ final class AppState {
 
     var tokenAlert: TokenAlert?
 
+    /// Token kullanan istek hata aldıysa yanıtın üstünde gösterilecek öneri
+    /// (bkz. `TokenRetryAdvice`). İstek başına; yeni gönderimde sıfırlanır.
+    var tokenRetryAdvice: [UUID: TokenRetryAdvice] = [:]
+
+    /// Token alınamadığı için GÖNDERİLMEYEN istekler ve kullandıkları
+    /// değişkenler. "Yine de gönder (token olmadan)" düğmesi buna bakar.
+    var tokenBlockedSends: [UUID: [String]] = [:]
+
     // MARK: - OAuth2 durumu (davranış: AppState+Sending)
 
     let oauthService = OAuth2Service()

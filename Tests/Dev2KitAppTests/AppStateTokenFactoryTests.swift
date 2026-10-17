@@ -85,6 +85,18 @@ final class AppStateTokenFactoryTests: XCTestCase {
         XCTAssertTrue(state.templateSuggestions(matching: "tok").contains("token"))
     }
 
+    func testOpenTokenRequestJumpsToItsTokenTab() throws {
+        // "Token içeriğini kontrol et" önerisinin düğmesi: üreten isteği açar.
+        state.addTokenFactoryRequest()
+        let factoryRequest = try XCTUnwrap(factory?.requests.first)
+        let api = harness.addRequest(named: "api")
+        XCTAssertEqual(state.selectedRequestID, api.id)
+
+        state.openTokenRequest(producing: "token")
+        XCTAssertEqual(state.selectedRequestID, factoryRequest.id)
+        XCTAssertEqual(state.editorTab, .token)
+    }
+
     func testTokenSettingsArePersisted() throws {
         state.addTokenFactoryRequest()
         let saved = try harness.savedWorkspace()

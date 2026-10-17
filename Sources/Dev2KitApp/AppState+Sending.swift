@@ -19,7 +19,13 @@ extension AppState {
         }
     }
 
-    func send(_ request: RequestModel) {
+    /// - Parameter refreshingTokens: kullanıcı "token'ı yenile ve tekrar
+    ///   gönder" dedi: kullanılan token'lar bellekte geçerli görünse de
+    ///   yeniden alınır ve sonuç buna göre yorumlanır (bkz. `TokenRetryAdvice`).
+    /// - Parameter skippingTokens: token alınamadı ve kullanıcı "yine de
+    ///   gönder" dedi: Token Factory'ye gidilmez, değişken environment'taki
+    ///   aynı adlı değere ya da boşa bağlanır (`environmentWithoutTokens`).
+    func send(_ request: RequestModel, refreshingTokens: Bool = false, skippingTokens: Bool = false) {
         flushPendingWrites()
         // Gönderilen istek kullanılan istektir: önizleme sekmesi kalıcı olur.
         pinTab(request.id)
@@ -36,6 +42,8 @@ extension AppState {
         let usedTokens = isTokenRequest
             ? []
             : TokenFactory.referenced(by: request, environment: environment, sources: tokenSources(for: environment))
+        tokenRetryAdvice[id] = nil
+        tokenBlockedSends[id] = nil
 
         inFlight[id] = Task { [weak self] in
             guard let self else { return }
@@ -46,11 +54,23 @@ extension AppState {
                 // çıkılmadan devam edilir. Alınamazsa istek GÖNDERİLMEZ.
                 let sendEnvironment: EnvironmentModel?
                 let sendStore: SecretStore
-                do {
-                    (sendEnvironment, sendStore) = try await self.prepareTokens(usedTokens, environment: environment)
-                } catch let error as TokenError {
-                    self.showTokenAlert(error.localizedDescription, for: id)
-                    throw error
+                if skippingTokens {
+                    (sendEnvironment, sendStore) = (
+                        TokenFactory.environmentWithoutTokens(environment, sources: usedTokens),
+                        self.secretStore
+                    )
+                } else {
+                    do {
+                        (sendEnvironment, sendStore) = try await self.prepareTokens(
+                            usedTokens,
+                            environment: environment,
+                            forceRefresh: refreshingTokens
+                        )
+                    } catch let error as TokenError {
+                        self.tokenBlockedSends[id] = usedTokens.map(\.variable)
+                        self.showTokenAlert(error.localizedDescription, for: id)
+                        throw error
+                    }
                 }
                 let response = try await engine.send(
                     request,
@@ -59,15 +79,17 @@ extension AppState {
                     hostPolicy: self.hostPolicy,
                     approvedWarnings: self.approvalStore.load()
                 )
-                // Token sunucuda erken geçersiz kılınmış olabilir: bir sonraki
-                // gönderim yenisini alsın. İstek bilerek yeniden gönderilmez;
-                // kullanıcı 401'i görür ve tekrar gönderir.
-                if response.statusCode == 401 {
-                    usedTokens.forEach { self.forgetToken($0, environment: environment) }
-                }
+                // Token kullanan istek hata aldıysa yenileme KULLANICIYA önerilir
+                // (TokenRetryAdvice); token sessizce düşürülmez, istek
+                // kendiliğinden yeniden gönderilmez — POST iki kez çalışmasın.
                 if isTokenRequest {
                     self.absorbTokenResponse(request, response: response, environment: environment)
                 }
+                self.tokenRetryAdvice[id] = TokenRetryAdvice.advice(
+                    statusCode: response.statusCode,
+                    usedVariables: usedTokens.map(\.variable),
+                    afterRefresh: refreshingTokens
+                )
                 let display = await Task.detached { AppState.makeDisplay(response) }.value
                 try Task.checkCancellation()
                 self.setResponse(.success(display), for: id)

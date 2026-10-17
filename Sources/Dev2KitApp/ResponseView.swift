@@ -40,6 +40,9 @@ struct ResponseView: View {
                     systemImage: "exclamationmark.triangle",
                     description: Text(message)
                 )
+                if let id = appState.selectedRequestID, let variables = appState.tokenBlockedSends[id] {
+                    SendWithoutTokenButton(requestID: id, variables: variables)
+                }
                 if let suggestion = appState.tlsSuggestion {
                     TLSSuggestionBanner(match: suggestion)
                         .frame(maxWidth: 520)
@@ -78,6 +81,9 @@ struct ResponseView: View {
             let response = display.data
             VStack(spacing: 0) {
                 statusBar(display)
+                if let id = appState.selectedRequestID, let advice = appState.tokenRetryAdvice[id] {
+                    TokenRetryBanner(requestID: id, advice: advice)
+                }
                 Divider()
                 ZStack {
                     // Sekmeler ortada kalsın; katlama düğmeleri sağ uçta durur.

@@ -166,6 +166,9 @@ struct TokenAlertToast: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
             Spacer(minLength: 0)
+            if let variables = appState.tokenBlockedSends[alert.requestID] {
+                SendWithoutTokenButton(requestID: alert.requestID, variables: variables, onTint: true)
+            }
             Button {
                 appState.dismissTokenAlert(alert.id)
             } label: {
@@ -189,5 +192,99 @@ struct TokenAlertToast: View {
             try? await Task.sleep(for: .seconds(Self.visibleSeconds))
             withAnimation(.easeOut(duration: 0.2)) { appState.dismissTokenAlert(alert.id) }
         }
+    }
+}
+
+/// Token kullanan istek hata aldığında durum kodunun hemen altında çıkan öneri.
+///
+/// İlk hatada "token'ı yenile ve tekrar gönder"; yenilenmiş token'la yine hata
+/// gelirse sorun büyük ihtimalle token'ın içeriğinde (yanlış müşteri, scope,
+/// environment) — o zaman ilgili Token Factory isteğine yönlendirir.
+struct TokenRetryBanner: View {
+    @Environment(AppState.self) private var appState
+    let requestID: UUID
+    let advice: TokenRetryAdvice
+
+    var body: some View {
+        let names = advice.variables.map { "{{\($0)}}" }.joined(separator: ", ")
+        HStack(spacing: 10) {
+            switch advice {
+            case .offerRefresh(let status, _):
+                Image(systemName: "arrow.triangle.2.circlepath")
+                    .foregroundStyle(Theme.warning)
+                Text("Bu istek \(names) kullanıyor ve HTTP \(status) döndü. Token sunucuda geçersiz kılınmış olabilir.")
+                    .font(.caption)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+                Button("Token'ı Yenile ve Tekrar Gönder") {
+                    appState.refreshTokensAndResend(requestID)
+                }
+                .controlSize(.small)
+            case .checkTokenContent(let status, let variables):
+                Image(systemName: "exclamationmark.octagon.fill")
+                    .foregroundStyle(Theme.down)
+                Text("Token yenilendi ama istek yine HTTP \(status) döndü. Token içeriğini kontrol et: doğru müşteri, scope ya da environment mı?")
+                    .font(.caption)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+                if let first = variables.first {
+                    Button("Token İsteğini Aç") {
+                        appState.openTokenRequest(producing: first)
+                    }
+                    .controlSize(.small)
+                }
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background((advice.isContentProblem ? Theme.down : Theme.warning).opacity(0.12))
+        .accessibilityElement(children: .contain)
+    }
+}
+
+private extension TokenRetryAdvice {
+    var isContentProblem: Bool {
+        if case .checkTokenContent = self { return true }
+        return false
+    }
+}
+
+/// Token alınamadığında isteği bilerek token'sız göndermek.
+///
+/// Varsayılan "gönderme" — bu düğme kullanıcının açık kararı. Değişken
+/// environment'taki aynı adlı değere, yoksa boşa bağlanır; ne olacağı
+/// düğmenin ipucunda yazar.
+struct SendWithoutTokenButton: View {
+    @Environment(AppState.self) private var appState
+    let requestID: UUID
+    let variables: [String]
+    /// Kırmızı uyarının içinde: sistem düğmesi orada gri bir kutu olarak
+    /// sırıtıyordu; uyarının geri kalanı gibi beyaz çizilir.
+    var onTint = false
+
+    var body: some View {
+        let names = variables.map { "{{\($0)}}" }.joined(separator: ", ")
+        Group {
+            if onTint {
+                Button {
+                    appState.sendWithoutTokens(requestID)
+                } label: {
+                    Text("Yine de Gönder (token olmadan)")
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 10)
+                        .frame(minHeight: HitTarget.row)
+                        .overlay(Capsule().strokeBorder(.white, lineWidth: 1))
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+            } else {
+                Button("Yine de Gönder (token olmadan)") {
+                    appState.sendWithoutTokens(requestID)
+                }
+                .controlSize(.small)
+            }
+        }
+        .help("İstek Token Factory'ye gidilmeden gönderilir. \(names) aktif environment'ta aynı adlı değişken varsa onun değerini, yoksa boş değer alır.")
     }
 }

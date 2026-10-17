@@ -69,6 +69,23 @@ public enum TokenFactory {
         return copy
     }
 
+    /// "Yine de gönder (token olmadan)" için environment: token alınamadı ve
+    /// kullanıcı isteği bilerek token'sız göndermek istiyor.
+    ///
+    /// Environment'ta aynı adlı (etkin) değişken varsa o kullanılır — token
+    /// yokken kullanıcının kendi koyduğu değer en makul yedek. Yoksa değişken
+    /// BOŞ bağlanır; tanımsız değişken hatasıyla yeniden durdurmak, kullanıcının
+    /// az önce verdiği "yine de gönder" kararını boşa çıkarırdı.
+    public static func environmentWithoutTokens(_ environment: EnvironmentModel?, sources: [Source]) -> EnvironmentModel? {
+        guard !sources.isEmpty else { return environment }
+        var copy = environment ?? EnvironmentModel(id: unboundEnvironmentID, name: "")
+        let defined = Set(copy.variables.filter { $0.enabled && !$0.key.isEmpty }.map(\.key))
+        for source in sources where !defined.contains(source.variable) {
+            copy.variables.append(KeyValueEntry(key: source.variable, value: ""))
+        }
+        return copy
+    }
+
     /// Environment'taki, Token Factory tarafından ezilen değişken adları.
     public static func shadowedVariables(in environment: EnvironmentModel?, sources: [Source]) -> [String] {
         guard let environment else { return [] }

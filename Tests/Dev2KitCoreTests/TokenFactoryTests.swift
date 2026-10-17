@@ -357,3 +357,75 @@ final class TokenIssueTests: XCTestCase {
         }
     }
 }
+
+// MARK: - Hata sonrası öneri
+
+final class TokenRetryAdviceTests: XCTestCase {
+    func testSuccessNeedsNoAdvice() {
+        for status in [200, 201, 204] {
+            XCTAssertNil(TokenRetryAdvice.advice(statusCode: status, usedVariables: ["token"], afterRefresh: false))
+        }
+    }
+
+    func testRequestWithoutTokensNeedsNoAdvice() {
+        XCTAssertNil(TokenRetryAdvice.advice(statusCode: 401, usedVariables: [], afterRefresh: false))
+    }
+
+    func testFirstFailureOffersRefresh() {
+        // 401 dışındaki hatalarda da: bazı API'ler süresi dolmuş token'a 403 ya da 500 dönüyor.
+        for status in [401, 403, 500] {
+            XCTAssertEqual(
+                TokenRetryAdvice.advice(statusCode: status, usedVariables: ["token"], afterRefresh: false),
+                .offerRefresh(statusCode: status, variables: ["token"])
+            )
+        }
+    }
+
+    func testFailureAfterRefreshPointsAtTokenContent() {
+        XCTAssertEqual(
+            TokenRetryAdvice.advice(statusCode: 403, usedVariables: ["token"], afterRefresh: true),
+            .checkTokenContent(statusCode: 403, variables: ["token"])
+        )
+    }
+
+    func testSuccessAfterRefreshClearsAdvice() {
+        XCTAssertNil(TokenRetryAdvice.advice(statusCode: 200, usedVariables: ["token"], afterRefresh: true))
+    }
+
+    func testVariablesAreStableOrdered() {
+        XCTAssertEqual(
+            TokenRetryAdvice.advice(statusCode: 401, usedVariables: ["b", "a"], afterRefresh: false)?.variables,
+            ["a", "b"]
+        )
+    }
+}
+
+// MARK: - Token olmadan gönder
+
+final class TokenlessSendTests: XCTestCase {
+    private let sources = TokenFactory.sources(in: [RequestModel(name: "login", tokenOutput: TokenOutput(variableName: "accessToken"))], environment: nil)
+
+    func testEnvironmentVariableIsUsedAsFallback() {
+        let env = EnvironmentModel(name: "e", variables: [KeyValueEntry(key: "accessToken", value: "elle")])
+        let result = TokenFactory.environmentWithoutTokens(env, sources: sources)
+        XCTAssertEqual(result?.variables.filter { $0.key == "accessToken" }.map(\.value), ["elle"])
+        XCTAssertEqual(result?.id, env.id)
+    }
+
+    func testMissingVariableIsBoundEmpty() throws {
+        let result = TokenFactory.environmentWithoutTokens(nil, sources: sources)
+        XCTAssertEqual(result?.variables.map(\.key), ["accessToken"])
+        XCTAssertEqual(result?.variables.map(\.value), [""])
+        XCTAssertEqual(result?.id, TokenFactory.unboundEnvironmentID, "çerez kapsamı değişmemeli")
+        // Gönderimde tanımsız değişken hatası vermemeli: boş çözülür.
+        let resolver = VariableResolver(environment: result, secretStore: InMemorySecretStore(initial: [:]))
+        XCTAssertEqual(try resolver.resolve("Bearer {{accessToken}}"), "Bearer ")
+    }
+
+    func testDisabledVariableIsNotAFallback() {
+        let env = EnvironmentModel(name: "e", variables: [KeyValueEntry(key: "accessToken", value: "eski", enabled: false)])
+        let values = TokenFactory.environmentWithoutTokens(env, sources: sources)?
+            .variables.filter { $0.key == "accessToken" && $0.enabled }.map(\.value)
+        XCTAssertEqual(values, [""])
+    }
+}
