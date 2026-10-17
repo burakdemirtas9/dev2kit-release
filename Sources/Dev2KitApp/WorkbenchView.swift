@@ -62,6 +62,11 @@ extension WorkbenchTool {
     var symbol: String {
         switch id {
         case "json": return "curlybraces"
+        case "xml": return "chevron.left.forwardslash.chevron.right"
+        case "html": return "globe"
+        case "css": return "paintbrush"
+        case "javascript": return "j.square"
+        case "typescript": return "t.square"
         default:
             switch category {
             case .format: return "text.alignleft"

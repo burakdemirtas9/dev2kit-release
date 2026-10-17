@@ -165,6 +165,40 @@ public struct WorkbenchIssue: Error, Equatable, Sendable, LocalizedError {
         return "\(message) (satır \(line), sütun \(column))"
     }
 
+    /// Karakter dizisindeki konumdan satır/sütun ve editör konumu (UTF-16).
+    /// `CodeScanner` tabanlı denetimler için.
+    static func at(characterOffset: Int, in chars: [Character], message: String) -> WorkbenchIssue {
+        let end = min(max(characterOffset, 0), chars.count)
+        var line = 1
+        var column = 1
+        var utf16 = 0
+        for character in chars[0..<end] {
+            if character.isNewline { line += 1; column = 1 } else { column += 1 }
+            utf16 += character.utf16.count
+        }
+        return WorkbenchIssue(message: message, line: line, column: column, offset: utf16)
+    }
+
+    /// Satır/sütundan (1 tabanlı) editör konumu. `XMLParser` gibi yalnızca
+    /// satır/sütun veren okuyucular için.
+    static func at(line: Int, column: Int, in text: String, message: String) -> WorkbenchIssue {
+        var currentLine = 1
+        var utf16 = 0
+        var index = text.startIndex
+        while currentLine < line, index < text.endIndex {
+            if text[index].isNewline { currentLine += 1 }
+            utf16 += text[index].utf16.count
+            index = text.index(after: index)
+        }
+        var remaining = max(column - 1, 0)
+        while remaining > 0, index < text.endIndex, !text[index].isNewline {
+            utf16 += text[index].utf16.count
+            index = text.index(after: index)
+            remaining -= 1
+        }
+        return WorkbenchIssue(message: message, line: line, column: column, offset: utf16)
+    }
+
     /// UTF-8 bayt konumundan satır/sütun ve karakter konumu.
     static func at(offset byteOffset: Int, in bytes: [UInt8], message: String) -> WorkbenchIssue {
         let end = min(max(byteOffset, 0), bytes.count)
@@ -182,6 +216,11 @@ public struct WorkbenchIssue: Error, Equatable, Sendable, LocalizedError {
 public enum WorkbenchCatalog {
     public static let all: [WorkbenchTool] = [
         WorkbenchTools.json,
+        WorkbenchTools.xml,
+        WorkbenchTools.html,
+        WorkbenchTools.css,
+        WorkbenchTools.javascript,
+        WorkbenchTools.typescript,
     ]
 
     public static func tool(id: String?) -> WorkbenchTool? {
