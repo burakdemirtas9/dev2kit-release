@@ -223,7 +223,23 @@ struct SidebarView: View {
     @State private var deleteTarget: CollectionModel?
     @State private var deleteRequestTargets: Set<UUID> = []
     @State private var draggingCollectionID: UUID?
+    @State private var tokenFactoryDropTargeted = false
     @FocusState private var searchFocused: Bool
+
+    /// Bırakılan satır kimliklerini okuyup Token Factory'ye kopyalar. Metin
+    /// başka bir uygulamadan da gelebilir: yalnızca workspace'teki normal
+    /// isteklere karşılık gelen kimlikler işlenir, gerisi yok sayılır.
+    private func copyDroppedRequests(_ providers: [NSItemProvider]) {
+        Task { @MainActor in
+            var ids = Set<UUID>()
+            for provider in providers {
+                if let text = await provider.loadText(), let id = UUID(uuidString: text) {
+                    ids.insert(id)
+                }
+            }
+            appState.copyToTokenFactory(ids)
+        }
+    }
 
     /// Sürükleme sırasında diğer koleksiyonlar soluklaşır ve kilitlenir.
     private func isDimmed(_ collectionID: UUID) -> Bool {
@@ -379,6 +395,12 @@ struct SidebarView: View {
                                           systemImage: "folder")
                                 }
                             }
+                            Button {
+                                appState.copyToTokenFactory(picked)
+                            } label: {
+                                Label(isMultiple ? "\(picked.count) İsteği Token Factory'ye Kopyala" : "Token Factory'ye Kopyala",
+                                      systemImage: "key.viewfinder")
+                            }
                             if !collection.isUngrouped {
                                 Button {
                                     appState.removeFromCollection(picked)
@@ -397,6 +419,10 @@ struct SidebarView: View {
                         .opacity(isDimmed(collection.id) ? 0.35 : 1)
                         .disabled(draggingCollectionID != nil)
                         .moveDisabled(appState.isSearching)
+                        // Token Factory paneline bırakılınca kopyalanabilsin diye
+                        // satır kimliğini taşır; liste içi sıralama (`onMove`)
+                        // bundan etkilenmez.
+                        .itemProvider { NSItemProvider(object: request.id.uuidString as NSString) }
                     }
                     .onMove { source, destination in
                         // Filtreliyken indeksler GÖRÜNEN listeye göre gelir;
@@ -540,7 +566,16 @@ struct SidebarView: View {
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             VStack(spacing: 0) {
-                TokenFactoryPanel()
+                TokenFactoryPanel(isDropTargeted: tokenFactoryDropTargeted)
+                    // Yukarıdan sürüklenen istekler bırakılınca KOPYALANIR
+                    // (bkz. AppState.copyToTokenFactory). Koleksiyon başlığı
+                    // da kimlik taşır; istek olmadığı için yok sayılır ama
+                    // sürükleme durumu yine temizlenmeli.
+                    .onDrop(of: [.text], isTargeted: $tokenFactoryDropTargeted) { providers in
+                        draggingCollectionID = nil
+                        copyDroppedRequests(providers)
+                        return true
+                    }
                 bottomBar
             }
         }
@@ -755,6 +790,16 @@ struct EnvironmentPicker: View {
         .help(helpText)
         .onChange(of: appState.workspace.activeEnvironmentID) {
             appState.persist()
+        }
+    }
+}
+
+private extension NSItemProvider {
+    func loadText() async -> String? {
+        await withCheckedContinuation { continuation in
+            _ = loadObject(ofClass: NSString.self) { object, _ in
+                continuation.resume(returning: (object as? NSString).map(String.init))
+            }
         }
     }
 }

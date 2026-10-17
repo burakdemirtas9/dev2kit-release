@@ -11,6 +11,8 @@ struct TokenFactoryPanel: View {
     @Environment(AppState.self) private var appState
     @AppStorage("tokenFactoryCollapsed") private var collapsed = false
     @State private var pendingDelete: RequestModel?
+    /// Yukarıdan bir istek panelin üstüne sürükleniyor (bırakma ContentView'da).
+    var isDropTargeted = false
 
     private static let maxListHeight: CGFloat = 150
 
@@ -41,6 +43,25 @@ struct TokenFactoryPanel: View {
             }
         }
         .background(Theme.purple.opacity(0.06))
+        // Vurgu yalnızca üst katman: yerleşim değişirse panelin boyu oynar,
+        // imleç hedeften çıkar, panel geri büyür — sürükleme boyunca titrer.
+        .overlay {
+            if isDropTargeted {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(Theme.purple.opacity(0.12))
+                        .strokeBorder(Theme.purple, lineWidth: 2)
+                    Label("Bırak: Token Factory'ye kopyalanır", systemImage: "plus.square.on.square")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(Theme.purple, in: Capsule())
+                }
+                .padding(2)
+                .allowsHitTesting(false)
+            }
+        }
         .confirmationDialog(
             "\"\(pendingDelete?.name ?? "")\" silinsin mi?",
             isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),

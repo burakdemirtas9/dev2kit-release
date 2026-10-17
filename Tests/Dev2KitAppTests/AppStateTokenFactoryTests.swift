@@ -97,6 +97,41 @@ final class AppStateTokenFactoryTests: XCTestCase {
         XCTAssertEqual(state.editorTab, .token)
     }
 
+    func testRegularRequestIsCopiedIntoFactory() throws {
+        let original = harness.addRequest(named: "login")
+        state.copyToTokenFactory([original.id])
+
+        let copy = try XCTUnwrap(factory?.requests.first)
+        XCTAssertNotEqual(copy.id, original.id)
+        XCTAssertEqual(copy.name, "login")
+        XCTAssertEqual(copy.url, original.url)
+        XCTAssertEqual(copy.tokenOutput?.variableName, "token")
+        // Asıl istek yerinde kalır, Token Factory'ye dönüşmez.
+        XCTAssertFalse(state.isTokenFactoryRequest(original.id))
+        XCTAssertNotNil(state.request(withID: original.id))
+        // Kopya Token sekmesinde açılır: yanıt alanı oradan ayarlanır.
+        XCTAssertEqual(state.selectedRequestID, copy.id)
+        XCTAssertEqual(state.editorTab, .token)
+    }
+
+    func testCopiesGetTheirOwnVariableAndName() throws {
+        state.addTokenFactoryRequest()
+        let first = harness.addRequest(named: "Token İsteği")
+        let second = harness.addRequest(named: "login")
+        state.copyToTokenFactory([first.id, second.id])
+
+        XCTAssertEqual(factory?.requests.map(\.name), ["Token İsteği", "Token İsteği kopya", "login"])
+        XCTAssertEqual(factory?.requests.compactMap(\.tokenOutput?.variableName), ["token", "token2", "token3"])
+        XCTAssertTrue(TokenFactory.problems(in: factory?.requests ?? [], environment: nil).isEmpty)
+    }
+
+    func testCopyingFactoryRequestsIsIgnored() throws {
+        state.addTokenFactoryRequest()
+        let factoryRequest = try XCTUnwrap(factory?.requests.first)
+        state.copyToTokenFactory([factoryRequest.id])
+        XCTAssertEqual(factory?.requests.count, 1)
+    }
+
     func testTokenSettingsArePersisted() throws {
         state.addTokenFactoryRequest()
         let saved = try harness.savedWorkspace()

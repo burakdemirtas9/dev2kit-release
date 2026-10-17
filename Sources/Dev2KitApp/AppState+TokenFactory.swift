@@ -37,6 +37,38 @@ extension AppState {
         persist()
     }
 
+    /// Normal istekleri Token Factory'ye KOPYALAR; asılları yerinde kalır.
+    ///
+    /// Taşıma değil: oradaki istek tüm isteklere token yazar; elle denenmiş bir
+    /// login isteğinin koleksiyondan kaybolması beklenmez (bkz. `moveRequests`).
+    /// Her kopya kendi değişken adını alır, sıralama kenar çubuğundaki gibi.
+    /// Son kopya Token sekmesinde açılır: yanıt alanı oradan ayarlanır.
+    func copyToTokenFactory(_ ids: Set<UUID>) {
+        let picked = workspace.collections
+            .filter { !$0.isTokenFactory }
+            .flatMap(\.requests)
+            .filter { ids.contains($0.id) }
+        guard !picked.isEmpty else { return }
+        clearSearch()
+        let factoryID = workspace.ensureTokenFactoryCollection()
+        guard let index = workspace.collections.firstIndex(where: { $0.id == factoryID }) else { return }
+        for var request in picked {
+            request.id = UUID()
+            request.name = CollectionPorting.uniqueName(
+                request.name,
+                suffix: "kopya",
+                existingNames: workspace.collections[index].requests.map(\.name)
+            )
+            request.tokenOutput = TokenOutput(variableName: uniqueTokenVariableName(base: TokenOutput.defaultVariableName))
+            workspace.collections[index].requests.append(request)
+        }
+        guard let last = workspace.collections[index].requests.last else { return }
+        selectedRequestID = last.id
+        pinTab(last.id)
+        editorTab = .token
+        persist()
+    }
+
     /// Token Factory'de kullanılmayan değişken adı: `token`, `token2`, `token3`…
     func uniqueTokenVariableName(base: String) -> String {
         let root = TokenFactory.isValidVariableName(base) ? base : TokenOutput.defaultVariableName
