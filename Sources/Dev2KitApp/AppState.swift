@@ -330,6 +330,18 @@ final class AppState {
 
     private static let appearanceKey = "appearanceMode"
 
+    /// Zinciri güven deposundaki bir CA'ya çıkan sertifikalarda ömür üst
+    /// sınırı aranmasın mı. Doğrulama anahtarının aksine KALICI: bu bir
+    /// gevşetme değil, kurum PKI'sına dair bilinçli bir yapılandırma; host
+    /// profilindeki aynı seçenek de diske yazılıyor.
+    var trustStoreAllowsLongValidity: Bool {
+        didSet {
+            UserDefaults.standard.set(trustStoreAllowsLongValidity, forKey: Self.trustStoreLongValidityKey)
+            engine.trustStoreAllowsLongValidity = trustStoreAllowsLongValidity
+        }
+    }
+    private static let trustStoreLongValidityKey = "trustStoreAllowsLongValidity"
+
     private static func applyAppearance(_ mode: AppearanceMode) {
         switch mode {
         case .system: NSApplication.shared.appearance = nil
@@ -417,6 +429,7 @@ final class AppState {
             .flatMap(AppearanceMode.init(rawValue:)) ?? .system
         self.appearanceMode = savedMode
         Self.applyAppearance(savedMode)
+        self.trustStoreAllowsLongValidity = UserDefaults.standard.bool(forKey: Self.trustStoreLongValidityKey)
         do {
             self.workspace = try store.load()
         } catch {
@@ -430,6 +443,7 @@ final class AppState {
         }
         history = historyStore.entries()
         engine.tlsProfiles = workspace.tlsProfiles
+        engine.trustStoreAllowsLongValidity = trustStoreAllowsLongValidity
         reloadTrustStore()
 
         let live = Set(workspace.collections.flatMap { $0.requests.map(\.id) })

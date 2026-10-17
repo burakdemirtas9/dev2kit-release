@@ -234,6 +234,25 @@ final class TrustStoreTests: XCTestCase {
         let result = TrustStore.load()
         XCTAssertTrue(result.problems.contains { $0.contains("gecici-test-bozuk.pem") })
     }
+
+    func testUnrecognisedExtensionIsReportedNotSilentlySkipped() throws {
+        // Sahada: kopyalanan PEM metni .txt olarak kaydedilip dizine bırakılıyor,
+        // dosya listede hiç görünmüyor ve kimse nedenini bilmiyordu.
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("dev2kit-cacerts-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        setenv(TrustStore.environmentVariable, directory.path, 1)
+        defer { unsetenv(TrustStore.environmentVariable) }
+
+        try Data(CertificateInspectionTests.ca.utf8).write(to: directory.appendingPathComponent("kurum-ca.txt"))
+        try Data().write(to: directory.appendingPathComponent(".DS_Store"))
+
+        let problems = TrustStore.load().problems
+        XCTAssertTrue(problems.contains { $0.contains("kurum-ca.txt") && $0.contains("uzantı") }, "\(problems)")
+        // Sistem dosyaları gürültü yapmasın.
+        XCTAssertFalse(problems.contains { $0.contains(".DS_Store") }, "\(problems)")
+    }
 }
 
 /// CA seçilmemişken sabitleme: kutu bir güvenlik özelliği vaat ediyor ama
@@ -312,7 +331,10 @@ final class TLSRejectionReasonTests: XCTestCase {
 
     func testValidityPeriodIsExplainedInPlainWords() {
         let reason = TLSChallengeHandler.explain(osStatusError(errSecCertificateValidityPeriodTooLong))
+        // Kurum CA'larında sınır 825 (ölçüldü); yalnızca 398 demek yanlış yönlendiriyordu.
+        XCTAssertTrue(reason.contains("825"), reason)
         XCTAssertTrue(reason.contains("398"), reason)
+        XCTAssertTrue(reason.contains("Güven Deposu"), reason)
         XCTAssertTrue(reason.contains("sunucu sertifikas"), reason)
         // Kökün süresiyle karıştırılmasın: kullanıcı yanlış sertifikayı değiştirmeye kalkmasın.
         XCTAssertTrue(reason.lowercased().contains("kök"), reason)
@@ -321,6 +343,7 @@ final class TLSRejectionReasonTests: XCTestCase {
     func testOtherErrorsKeepSystemWording() {
         let reason = TLSChallengeHandler.explain(osStatusError(errSecCertificateExpired))
         XCTAssertFalse(reason.contains("398"), reason)
+        XCTAssertFalse(reason.contains("825"), reason)
         XCTAssertFalse(reason.isEmpty)
     }
 

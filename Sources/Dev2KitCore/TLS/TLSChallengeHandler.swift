@@ -10,8 +10,11 @@ public struct ResolvedTLSProfile: @unchecked Sendable {
     public let caCertificates: [SecCertificate]
     /// Yalnızca bu CA kabul edilsin mi (sertifika sabitleme).
     public let pinToCA: Bool
-    /// Ömür üst sınırı (398 gün) bu host'ta aranmasın mı.
+    /// Ömür üst sınırı bu host'ta aranmasın mı (host profili seçeneği).
     public let allowLongValidity: Bool
+    /// Zinciri bunlardan birine çıkan sertifikalarda ömür üst sınırı aranmaz.
+    /// Güven deposundaki CA'lar; kullanıcı Güven Deposu'nda açıkça seçtiyse.
+    public let longValidityAnchors: [SecCertificate]
     /// Sunucu sertifikası HİÇ doğrulanmasın mı (uygulama geneli kaçış kapısı,
     /// bkz. `RequestEngine.skipCertificateValidation`).
     public let skipValidation: Bool
@@ -21,12 +24,14 @@ public struct ResolvedTLSProfile: @unchecked Sendable {
         caCertificates: [SecCertificate],
         pinToCA: Bool,
         allowLongValidity: Bool = false,
+        longValidityAnchors: [SecCertificate] = [],
         skipValidation: Bool = false,
         identity: SecIdentity?
     ) {
         self.caCertificates = caCertificates
         self.pinToCA = pinToCA
         self.allowLongValidity = allowLongValidity
+        self.longValidityAnchors = longValidityAnchors
         self.skipValidation = skipValidation
         self.identity = identity
     }
@@ -120,11 +125,14 @@ enum TLSChallengeHandler {
         var error: CFError?
         // Değerlendirme sonucuna UYULUR. Başarısızsa bağlantı reddedilir.
         guard SecTrustEvaluateWithError(trust, &error) else {
-            // Tek istisna: kullanıcı bu host'lar için ömür sınırını açıkça
-            // muaf tuttuysa ve düşen TEK kontrol o sınırsa. Zincir, imza,
-            // tarihler ve hostname yine geçmiş olmak zorunda; bunlardan biri
-            // bile düşmüşse buraya girilmez (bkz. `TrustFailure`).
-            if profile.allowLongValidity, TrustFailure.isOnlyValidityPeriodLimit(trust) {
+            // Tek istisna: düşen TEK kontrol ömür sınırıysa ve kullanıcı bunu
+            // açıkça muaf tuttuysa — ya bu host'lar için (profil) ya da zinciri
+            // güven deposundaki bir CA'ya çıkan sertifikalar için. Zincir,
+            // imza, tarihler ve hostname yine geçmiş olmak zorunda; bunlardan
+            // biri bile düşmüşse buraya girilmez (bkz. `TrustFailure`).
+            if TrustFailure.isOnlyValidityPeriodLimit(trust),
+               profile.allowLongValidity
+                || TrustFailure.chain(of: trust, endsAtOneOf: profile.longValidityAnchors) {
                 return (.useCredential, URLCredential(trust: trust), nil)
             }
             // Sistemin gerekçesi kullanıcıya AYNEN aktarılır: "kök bulunamadı"
@@ -149,20 +157,22 @@ enum TLSChallengeHandler {
     /// Güven değerlendirmesinin gerekçesi, anlaşılır haliyle.
     ///
     /// Sistemin bazı mesajları kullanıcıya hiçbir şey söylemiyor; en sık
-    /// rastlanan ve en kafa karıştıranı geçerlilik süresi sınırı. Apple,
-    /// 1 Eylül 2020'den sonra düzenlenmiş SUNUCU sertifikalarında 398 günden
-    /// uzun geçerlilik kabul etmiyor ve hatayı "standartlarla uyumlu değil"
-    /// diye veriyor. Ölçüldü: aynı kurum köküyle imzalanmış 300 günlük
-    /// sertifika geçiyor, 10 yıllık `-67901` ile düşüyor. Kökün kendi süresi
-    /// uzun olabilir, kural yalnızca uç sertifikaya uygulanıyor.
+    /// rastlanan ve en kafa karıştıranı geçerlilik süresi sınırı. Apple
+    /// SUNUCU sertifikalarına ömür üst sınırı koyuyor ve hatayı "standartlarla
+    /// uyumlu değil" diye veriyor. Ölçüldü: bizim verdiğimiz kurum köküyle
+    /// imzalı sertifikada sınır 825 gün (825 geçiyor, 826 `-67901` ile
+    /// düşüyor); public köklerde 398. Kökün kendi süresi uzun olabilir, kural
+    /// yalnızca uç sertifikaya uygulanıyor.
     static func explain(_ error: CFError?) -> String {
         let fallback = "sertifika zinciri doğrulanamadı"
         guard let error = error as Error? as NSError? else { return fallback }
         if error.domain == NSOSStatusErrorDomain,
            error.code == Int(errSecCertificateValidityPeriodTooLong) {
-            return "sunucu sertifikasının geçerlilik süresi Apple'ın izin verdiği "
-                + "üst sınırı (398 gün) aşıyor. Kurum kökünün süresi uzun olabilir; "
-                + "sınır yalnızca sunucu sertifikasına uygulanır."
+            return "sunucu sertifikasının geçerlilik süresi Apple'ın izin verdiği üst sınırı "
+                + "aşıyor (kurum CA'larında 825, public CA'larda 398 gün). Kurum kökünün süresi "
+                + "uzun olabilir; sınır yalnızca sunucu sertifikasına uygulanır. Kalıcı çözüm: "
+                + "PKI ekibinden daha kısa ömürlü sertifika. Kurum CA'sı güven deposundaysa "
+                + "TLS > Güven Deposu'ndan ömür sınırı muaf tutulabilir" + "."
         }
         return error.localizedDescription.isEmpty ? fallback : error.localizedDescription
     }

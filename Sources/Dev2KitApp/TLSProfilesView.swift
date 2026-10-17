@@ -215,11 +215,11 @@ private struct TLSProfileDetail: View {
 
                     Divider().padding(.vertical, 2)
 
-                    Toggle("Uzun geçerlilik süresini kabul et (398 gün sınırı aranmasın)", isOn: $profile.allowLongValidity)
+                    Toggle("Uzun geçerlilik süresini kabul et (ömür üst sınırı aranmasın)", isOn: $profile.allowLongValidity)
                         .toggleStyle(.checkbox)
                     Text(profile.allowLongValidity
                          ? "Yalnızca ömür üst sınırı gevşer. Zincir, imza, sertifika tarihleri ve host adı kontrolleri AYNEN zorunlu; bunlardan biri düşerse bağlantı yine reddedilir."
-                         : "Apple, 1 Eylül 2020'den sonra düzenlenmiş sunucu sertifikalarında 398 günden uzun geçerlilik kabul etmiyor. Kural public sertifikalar için; kendi test/kurum PKI'nda uzun ömürlü sertifika kullanıyorsan bunu aç.")
+                         : "Apple sunucu sertifikalarına ömür sınırı koyuyor: kurum CA'larında 825, public CA'larda 398 gün. Kurum CA'sı güven deposundaysa bu muafiyeti host yazmadan Güven Deposu sekmesinden açmak daha kolay.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
 
@@ -325,6 +325,15 @@ struct TrustStoreSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Buradaki CA'lar tüm host'lara ek güven çıpası olarak uygulanır — Java'daki cacerts gibi. Güvenlik ekibi dosyaları doğrudan dizine bırakabilir.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            @Bindable var state = appState
+            Toggle("Bu CA'larla imzalı sertifikalarda ömür üst sınırını uygulama (825 gün)", isOn: $state.trustStoreAllowsLongValidity)
+                .toggleStyle(.checkbox)
+            Text(appState.trustStoreAllowsLongValidity
+                 ? "Yalnızca zinciri buradaki bir CA'ya çıkan sertifikalarda ömür sınırı aranmaz. Host adı, imza ve tarih kontrolleri AYNEN zorunlu; public sitelerde kural değişmez."
+                 : "Apple, kurum CA'larıyla imzalı sunucu sertifikalarında 825 günden uzun ömrü reddeder. Kurum PKI'n 3-5 yıllık sertifika basıyorsa bunu aç; kalıcı çözüm PKI ekibinden daha kısa ömürlü sertifika istemek.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 

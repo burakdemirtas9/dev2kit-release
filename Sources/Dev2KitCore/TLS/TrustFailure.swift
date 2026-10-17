@@ -3,12 +3,12 @@ import Security
 
 /// Güven değerlendirmesinde HANGİ kontrollerin düştüğü.
 ///
-/// Neden gerekli: Apple, 1 Eylül 2020'den sonra düzenlenmiş TLS sunucu
-/// sertifikalarında 398 günden uzun geçerlilik kabul etmiyor. Kural public
-/// WebPKI için konmuş; kendi kontrolündeki test/kurum PKI'sında uzun ömürlü
-/// sertifika yaygın ve meşru. Apple'ın kendisi de sisteme kurulmuş köklere
-/// muafiyet tanıyor — ama bu muafiyet, çıpaları programatik verdiğimiz yola
-/// uygulanmıyor (ölçüldü).
+/// Neden gerekli: Apple TLS sunucu sertifikalarına ömür üst sınırı koyuyor.
+/// Ölçüldü (macOS 26/27, çıpayı `SecTrustSetAnchorCertificates` ile
+/// verdiğimiz yol): bizim verdiğimiz kurum CA'larıyla imzalı sertifikada
+/// sınır **825 gün** — 825 geçiyor, 826 düşüyor. Public köklerdeki 398 gün
+/// kuralı buraya uygulanmıyor. Kendi kontrolündeki kurum PKI'sında daha uzun
+/// ömürlü sertifika yine de yaygın (AD CS şablonları 3-5 yıl basabiliyor).
 ///
 /// Hata KODUNA bakarak "yalnızca süre sorunu var" denemez: ölçüldü, hostname'i
 /// de yanlış olan 10 yıllık sertifika yine `-67901` veriyor. `SecTrustCopyResult`
@@ -68,9 +68,11 @@ public enum TrustFailure {
         let known: [(String, String)] = [
             (hostnameKey, "sertifikadaki adlar bu host ile eşleşmiyor"),
             (temporalValidityKey, "sertifikanın tarihleri geçerli değil (süresi dolmuş ya da henüz başlamamış)"),
-            (validityPeriodKey, "sunucu sertifikasının geçerlilik süresi Apple'ın izin verdiği "
-                + "üst sınırı (398 gün) aşıyor. Kurum kökünün süresi uzun olabilir; "
-                + "sınır yalnızca sunucu sertifikasına uygulanır"),
+            (validityPeriodKey, "sunucu sertifikasının geçerlilik süresi Apple'ın izin verdiği üst sınırı "
+                + "aşıyor (kurum CA'larında 825, public CA'larda 398 gün). Kurum kökünün süresi "
+                + "uzun olabilir; sınır yalnızca sunucu sertifikasına uygulanır. Kalıcı çözüm: "
+                + "PKI ekibinden daha kısa ömürlü sertifika. Kurum CA'sı güven deposundaysa "
+                + "TLS > Güven Deposu'ndan ömür sınırı muaf tutulabilir"),
         ]
         var parts = known.filter { checks.contains($0.0) }.map(\.1)
         let others = checks.subtracting(known.map(\.0))
@@ -78,6 +80,26 @@ public enum TrustFailure {
             parts.append("başka kontroller düştü (\(others.sorted().joined(separator: ", ")))")
         }
         return parts.isEmpty ? nil : parts.joined(separator: "; ")
+    }
+
+    /// Değerlendirilen zincir verilen çıpalardan birinde mi bitiyor.
+    ///
+    /// Ömür muafiyetini yalnızca kullanıcının açıkça güvendiği CA'lara
+    /// bağlamak için: zincir public bir köke çıkıyorsa muafiyet uygulanmaz.
+    /// Ölçüldü: değerlendirme yalnızca ömür sınırından düştüğünde zincir
+    /// çıpaya kadar kurulmuş halde geliyor; tanınmayan CA'da ise zincir
+    /// yalnızca uç sertifikadan ibaret, yani yanlışlıkla eşleşemez.
+    /// Karşılaştırma DER baytlarıyla yapılır: ad aynı ama anahtar farklı bir
+    /// sertifika eşleşmez.
+    public static func chain(_ chain: [SecCertificate], endsAtOneOf anchors: [SecCertificate]) -> Bool {
+        guard let last = chain.last, !anchors.isEmpty else { return false }
+        let lastData = SecCertificateCopyData(last) as Data
+        return anchors.contains { SecCertificateCopyData($0) as Data == lastData }
+    }
+
+    public static func chain(of trust: SecTrust, endsAtOneOf anchors: [SecCertificate]) -> Bool {
+        let built = SecTrustCopyCertificateChain(trust) as? [SecCertificate] ?? []
+        return chain(built, endsAtOneOf: anchors)
     }
 
     public static func isOnlyValidityPeriodLimit(_ trust: SecTrust) -> Bool {

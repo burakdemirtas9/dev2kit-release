@@ -100,7 +100,7 @@ extension TrustFailureTests {
         let text = TrustFailure.describe(["OtherTrustValidityPeriod", "SSLHostname"])
         XCTAssertNotNil(text)
         let hostnameIndex = text!.range(of: "adlar")?.lowerBound
-        let validityIndex = text!.range(of: "398")?.lowerBound
+        let validityIndex = text!.range(of: "825")?.lowerBound
         XCTAssertNotNil(hostnameIndex)
         XCTAssertNotNil(validityIndex)
         XCTAssertTrue(hostnameIndex! < validityIndex!, text!)

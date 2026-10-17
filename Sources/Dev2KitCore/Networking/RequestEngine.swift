@@ -197,6 +197,10 @@ public final class RequestEngine: @unchecked Sendable {
     /// Kurum güven deposundaki CA'lar (cacerts dizini). Her istekte dosya
     /// okumamak için burada tutulur; değişince AppState yeniler.
     public var trustStoreCertificates: [SecCertificate] = []
+    /// Zinciri güven deposundaki bir CA'ya çıkan sertifikalarda ömür üst
+    /// sınırı aranmasın mı. Kullanıcının Güven Deposu'nda açık seçimi;
+    /// public köklere çıkan zincirleri etkilemez.
+    public var trustStoreAllowsLongValidity = false
 
     /// Host başına son görülen sunucu sertifikası.
     ///
@@ -493,6 +497,8 @@ public final class RequestEngine: @unchecked Sendable {
             caCertificates: certificates,
             pinToCA: pin,
             allowLongValidity: profile?.allowLongValidity ?? false,
+            // Sabitleme açıkken depo zaten devre dışı; muafiyeti de taşımaz.
+            longValidityAnchors: !pin && trustStoreAllowsLongValidity ? trustStoreCertificates : [],
             skipValidation: skipValidation,
             identity: identity
         )

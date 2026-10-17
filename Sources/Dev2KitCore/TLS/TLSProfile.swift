@@ -17,7 +17,9 @@ public struct TLSProfile: Codable, Identifiable, Hashable, Sendable {
     /// Kapalıysa sistem kökleri de geçerli kalır — kurumsal proxy senaryosunda
     /// bazı host'lar proxy'den, bazıları doğrudan geldiği için varsayılan budur.
     public var pinToCA: Bool
-    /// Bu host'larda sertifikanın ömür üst sınırı (398 gün) aranmasın.
+    /// Bu host'larda sertifikanın ömür üst sınırı aranmasın (kurum CA'larında
+    /// 825, public CA'larda 398 gün). Kurum CA'sı güven deposundaysa aynı
+    /// muafiyet Güven Deposu'ndan host yazmadan da açılabilir.
     ///
     /// Yalnızca ömür sınırı gevşer; zincir, imza, tarihler ve hostname
     /// kontrolleri aynen zorunlu kalır (bkz. `TrustFailure`). Host'a bağlı

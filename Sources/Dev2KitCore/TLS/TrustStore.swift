@@ -121,7 +121,17 @@ public enum TrustStore {
             ) else { continue }
 
             for file in files.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
-                guard extensions.contains(file.pathExtension.lowercased()) else { continue }
+                // Gizli dosyalar (.DS_Store) ve alt dizinler sertifika adayı değil.
+                guard !file.lastPathComponent.hasPrefix("."), !file.hasDirectoryPath else { continue }
+                // Tanınmayan uzantı SESSİZCE atlanmaz: kullanıcı dosyayı
+                // bıraktığını sanıp neden güvenilmediğini arıyordu.
+                guard extensions.contains(file.pathExtension.lowercased()) else {
+                    problems.append(
+                        "\(file.lastPathComponent): uzantı tanınmıyor, yüklenmedi "
+                            + "(\(extensions.sorted().map { "." + $0 }.joined(separator: ", ")) olmalı)."
+                    )
+                    continue
+                }
                 guard seenPaths.insert(file.path).inserted else { continue }
                 do {
                     let certificates = try CertificateLoader.loadCertificates(atPath: file.path)

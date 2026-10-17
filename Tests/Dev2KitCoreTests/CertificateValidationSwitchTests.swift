@@ -91,7 +91,7 @@ final class CertificateValidationSwitchTests: XCTestCase {
     }
 }
 
-private final class FakeServerTrustSpace: URLProtectionSpace, @unchecked Sendable {
+final class FakeServerTrustSpace: URLProtectionSpace, @unchecked Sendable {
     private let trust: SecTrust
 
     init(host: String, trust: SecTrust) {
@@ -110,7 +110,7 @@ private final class FakeServerTrustSpace: URLProtectionSpace, @unchecked Sendabl
     override var serverTrust: SecTrust? { trust }
 }
 
-private final class NoopChallengeSender: NSObject, URLAuthenticationChallengeSender {
+final class NoopChallengeSender: NSObject, URLAuthenticationChallengeSender {
     func use(_ credential: URLCredential, for challenge: URLAuthenticationChallenge) {}
     func continueWithoutCredential(for challenge: URLAuthenticationChallenge) {}
     func cancel(_ challenge: URLAuthenticationChallenge) {}
