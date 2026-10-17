@@ -322,7 +322,30 @@ struct SidebarView: View {
         .background(.bar)
     }
 
+    /// Liste, altında Token Factory ve alt çubuk.
+    ///
+    /// Alt kısım `safeAreaInset` DEĞİL, listenin altında ayrı bir bölge: inset
+    /// içinde liste onun arkasına kayıyor, yarı saydam panelin içinden uzun
+    /// koleksiyonların satırları görünüyordu. Böylece liste panelin başladığı
+    /// yerde biter.
     var body: some View {
+        VStack(spacing: 0) {
+            requestList
+            TokenFactoryPanel(isDropTargeted: tokenFactoryDropTargeted)
+                // Yukarıdan sürüklenen istekler bırakılınca KOPYALANIR
+                // (bkz. AppState.copyToTokenFactory). Koleksiyon başlığı
+                // da kimlik taşır; istek olmadığı için yok sayılır ama
+                // sürükleme durumu yine temizlenmeli.
+                .onDrop(of: [.text], isTargeted: $tokenFactoryDropTargeted) { providers in
+                    draggingCollectionID = nil
+                    copyDroppedRequests(providers)
+                    return true
+                }
+            bottomBar
+        }
+    }
+
+    @ViewBuilder private var requestList: some View {
         // Filtreleme render başına bir kez: boş-sonuç kontrolü, liste ve
         // eşleşme sayacı aynı sonucu kullanır.
         // Boş "Koleksiyonsuz" kabı gösterilmez: içinde istek yokken bölüm yoktur.
@@ -563,21 +586,6 @@ struct SidebarView: View {
         }
         .safeAreaInset(edge: .top, spacing: 0) {
             searchBar(hitCount: RequestSearch.totalRequests(in: matches))
-        }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            VStack(spacing: 0) {
-                TokenFactoryPanel(isDropTargeted: tokenFactoryDropTargeted)
-                    // Yukarıdan sürüklenen istekler bırakılınca KOPYALANIR
-                    // (bkz. AppState.copyToTokenFactory). Koleksiyon başlığı
-                    // da kimlik taşır; istek olmadığı için yok sayılır ama
-                    // sürükleme durumu yine temizlenmeli.
-                    .onDrop(of: [.text], isTargeted: $tokenFactoryDropTargeted) { providers in
-                        draggingCollectionID = nil
-                        copyDroppedRequests(providers)
-                        return true
-                    }
-                bottomBar
-            }
         }
         .fileImporter(
             isPresented: $showingImporter,
