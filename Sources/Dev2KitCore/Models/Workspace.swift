@@ -6,7 +6,8 @@ public struct EnvironmentModel: Codable, Identifiable, Hashable, Sendable {
     public var id: UUID
     public var name: String
     public var variables: [KeyValueEntry]
-    /// Değeri OAuth2 client credentials ile alınan değişkenler (`{{accessToken}}`).
+    /// ESKİ BİÇİM: yalnızca okunur, açılışta Token Factory'ye taşınıp boşaltılır
+    /// (bkz. `TokenFactoryMigration`, `TokenVariable`).
     public var tokenVariables: [TokenVariable]
 
     public init(

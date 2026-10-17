@@ -131,15 +131,10 @@ public enum HeaderClassifier {
     }
 
     /// Yalnızca `exp` okunur; imza doğrulanmaz, token içeriği hiçbir yere yazılmaz.
+    /// Çözümleme Token Factory ile ortak (`TokenLifetime.jwtExpiry`).
     static func jwtExpiry(_ value: String) -> Date? {
         let token = value.hasPrefix("Bearer ") ? String(value.dropFirst(7)) : value
-        let parts = token.split(separator: ".")
-        guard parts.count == 3, token.hasPrefix("eyJ") else { return nil }
-        var payload = String(parts[1]).replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
-        payload += String(repeating: "=", count: (4 - payload.count % 4) % 4)
-        guard let data = Data(base64Encoded: payload),
-              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let exp = object["exp"] as? Double else { return nil }
-        return Date(timeIntervalSince1970: exp)
+        guard token.hasPrefix("eyJ") else { return nil }
+        return TokenLifetime.jwtExpiry(token)
     }
 }

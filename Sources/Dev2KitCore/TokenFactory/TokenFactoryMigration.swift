@@ -35,7 +35,7 @@ public enum TokenFactoryMigration {
 
     /// Eski değişkenin karşılığı olan istek.
     ///
-    /// Eski akış (`OAuth2Client.clientCredentialsRequest`) ile aynı tel çıktısı:
+    /// Eski akış (kaldırılan `OAuth2Client.clientCredentialsRequest`) ile aynı tel çıktısı:
     /// form gövdesinde `grant_type=client_credentials`, varsa `scope`; client
     /// kimliği seçime göre Basic başlığında ya da gövdede. Tek fark: eski akış
     /// Basic başlığından önce kimliği form kodluyordu (RFC 6749 §2.3.1), genel
