@@ -36,6 +36,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 struct Dev2KitApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var appState = AppState()
+    @State private var workbench = WorkbenchState()
+
+    /// Workbench'teyken API Client'a ait kısayollar devre dışı (docs/V2.md).
+    private var apiClientCommandsDisabled: Bool { !appState.isAPIClient }
 
     init() {
         // macOS'un akıllı tırnak/tire/metin düzeltmesi JSON ve header değerlerini
@@ -61,14 +65,23 @@ struct Dev2KitApp: App {
                 appState.addRequestToCurrentCollection()
             }
             .keyboardShortcut("n", modifiers: .command)
+            .disabled(apiClientCommandsDisabled)
             Button("Yeni Koleksiyon") {
                 appState.addCollection()
             }
             .keyboardShortcut("n", modifiers: [.command, .shift])
+            .disabled(apiClientCommandsDisabled)
         }
         // ⌘W önce sekmeyi kapatır (Postman/Safari gibi); sekme yoksa pencereyi.
         // Standart "Kapat" bu grupta durduğu için grup değiştirilir.
         CommandGroup(replacing: .saveItem) {
+            // Workbench diske yazmaz; ⌘S yalnızca bunu söyler (docs/V2.md).
+            // API Client zaten her değişikliği kendiliğinden kaydediyor.
+            Button("Save") {
+                workbench.save()
+            }
+            .keyboardShortcut("s", modifiers: .command)
+            .disabled(appState.isAPIClient)
             Button("Sekmeyi Kapat") {
                 if let id = appState.selectedRequestID, appState.openTabs.contains(id) {
                     appState.closeTab(id)
@@ -77,6 +90,7 @@ struct Dev2KitApp: App {
                 }
             }
             .keyboardShortcut("w", modifiers: .command)
+            .disabled(apiClientCommandsDisabled)
             Button("Pencereyi Kapat") {
                 NSApp.keyWindow?.performClose(nil)
             }
@@ -85,8 +99,10 @@ struct Dev2KitApp: App {
         // Find, macOS'ta Düzen menüsünde yapıştırma grubundan sonra durur.
         CommandGroup(after: .pasteboard) {
             Divider()
-            Button("İstek Ara") {
-                appState.focusSearch()
+            // ⌘F her modda arar: API Client'ta istek listesinde, Workbench'te
+            // odaktaki editörde (son tıklanan girdi/çıktı).
+            Button(appState.isAPIClient ? "İstek Ara" : "Find") {
+                if appState.isAPIClient { appState.focusSearch() } else { workbench.requestSearch() }
             }
             .keyboardShortcut("f", modifiers: .command)
             // ⌘F zaten sidebar aramasında. Editör aramaları iki AYRI komut:
@@ -96,10 +112,12 @@ struct Dev2KitApp: App {
                 appState.openBodySearch()
             }
             .keyboardShortcut("f", modifiers: [.command, .option])
+            .disabled(apiClientCommandsDisabled)
             Button("Yanıtta Ara") {
                 appState.openResponseSearch()
             }
             .keyboardShortcut("f", modifiers: [.command, .shift])
+            .disabled(apiClientCommandsDisabled)
         }
         CommandMenu("İstek") {
             ForEach(Array(EditorTab.allCases.enumerated()), id: \.element) { index, tab in
@@ -111,15 +129,15 @@ struct Dev2KitApp: App {
                 // Token sekmesi yalnızca Token Factory isteklerinde var.
                 .disabled(tab == .token && !(appState.selectedRequestID.map(appState.isTokenFactoryRequest) ?? false))
             }
-            .disabled(appState.selectedRequestID == nil)
+            .disabled(appState.selectedRequestID == nil || apiClientCommandsDisabled)
             Divider()
             // Ok tuşları klavye düzeninden bağımsız: ⇧⌘] Türkçe klavyede ⇧⌘Ü görünürdü.
             Button("Sonraki Sekme") { appState.selectAdjacentTab(1) }
                 .keyboardShortcut(.rightArrow, modifiers: [.command, .option])
-                .disabled(appState.openTabs.count < 2)
+                .disabled(appState.openTabs.count < 2 || apiClientCommandsDisabled)
             Button("Önceki Sekme") { appState.selectAdjacentTab(-1) }
                 .keyboardShortcut(.leftArrow, modifiers: [.command, .option])
-                .disabled(appState.openTabs.count < 2)
+                .disabled(appState.openTabs.count < 2 || apiClientCommandsDisabled)
             Divider()
             Button("Güvenlik Onaylarını Sıfırla…") {
                 confirmResetSecurityApprovals()
@@ -146,11 +164,15 @@ struct Dev2KitApp: App {
         WindowGroup("dev2kit") {
             ContentView()
                 .environment(appState)
+                .environment(workbench)
                 .tint(Theme.accent)
                 .frame(minWidth: 900, minHeight: 560)
                 .onAppear {
                     appDelegate.appState = appState
                     SidebarDoubleClick.install {
+                        // Workbench'in araç listesi de bir List: çift tık orada
+                        // API Client sekmesine dokunmasın.
+                        guard appState.isAPIClient else { return }
                         if let id = appState.selectedRequestID { appState.pinTab(id) }
                     }
                 }

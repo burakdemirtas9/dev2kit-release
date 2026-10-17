@@ -38,8 +38,8 @@ struct ContentView: View {
         }
     }
 
-    var body: some View {
-        @Bindable var state = appState
+    /// API Client modu: kenar çubuğu, sekmeler, istek editörü.
+    private var apiClientLayout: some View {
         // Genişlik tamamen bizde: HSplitView/NavigationSplitView ayraç konumunu
         // dışarıdan vermeye izin vermiyor (ilk açılış + kalıcılık için gerekli).
         GeometryReader { geometry in
@@ -68,19 +68,52 @@ struct ContentView: View {
             // Sürüklerken örtük animasyon genişliği "kovalayınca" titreme oluyor.
             .animation(nil, value: sidebarWidth)
         }
+    }
+
+    /// Pencerenin üst ortasındaki mod seçici. Sistem segmentli kontrolü:
+    /// macOS 26'da cam görünümünü kendisi alır (docs/TASARIM.md §1).
+    private var modePicker: some View {
+        @Bindable var state = appState
+        return Picker("Mod", selection: $state.mode) {
+            ForEach(AppMode.allCases) { Text($0.title).tag($0) }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .fixedSize()
+        .help("API Client ile Workbench arasında geç")
+    }
+
+    var body: some View {
+        @Bindable var state = appState
+        Group {
+            // Mod değişince API Client görünümü kurulmaz ama durumu AppState'te
+            // (sekmeler, gövde, yanıtlar) kaldığı için geri dönünce yerindedir.
+            if appState.isAPIClient {
+                apiClientLayout
+            } else {
+                WorkbenchView()
+            }
+        }
         .toolbar {
-            ToolbarItem(placement: .automatic) {
-                EnvironmentPicker()
+            ToolbarItem(placement: .principal) {
+                modePicker
             }
-            ToolbarItem(placement: .automatic) {
-                Button {
-                    showingEnvironments = true
-                } label: {
-                    Label("Environment'lar", systemImage: "globe")
+            // Environment, geçmiş, çerez, TLS ve secret yalnızca API Client'ta
+            // anlamlı; Workbench'te gizlenir (docs/V2.md).
+            if appState.isAPIClient {
+                ToolbarItem(placement: .automatic) {
+                    EnvironmentPicker()
                 }
-                .help("Environment oluştur ve düzenle")
+                ToolbarItem(placement: .automatic) {
+                    Button {
+                        showingEnvironments = true
+                    } label: {
+                        Label("Environment'lar", systemImage: "globe")
+                    }
+                    .help("Environment oluştur ve düzenle")
+                }
+                toolbarGroupBreak
             }
-            toolbarGroupBreak
             ToolbarItem(placement: .automatic) {
                 // Picker olarak kurulur: araç çubuğu "simge ve metin" modunda
                 // Menu'nun başlığını göstermiyordu (Label da, Menu(_:systemImage:)
@@ -99,28 +132,32 @@ struct ContentView: View {
                 .frame(width: 36)
                 .help("Açık/koyu görünüm")
             }
-            toolbarGroupBreak
-            ToolbarItem(placement: .automatic) {
-                Button {
-                    showingHistory = true
-                } label: {
-                    Label("Geçmiş", systemImage: "clock.arrow.circlepath")
-                }
-                .help("Gönderilen isteklerin kaydı (⌘Y)")
-                .keyboardShortcut("y", modifiers: .command)
-            }
-            ToolbarItem(placement: .automatic) {
-                Button {
-                    showingCookies = true
-                } label: {
-                    Label {
-                        Text("Çerezler")
-                    } icon: {
-                        CookieIcon().frame(width: 15, height: 15)
+            if appState.isAPIClient {
+                toolbarGroupBreak
+                ToolbarItem(placement: .automatic) {
+                    Button {
+                        showingHistory = true
+                    } label: {
+                        Label("Geçmiş", systemImage: "clock.arrow.circlepath")
                     }
+                    .help("Gönderilen isteklerin kaydı (⌘Y)")
+                    .keyboardShortcut("y", modifiers: .command)
                 }
-                .help("Oturum çerezlerini görüntüle ve temizle")
+                ToolbarItem(placement: .automatic) {
+                    Button {
+                        showingCookies = true
+                    } label: {
+                        Label {
+                            Text("Çerezler")
+                        } icon: {
+                            CookieIcon().frame(width: 15, height: 15)
+                        }
+                    }
+                    .help("Oturum çerezlerini görüntüle ve temizle")
+                }
             }
+            // Güvenlik durumu her modda görünür (docs/TASARIM.md §1): Workbench'e
+            // geçince açık kalan doğrulama gizlenmesin.
             // Doğrulama kapalıyken her an görünür olmalı: açık unutulursa
             // kullanıcı bunu bir yanıta bakana kadar fark etmezdi.
             if appState.certificateValidationDisabled {
@@ -135,21 +172,23 @@ struct ContentView: View {
                     .help("Sertifika doğrulaması tüm isteklerde KAPALI. Tıklayınca yeniden açılır.")
                 }
             }
-            ToolbarItem(placement: .automatic) {
-                Button {
-                    showingTLS = true
-                } label: {
-                    Label("TLS", systemImage: "lock.shield")
+            if appState.isAPIClient {
+                ToolbarItem(placement: .automatic) {
+                    Button {
+                        showingTLS = true
+                    } label: {
+                        Label("TLS", systemImage: "lock.shield")
+                    }
+                    .help("Kurum CA'sı ve istemci sertifikası profilleri")
                 }
-                .help("Kurum CA'sı ve istemci sertifikası profilleri")
-            }
-            ToolbarItem(placement: .automatic) {
-                Button {
-                    showingSecrets = true
-                } label: {
-                    Label("Secrets", systemImage: "key.fill")
+                ToolbarItem(placement: .automatic) {
+                    Button {
+                        showingSecrets = true
+                    } label: {
+                        Label("Secrets", systemImage: "key.fill")
+                    }
+                    .help("Keychain'deki secret'ları yönet")
                 }
-                .help("Keychain'deki secret'ları yönet")
             }
         }
         .sheet(isPresented: $showingSecrets) {

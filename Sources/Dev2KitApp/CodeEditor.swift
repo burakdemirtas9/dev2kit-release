@@ -164,6 +164,14 @@ struct CodeEditor: NSViewRepresentable {
     var folding: CodeFoldingController?
     /// Verilirse arama çubuğu bu editörü arayabilir.
     var search: EditorSearchController?
+    /// Verilirse bu karakter konumunun (UTF-16) bulunduğu satır hata olarak
+    /// kırmızı alt çizgiyle işaretlenir ve görünür alana kaydırılır.
+    /// Geçici öznitelik: metne ve renklendirmeye dokunmaz; arama vurgusuyla
+    /// (arka plan/ön plan) çakışmasın diye alt çizgi kullanılır.
+    var errorOffset: Int?
+    /// Kullanıcı editöre tıklayınca/seçim değişince çağrılır. Workbench ⌘F'nin
+    /// hangi bölmede (girdi/çıktı) arama açacağını buradan bilir.
+    var onFocus: (() -> Void)?
 
     static let font = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
 
@@ -255,6 +263,7 @@ struct CodeEditor: NSViewRepresentable {
         } else if context.coordinator.lastLanguage != language {
             context.coordinator.textChanged(textView)
         }
+        context.coordinator.markError(at: errorOffset, in: textView)
     }
 
     /// `@MainActor`: bu sınıfın tüm çağrıları AppKit'ten gelir (delegate'ler,
@@ -277,6 +286,32 @@ struct CodeEditor: NSViewRepresentable {
         let foldingDelegate = FoldingLayoutDelegate()
         private var regionWork: DispatchWorkItem?
 
+        private var markedErrorRange: NSRange?
+        private var markedErrorOffset: Int?
+
+        /// Hata satırını işaretler; konum değişmediyse dokunmaz (her
+        /// güncellemede yeniden kaydırmak kullanıcının kaydırmasını ezerdi).
+        func markError(at offset: Int?, in textView: NSTextView) {
+            guard offset != markedErrorOffset || (offset != nil && markedErrorRange == nil) else { return }
+            guard let layoutManager = textView.layoutManager else { return }
+            if let previous = markedErrorRange, NSMaxRange(previous) <= (textView.string as NSString).length {
+                layoutManager.removeTemporaryAttribute(.underlineStyle, forCharacterRange: previous)
+                layoutManager.removeTemporaryAttribute(.underlineColor, forCharacterRange: previous)
+            }
+            markedErrorRange = nil
+            markedErrorOffset = offset
+            let text = textView.string as NSString
+            guard let offset, text.length > 0 else { return }
+            let line = text.lineRange(for: NSRange(location: min(max(offset, 0), text.length - 1), length: 0))
+            layoutManager.addTemporaryAttributes(
+                [.underlineStyle: NSUnderlineStyle.thick.rawValue | NSUnderlineStyle.patternDot.rawValue,
+                 .underlineColor: NSColor.systemRed],
+                forCharacterRange: line
+            )
+            markedErrorRange = line
+            textView.scrollRangeToVisible(line)
+        }
+
         init(_ parent: CodeEditor) {
             self.parent = parent
         }
@@ -284,6 +319,11 @@ struct CodeEditor: NSViewRepresentable {
         deinit {
             regionWork?.cancel()
             if let scrollObserver { NotificationCenter.default.removeObserver(scrollObserver) }
+        }
+
+        func textViewDidChangeSelection(_ notification: Notification) {
+            guard let textView = notification.object as? NSTextView, textView.window?.firstResponder === textView else { return }
+            parent.onFocus?()
         }
 
         func textDidChange(_ notification: Notification) {

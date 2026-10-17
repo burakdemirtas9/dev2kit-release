@@ -8,6 +8,8 @@ import Dev2KitCore
 /// kural `TextSearch`'te, gösterim burada.
 struct EditorSearchBar: View {
     @ObservedObject var search: EditorSearchController
+    /// API Client Türkçe, Workbench İngilizce (docs/V2.md); aynı bileşen.
+    var strings: SearchStrings = .turkish
     /// Çubuk açılınca yazı imleci doğrudan kutuya girsin.
     @FocusState private var focused: Bool
 
@@ -16,7 +18,7 @@ struct EditorSearchBar: View {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
 
-            TextField("Ara", text: $search.query)
+            TextField(strings.prompt, text: $search.query)
                 .textFieldStyle(.plain)
                 .font(.system(.body, design: .monospaced))
                 .focused($focused)
@@ -31,13 +33,13 @@ struct EditorSearchBar: View {
             toggle(
                 "Aa",
                 isOn: search.options.caseSensitive,
-                help: "Büyük/küçük harfe duyarlı"
+                help: strings.caseSensitive
             ) { search.options.caseSensitive.toggle() }
 
             toggle(
                 ".*",
                 isOn: search.options.isRegex,
-                help: "Düzenli ifade — ⏎ ile çalışır"
+                help: strings.regex
             ) { search.options.isRegex.toggle() }
 
             Button {
@@ -49,8 +51,8 @@ struct EditorSearchBar: View {
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
             .keyboardShortcut(.escape, modifiers: [])
-            .help("Aramayı kapat")
-            .accessibilityLabel("Aramayı kapat")
+            .help(strings.close)
+            .accessibilityLabel(strings.close)
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
@@ -64,12 +66,12 @@ struct EditorSearchBar: View {
     @ViewBuilder
     private var status: some View {
         if search.isInvalidPattern {
-            Text("geçersiz kalıp")
+            Text(strings.invalidPattern)
                 .foregroundStyle(Theme.down)
         } else if search.query.isEmpty {
             EmptyView()
         } else if search.matchCount == 0 {
-            Text(search.runsIncrementally ? "sonuç yok" : "⏎ ile ara")
+            Text(search.runsIncrementally ? strings.noResults : strings.pressReturn)
                 .foregroundStyle(.secondary)
         } else {
             Text(counter)
@@ -94,16 +96,16 @@ struct EditorSearchBar: View {
             } label: {
                 Image(systemName: "chevron.up").iconHitTarget(20)
             }
-            .help("Önceki eşleşme")
-            .accessibilityLabel("Önceki eşleşme")
+            .help(strings.previous)
+            .accessibilityLabel(strings.previous)
 
             Button {
                 search.next()
             } label: {
                 Image(systemName: "chevron.down").iconHitTarget(20)
             }
-            .help("Sonraki eşleşme")
-            .accessibilityLabel("Sonraki eşleşme")
+            .help(strings.next)
+            .accessibilityLabel(strings.next)
         }
         .buttonStyle(.plain)
         .foregroundStyle(.secondary)
@@ -136,6 +138,7 @@ struct EditorSearchBar: View {
 /// Arama çubuğunu açıp kapatan düğme. Araç çubuğunda `FoldButtons`'ın yanında.
 struct SearchToggleButton: View {
     @ObservedObject var search: EditorSearchController
+    var strings: SearchStrings = .turkish
 
     var body: some View {
         Button {
@@ -146,7 +149,24 @@ struct SearchToggleButton: View {
         }
         .buttonStyle(.plain)
         .foregroundStyle(search.isPresented ? Theme.accent : .secondary)
-        .help("Metinde ara")
-        .accessibilityLabel("Metinde ara")
+        .help(strings.toggle)
+        .accessibilityLabel(strings.toggle)
     }
+}
+
+/// Arama çubuğunun metinleri.
+struct SearchStrings {
+    let prompt, caseSensitive, regex, close, invalidPattern, noResults, pressReturn, previous, next, toggle: String
+
+    static let turkish = SearchStrings(
+        prompt: "Ara", caseSensitive: "Büyük/küçük harfe duyarlı", regex: "Düzenli ifade — ⏎ ile çalışır",
+        close: "Aramayı kapat", invalidPattern: "geçersiz kalıp", noResults: "sonuç yok", pressReturn: "⏎ ile ara",
+        previous: "Önceki eşleşme", next: "Sonraki eşleşme", toggle: "Metinde ara"
+    )
+
+    static let english = SearchStrings(
+        prompt: "Find", caseSensitive: "Match case", regex: "Regular expression — runs on ⏎",
+        close: "Close find", invalidPattern: "invalid pattern", noResults: "no results", pressReturn: "⏎ to search",
+        previous: "Previous match", next: "Next match", toggle: "Find in text (⌘F)"
+    )
 }

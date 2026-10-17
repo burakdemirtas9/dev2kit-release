@@ -1,0 +1,521 @@
+import AppKit
+import SwiftUI
+import Dev2KitCore
+
+/// Her aracın ortak ekranı: sekmeler, eylem ve seçenekler, solda girdi,
+/// sağda çıktı (metin ya da ağaç), altta doğrulama durumu. Yeni araç için
+/// yeni ekran yazılmaz (docs/V2.md "Mimari"). Workbench arayüzü İngilizce.
+struct WorkbenchToolView: View {
+    @Environment(WorkbenchState.self) private var workbench
+    @StateObject private var inputSearch = EditorSearchController()
+    @StateObject private var outputSearch = EditorSearchController()
+
+    var body: some View {
+        VStack(spacing: 0) {
+            WorkbenchTabBar()
+            Divider()
+            header
+            Divider()
+            HStack(spacing: 0) {
+                inputPane
+                Divider()
+                outputPane
+            }
+            Divider()
+            statusBar
+        }
+        // ⌘F: odaktaki bölmede (son tıklanan editör) arama.
+        .onChange(of: workbench.searchRequest) {
+            if workbench.focusedPane == .output, !workbench.showsTree {
+                outputSearch.open()
+            } else {
+                inputSearch.open()
+            }
+        }
+        .onChange(of: workbench.document.id) {
+            inputSearch.close()
+            outputSearch.close()
+        }
+    }
+
+    // MARK: Üst çubuk
+
+    private var header: some View {
+        let tool = workbench.tool
+        let action = workbench.action
+        return HStack(spacing: 12) {
+            if tool.actions.count > 1 {
+                Picker("Action", selection: Binding(
+                    get: { action.id },
+                    set: { workbench.select(actionID: $0) }
+                )) {
+                    ForEach(tool.actions) { Text($0.title).tag($0.id) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+            }
+            if action.usesIndentation {
+                Picker("Indent", selection: Binding(
+                    get: { workbench.options.indentation },
+                    set: { var options = workbench.options; options.indentation = $0; workbench.update(options: options) }
+                )) {
+                    ForEach(Indentation.allCases, id: \.self) { Text($0.title).tag($0) }
+                }
+                .fixedSize()
+                .help("Indentation")
+            }
+            if action.usesSortKeys {
+                Toggle("Sort keys", isOn: Binding(
+                    get: { workbench.options.sortKeys },
+                    set: { var options = workbench.options; options.sortKeys = $0; workbench.update(options: options) }
+                ))
+                .help("Sort object keys alphabetically at every level. Comments are dropped when sorting.")
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+    }
+
+    // MARK: Girdi
+
+    private var inputPane: some View {
+        let issueOffset: Int? = {
+            if case .invalid(let issue) = workbench.validation { return issue.offset }
+            return nil
+        }()
+        let canUndo = workbench.clearedInput?.documentID == workbench.document.id
+        return VStack(spacing: 0) {
+            paneHeader("Input", stats: workbench.inputStats) {
+                if canUndo {
+                    Button("Undo Clear") { workbench.undoClear() }
+                        .controlSize(.small)
+                        .help("Restore the cleared input")
+                }
+                SearchToggleButton(search: inputSearch, strings: .english)
+                Button {
+                    workbench.clearInput()
+                } label: {
+                    Image(systemName: "xmark.circle").iconHitTarget()
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .disabled(workbench.input.isEmpty)
+                .help("Clear input (can be undone for a few seconds)")
+                .accessibilityLabel("Clear input")
+            }
+            if inputSearch.isPresented {
+                EditorSearchBar(search: inputSearch, strings: .english)
+            }
+            CodeEditor(
+                text: Binding(get: { workbench.input }, set: { workbench.input = $0 }),
+                language: workbench.highlightsSyntax ? CodeLanguage(workbench.tool.syntax) : .plain,
+                search: inputSearch,
+                errorOffset: issueOffset,
+                onFocus: { workbench.focus(.input) }
+            )
+            .id(workbench.document.id)
+            .overlay {
+                if workbench.input.isEmpty {
+                    Text("Paste content here. Input stays in memory only; it is never written to disk or history.")
+                        .font(.callout)
+                        .foregroundStyle(.tertiary)
+                        .multilineTextAlignment(.center)
+                        .padding(40)
+                        .allowsHitTesting(false)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    // MARK: Çıktı
+
+    private var outputPane: some View {
+        let showsTree = workbench.showsTree
+        let outputSyntax = workbench.action.outputSyntax ?? workbench.tool.syntax
+        return VStack(spacing: 0) {
+            paneHeader(showsTree ? "Tree" : "Output", stats: showsTree ? .empty : workbench.outputStats) {
+                if workbench.action.supportsTree {
+                    Picker("View", selection: Binding(
+                        get: { workbench.document.outputMode },
+                        set: { workbench.select(outputMode: $0) }
+                    )) {
+                        ForEach(WorkbenchState.OutputMode.allCases) { Text($0.title).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .fixedSize()
+                    .controlSize(.small)
+                    .help("Show the output as text or as a tree of the input")
+                }
+                if !showsTree {
+                    SearchToggleButton(search: outputSearch, strings: .english)
+                    Button {
+                        workbench.toggleOutputEditing()
+                    } label: {
+                        Image(systemName: workbench.isEditingOutput ? "pencil.circle.fill" : "pencil").iconHitTarget()
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(workbench.isEditingOutput ? AnyShapeStyle(Theme.accent) : AnyShapeStyle(.secondary))
+                    .disabled(workbench.displayedOutput.isEmpty)
+                    .help(workbench.isEditingOutput
+                          ? "Stop editing. Edits are replaced when the input or options change."
+                          : "Edit output")
+                    .accessibilityLabel("Edit output")
+                    Button {
+                        workbench.useOutputAsInput()
+                    } label: {
+                        Image(systemName: "arrow.uturn.left").iconHitTarget()
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    .disabled(workbench.displayedOutput.isEmpty)
+                    .help("Use output as input (chain another action)")
+                    .accessibilityLabel("Use output as input")
+                    CopyButton(text: workbench.displayedOutput, help: "Copy output")
+                }
+            }
+            if !showsTree, outputSearch.isPresented {
+                EditorSearchBar(search: outputSearch, strings: .english)
+            }
+            Group {
+                if showsTree {
+                    if let tree = workbench.tree {
+                        JSONTreeView(root: tree) { steps, text in
+                            workbench.editTreeValue(at: steps, text: text)
+                        }
+                    } else {
+                        placeholder(workbench.input.isEmpty ? "" : "The input must be valid JSON to show a tree.")
+                    }
+                } else if let issue = workbench.actionIssue, workbench.displayedOutput.isEmpty {
+                    placeholder(issue.localizedDescription, isError: true)
+                } else {
+                    CodeEditor(
+                        text: Binding(get: { workbench.displayedOutput }, set: { workbench.editOutput($0) }),
+                        language: workbench.outputStats.bytes <= WorkbenchState.highlightLimit ? CodeLanguage(outputSyntax) : .plain,
+                        isEditable: workbench.isEditingOutput,
+                        search: outputSearch,
+                        onFocus: { workbench.focus(.output) }
+                    )
+                    .id(workbench.document.id)
+                }
+            }
+            .frame(maxHeight: .infinity)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func placeholder(_ text: String, isError: Bool = false) -> some View {
+        Text(text)
+            .font(.callout)
+            .foregroundStyle(isError ? AnyShapeStyle(Theme.down) : AnyShapeStyle(.secondary))
+            .multilineTextAlignment(.center)
+            .textSelection(.enabled)
+            .padding(24)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func paneHeader<Trailing: View>(_ title: String, stats: TextStats, @ViewBuilder trailing: () -> Trailing) -> some View {
+        HStack(spacing: 6) {
+            Text(title).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            Text(stats.summary)
+                .font(.caption2.monospacedDigit())
+                .foregroundStyle(.tertiary)
+                .lineLimit(1)
+            Spacer(minLength: 0)
+            trailing()
+        }
+        .padding(.horizontal, 10)
+        .frame(height: 30)
+    }
+
+    // MARK: Durum
+
+    private var statusBar: some View {
+        HStack(spacing: 8) {
+            validationLabel
+            Spacer(minLength: 0)
+            if workbench.saveNotice {
+                Label("Kept in memory only — cleared when dev2kit quits. Nothing is written to disk.", systemImage: "memorychip")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            if workbench.isRunning {
+                ProgressView().controlSize(.small)
+            }
+            if workbench.isLargeInput {
+                Text("Large input: not run automatically").font(.caption).foregroundStyle(.secondary)
+                Button("Run") { workbench.runNow() }
+                    .controlSize(.small)
+                    .disabled(!workbench.isStale)
+            }
+        }
+        .padding(.horizontal, 14)
+        .frame(height: 30)
+        .background(.bar)
+    }
+
+    @ViewBuilder
+    private var validationLabel: some View {
+        switch workbench.validation {
+        case .empty:
+            Text(" ").font(.caption)
+        case .valid:
+            Label("Valid \(workbench.tool.title)", systemImage: "checkmark.circle.fill")
+                .font(.caption)
+                .foregroundStyle(Theme.up)
+        case .structurallyValid:
+            Label("Structure OK (full syntax not checked)", systemImage: "checkmark.circle")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        case .invalid(let issue):
+            Label(issue.localizedDescription, systemImage: "exclamationmark.octagon.fill")
+                .font(.caption)
+                .foregroundStyle(Theme.down)
+                .lineLimit(2)
+                .textSelection(.enabled)
+        }
+    }
+}
+
+/// Açık belgelerin sekmeleri. API Client sekme çubuğunun görsel dili
+/// (seçili sekmede editör zemini + üstte vurgu çizgisi), daha sade.
+struct WorkbenchTabBar: View {
+    @Environment(WorkbenchState.self) private var workbench
+    @State private var pendingClose: WorkbenchDocument?
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 0) {
+                    ForEach(workbench.documents) { doc in
+                        WorkbenchTab(
+                            title: workbench.title(of: doc),
+                            isSelected: doc.id == workbench.document.id,
+                            onSelect: { workbench.select(documentID: doc.id) },
+                            onClose: {
+                                // İçi dolu sekme kapanınca girdi kaybolur (diske yazılmıyor).
+                                if doc.input.isEmpty { workbench.closeDocument(doc.id) } else { pendingClose = doc }
+                            }
+                        )
+                    }
+                }
+            }
+            Button {
+                workbench.newDocument()
+            } label: {
+                Image(systemName: "plus").iconHitTarget()
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 8)
+            .help("New tab")
+            .accessibilityLabel("New tab")
+        }
+        .frame(height: 30)
+        .background(.bar)
+        .confirmationDialog(
+            "Close \"\(pendingClose.map { workbench.title(of: $0) } ?? "")\"?",
+            isPresented: Binding(get: { pendingClose != nil }, set: { if !$0 { pendingClose = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button("Close Tab", role: .destructive) {
+                if let doc = pendingClose { workbench.closeDocument(doc.id) }
+                pendingClose = nil
+            }
+            Button("Cancel", role: .cancel) { pendingClose = nil }
+        } message: {
+            Text("Its content is kept in memory only and will be lost.")
+        }
+    }
+}
+
+private struct WorkbenchTab: View {
+    let title: String
+    let isSelected: Bool
+    let onSelect: () -> Void
+    let onClose: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(title).font(.callout).lineLimit(1)
+            Button(action: onClose) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 9, weight: .semibold))
+                    .frame(width: 14, height: 14)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .opacity(hovering || isSelected ? 1 : 0)
+            .help("Close tab")
+            .accessibilityLabel("Close \(title)")
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 30)
+        .background(isSelected ? Theme.editorBackground : (hovering ? Color.primary.opacity(0.05) : .clear),
+                    ignoresSafeAreaEdges: [])
+        .overlay(alignment: .top) {
+            if isSelected { Rectangle().fill(Theme.accent).frame(height: 2) }
+        }
+        .overlay(alignment: .trailing) {
+            Rectangle().fill(Color(nsColor: .separatorColor)).frame(width: 1)
+        }
+        .contentShape(Rectangle())
+        .onHover { hovering = $0 }
+        .onTapGesture(perform: onSelect)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+    }
+}
+
+/// Panoya kopyalar; kısa süre "kopyalandı" işareti gösterir. Pano yalnızca
+/// kullanıcı basınca yazılır (README: pano kuralı).
+struct CopyButton: View {
+    let text: String
+    var help = "Copy"
+    @State private var copied = false
+
+    var body: some View {
+        Button {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(text, forType: .string)
+            copied = true
+        } label: {
+            Image(systemName: copied ? "checkmark" : "doc.on.doc").iconHitTarget()
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(copied ? AnyShapeStyle(Theme.up) : AnyShapeStyle(.secondary))
+        .disabled(text.isEmpty)
+        .help(help)
+        .accessibilityLabel(help)
+        .task(id: copied) {
+            guard copied else { return }
+            try? await Task.sleep(for: .seconds(1.5))
+            copied = false
+        }
+    }
+}
+
+/// JSON ağacı. Satırlara tıklama hareketi BAĞLANMAZ (UI-KURALLARI §2c);
+/// satır sonundaki düğmeler: yapraklarda kalem (değeri satır içinde düzenler)
+/// ve kopyala (DEĞERİ kopyalar), yol sağ tıkta. Çocuk düğümler açıldıkça
+/// oluşur (`JSONTreeNode.children`).
+struct JSONTreeView: View {
+    let root: JSONTreeNode
+    /// Düzenlenen yaprak değer; hata metni döner (satırda gösterilir).
+    let onEdit: ([JSONPathStep], String) -> String?
+
+    var body: some View {
+        List {
+            OutlineGroup(root.children ?? [root], children: \.children) { node in
+                JSONTreeRow(node: node, onEdit: onEdit)
+            }
+        }
+        .listStyle(.inset)
+    }
+
+    /// Metin değeri tırnaksız ham haliyle (token'ı kopyalayan kullanıcı
+    /// tırnakları silmek zorunda kalmasın); nesne/dizi sıkıştırılmış JSON.
+    static func copyValue(_ node: JSONTreeNode) -> String {
+        if case .string(let text) = node.value { return text }
+        return node.value.compact()
+    }
+}
+
+private struct JSONTreeRow: View {
+    let node: JSONTreeNode
+    let onEdit: ([JSONPathStep], String) -> String?
+    @State private var isEditing = false
+    @State private var draft = ""
+    @State private var error: String?
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        HStack(spacing: 6) {
+            if !node.label.isEmpty {
+                Text(node.label)
+                    .font(.system(.callout, design: .monospaced))
+                    .foregroundStyle(Color(nsColor: Theme.syntaxKey))
+            }
+            if isEditing {
+                TextField("Value", text: $draft)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(.callout, design: .monospaced))
+                    .focused($focused)
+                    .onSubmit(commit)
+                    .onExitCommand { cancel() }
+                if let error {
+                    Image(systemName: "exclamationmark.octagon.fill")
+                        .foregroundStyle(Theme.down)
+                        .help(error)
+                }
+                Button("Save", action: commit).controlSize(.small)
+                Button("Cancel", action: cancel).controlSize(.small)
+            } else {
+                Text(node.summary)
+                    .font(.system(.callout, design: .monospaced))
+                    .foregroundStyle(summaryStyle)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer(minLength: 4)
+                if node.isEditableLeaf {
+                    Button {
+                        draft = node.editableText
+                        error = nil
+                        isEditing = true
+                        focused = true
+                    } label: {
+                        Image(systemName: "pencil").iconHitTarget()
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    .help("Edit value (⏎ saves, Esc cancels)")
+                    .accessibilityLabel("Edit value")
+                }
+                if node.hiddenSiblings == 0 {
+                    CopyButton(text: JSONTreeView.copyValue(node), help: "Copy value")
+                }
+            }
+        }
+        .help(node.path)
+        .contextMenu {
+            if node.hiddenSiblings == 0 {
+                Button("Copy Value") { copy(JSONTreeView.copyValue(node)) }
+                if !node.path.isEmpty {
+                    Button("Copy Path (\(node.path))") { copy(node.path) }
+                }
+            }
+        }
+    }
+
+    private func commit() {
+        if let message = onEdit(node.steps, draft) {
+            error = message
+        } else {
+            isEditing = false
+        }
+    }
+
+    private func cancel() {
+        isEditing = false
+        error = nil
+    }
+
+    private var summaryStyle: AnyShapeStyle {
+        switch node.value {
+        case .string: return AnyShapeStyle(Color(nsColor: Theme.syntaxString))
+        case .number: return AnyShapeStyle(Color(nsColor: Theme.syntaxNumber))
+        case .bool, .null: return AnyShapeStyle(Color(nsColor: Theme.syntaxKeyword))
+        case .object, .array: return AnyShapeStyle(.tertiary)
+        }
+    }
+
+    private func copy(_ text: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+    }
+}

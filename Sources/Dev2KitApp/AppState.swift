@@ -33,6 +33,16 @@ import Dev2KitCore
 @MainActor
 final class AppState {
     var workspace: WorkspaceModel
+
+    /// Açık mod. Bir sonraki açılışta hatırlanır. Workbench'teyken API Client
+    /// kısayolları devre dışıdır (menü komutları buna bakar); mod değişince
+    /// API Client'ın durumu (sekmeler, gövde, yanıtlar) burada kaldığı için
+    /// kaybolmaz.
+    var mode: AppMode = AppMode(rawValue: UserDefaults.standard.string(forKey: "appMode") ?? "") ?? .apiClient {
+        didSet { UserDefaults.standard.set(mode.rawValue, forKey: "appMode") }
+    }
+
+    var isAPIClient: Bool { mode == .apiClient }
     /// Seçili istek. Açık değilse önizleme sekmesinde açılır (bkz. Sekmeler).
     var selectedRequestID: UUID? {
         didSet {
