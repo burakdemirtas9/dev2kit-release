@@ -80,7 +80,9 @@ public struct JavaSource: Sendable {
         return output
     }
 
-    private static func skipQuoted(_ input: [Character], from start: Int, quote: Character) -> Int {
+    /// Tırnaklı metnin (kaçışlara saygıyla) sonrasındaki konum. Modül içi:
+    /// `DeclarativeClients` de kullanıyor (önceden birebir kopyası vardı).
+    static func skipQuoted(_ input: [Character], from start: Int, quote: Character) -> Int {
         var index = start + 1
         while index < input.count {
             if input[index] == "\\" { index += 2; continue }
