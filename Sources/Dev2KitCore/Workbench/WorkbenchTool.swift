@@ -65,6 +65,7 @@ public struct WorkbenchAction: Identifiable, Sendable {
     /// Arayüz yalnızca eylemin kullandığı seçenekleri gösterir.
     public let usesIndentation: Bool
     public let usesSortKeys: Bool
+    public let usesKeywordCase: Bool
     /// Çıktının sözdizimi rengi aracınkinden farklıysa (Escape → düz metin).
     public let outputSyntax: Beautifier.Kind?
     /// Çıktı ağaç olarak da gösterilebilir mi. Yalnızca biçimlendirmede
@@ -82,6 +83,7 @@ public struct WorkbenchAction: Identifiable, Sendable {
         title: String,
         usesIndentation: Bool = false,
         usesSortKeys: Bool = false,
+        usesKeywordCase: Bool = false,
         outputSyntax: Beautifier.Kind? = nil,
         supportsTree: Bool = false,
         reverse: (@Sendable (String, String, WorkbenchOptions) throws -> String)? = nil,
@@ -91,6 +93,7 @@ public struct WorkbenchAction: Identifiable, Sendable {
         self.title = title
         self.usesIndentation = usesIndentation
         self.usesSortKeys = usesSortKeys
+        self.usesKeywordCase = usesKeywordCase
         self.outputSyntax = outputSyntax
         self.supportsTree = supportsTree
         self.reverse = reverse
@@ -101,10 +104,13 @@ public struct WorkbenchAction: Identifiable, Sendable {
 public struct WorkbenchOptions: Hashable, Sendable {
     public var indentation: Indentation
     public var sortKeys: Bool
+    /// SQL anahtar kelimeleri büyük harf. Varsayılan açık: en yaygın stil.
+    public var uppercaseKeywords: Bool
 
-    public init(indentation: Indentation = .default, sortKeys: Bool = false) {
+    public init(indentation: Indentation = .default, sortKeys: Bool = false, uppercaseKeywords: Bool = true) {
         self.indentation = indentation
         self.sortKeys = sortKeys
+        self.uppercaseKeywords = uppercaseKeywords
     }
 }
 
@@ -221,6 +227,8 @@ public enum WorkbenchCatalog {
         WorkbenchTools.css,
         WorkbenchTools.javascript,
         WorkbenchTools.typescript,
+        WorkbenchTools.sql,
+        WorkbenchTools.markdown,
     ]
 
     public static func tool(id: String?) -> WorkbenchTool? {

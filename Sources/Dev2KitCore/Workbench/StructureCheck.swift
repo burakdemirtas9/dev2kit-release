@@ -14,10 +14,14 @@ public enum StructureCheck {
         /// `//` satır yorumu var mı (CSS'te yok; `url(http://…)` yorum değil).
         let lineComments: Bool
         let regexLiterals: Bool
+        /// SQL: `--` satır yorumu, tırnak tekrarıyla kaçış (`'it''s'`), ters
+        /// bölü kaçış değil (`'C:\'`).
+        var sqlQuoting = false
 
         public static let javascript = Rules(language: "JavaScript", quotes: ["\"", "'", "`"], multilineQuote: "`", lineComments: true, regexLiterals: true)
         public static let typescript = Rules(language: "TypeScript", quotes: ["\"", "'", "`"], multilineQuote: "`", lineComments: true, regexLiterals: true)
         public static let css = Rules(language: "CSS", quotes: ["\"", "'"], multilineQuote: nil, lineComments: false, regexLiterals: false)
+        public static let sql = Rules(language: "SQL", quotes: ["\"", "'", "`"], multilineQuote: nil, lineComments: false, regexLiterals: false, sqlQuoting: true)
     }
 
     public static func validate(_ text: String, rules: Rules) -> WorkbenchValidation {
@@ -35,6 +39,10 @@ public enum StructureCheck {
             let ch = scanner.current
             let start = scanner.index
             if ch.isWhitespace { scanner.index += 1; continue }
+            if rules.sqlQuoting, ch == "-", scanner.peek() == "-" {
+                while !scanner.isAtEnd, !scanner.current.isNewline { scanner.index += 1 }
+                continue
+            }
             if ch == "/", let next = scanner.peek(), next == "*" || (next == "/" && rules.lineComments) {
                 guard (try? scanner.readComment(language: rules.language)) != nil else {
                     return issue("/* yorumu */ ile kapatılmamış", at: start)
@@ -42,7 +50,11 @@ public enum StructureCheck {
                 continue
             }
             if rules.quotes.contains(ch) {
-                guard scanner.readQuoted(multiline: ch == rules.multilineQuote) != nil else {
+                guard scanner.readQuoted(
+                    multiline: rules.sqlQuoting || ch == rules.multilineQuote,
+                    backslashEscapes: !rules.sqlQuoting,
+                    doubledQuotes: rules.sqlQuoting
+                ) != nil else {
                     return issue("\(ch) ile açılan metin kapatılmamış", at: start)
                 }
                 lastMeaningful = ch

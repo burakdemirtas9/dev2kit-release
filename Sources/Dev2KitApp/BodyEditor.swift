@@ -45,6 +45,8 @@ struct BodyEditor: View {
         case .html: return "HTML"
         case .javascript: return "JavaScript"
         case .css: return "CSS"
+        case .sql: return "SQL"
+        case .markdown: return "Markdown"
         }
     }
 

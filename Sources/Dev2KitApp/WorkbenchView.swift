@@ -67,6 +67,8 @@ extension WorkbenchTool {
         case "css": return "paintbrush"
         case "javascript": return "j.square"
         case "typescript": return "t.square"
+        case "sql": return "cylinder.split.1x2"
+        case "markdown": return "text.document"
         default:
             switch category {
             case .format: return "text.alignleft"

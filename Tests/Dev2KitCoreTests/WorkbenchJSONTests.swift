@@ -170,8 +170,9 @@ final class WorkbenchCatalogTests: XCTestCase {
     func testSearchIsCaseAndDiacriticInsensitive() {
         XCTAssertEqual(WorkbenchCatalog.matching("json").map(\.id), ["json"])
         XCTAssertEqual(WorkbenchCatalog.matching("JSON").map(\.id), ["json"])
-        // Her biçimlendirici sıkıştırır: Türkçe karakter/harf farkı gözetmeden hepsi.
-        XCTAssertEqual(WorkbenchCatalog.matching("SIKIŞTIR").count, WorkbenchCatalog.all.count)
+        // Sıkıştıran her araç: Türkçe karakter/harf farkı gözetmeden (Markdown sıkıştırmaz).
+        XCTAssertEqual(WorkbenchCatalog.matching("SIKIŞTIR").map(\.id),
+                       WorkbenchCatalog.all.filter { $0.actions.contains { $0.id == "minify" } }.map(\.id))
         XCTAssertTrue(WorkbenchCatalog.matching("bicim").map(\.id).contains("json"))
         XCTAssertTrue(WorkbenchCatalog.matching("yok-böyle-araç").isEmpty)
         XCTAssertEqual(WorkbenchCatalog.matching("  ").count, WorkbenchCatalog.all.count)

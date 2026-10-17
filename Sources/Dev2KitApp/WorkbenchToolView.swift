@@ -65,6 +65,13 @@ struct WorkbenchToolView: View {
                 .fixedSize()
                 .help("Indentation")
             }
+            if action.usesKeywordCase {
+                Toggle("Uppercase keywords", isOn: Binding(
+                    get: { workbench.options.uppercaseKeywords },
+                    set: { var options = workbench.options; options.uppercaseKeywords = $0; workbench.update(options: options) }
+                ))
+                .help("Write SQL keywords (SELECT, FROM…) in upper case")
+            }
             if action.usesSortKeys {
                 Toggle("Sort keys", isOn: Binding(
                     get: { workbench.options.sortKeys },

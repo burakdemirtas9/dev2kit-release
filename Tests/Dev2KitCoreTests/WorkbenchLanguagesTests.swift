@@ -88,13 +88,13 @@ final class WorkbenchLanguageToolsTests: XCTestCase {
     func testOnlyJSONHasEscapeActions() {
         // Kullanıcı kararı: kaçış kuralı bağlama göre değişiyor; yalnızca JSON'da kaldı.
         for tool in WorkbenchCatalog.all where tool.id != "json" {
-            XCTAssertEqual(tool.actions.map(\.id), ["format", "minify"], tool.id)
+            XCTAssertFalse(tool.actions.contains { $0.id == "escape" || $0.id == "unescape" }, tool.id)
         }
         XCTAssertEqual(WorkbenchTools.json.actions.map(\.id), ["format", "minify", "escape", "unescape"])
     }
 
     func testCatalogHasStep1bTools() {
-        XCTAssertEqual(WorkbenchCatalog.all.map(\.id), ["json", "xml", "html", "css", "javascript", "typescript"])
+        XCTAssertEqual(WorkbenchCatalog.all.map(\.id), ["json", "xml", "html", "css", "javascript", "typescript", "sql", "markdown"])
         XCTAssertEqual(WorkbenchCatalog.matching("ts").first?.id, "typescript")
         XCTAssertEqual(WorkbenchCatalog.matching("soap").map(\.id), ["xml"])
     }
@@ -106,6 +106,8 @@ final class WorkbenchLanguageToolsTests: XCTestCase {
             "css": "a{color:red}",
             "javascript": "const a = {b: \"x\"}",
             "typescript": "const m: Map<string, number> = new Map()",
+            "sql": "select a from t where b = 'x'",
+            "markdown": "# Başlık\n\n| a | b |\n| - | - |\n| 1 | 2 |",
         ]
         for tool in WorkbenchCatalog.all where tool.id != "json" {
             let sample = try XCTUnwrap(samples[tool.id], tool.id)
@@ -114,7 +116,9 @@ final class WorkbenchLanguageToolsTests: XCTestCase {
                 XCTAssertEqual(try action.reverse?(output, sample, .init()), output, "\(tool.id) \(action.id) tersi")
             }
             XCTAssertNoThrow(try tool.action(id: "format").run(sample, .init()), tool.id)
-            XCTAssertNoThrow(try tool.action(id: "minify").run(sample, .init()), tool.id)
+            if tool.actions.contains(where: { $0.id == "minify" }) {
+                XCTAssertNoThrow(try tool.action(id: "minify").run(sample, .init()), tool.id)
+            }
             XCTAssertNotEqual(tool.validate?(sample), nil)
         }
     }

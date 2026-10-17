@@ -13,7 +13,7 @@ import Foundation
 /// yeni bir tür eklenirken tarayıcı/yazıcı yeniden yazılmaz, bunlar kullanılır.
 public enum Beautifier {
     public enum Kind: String, Sendable, CaseIterable {
-        case json, xml, html, javascript, css, plain
+        case json, xml, html, javascript, css, sql, markdown, plain
     }
 
     /// Yalnızca başlıktan tür. Gövde tipi seçicisi gibi içeriğin henüz
@@ -34,6 +34,8 @@ public enum Beautifier {
         if header.contains("html") { return .html }
         if header.contains("javascript") || header.contains("typescript") { return .javascript }
         if header.contains("css") { return .css }
+        if header.contains("sql") { return .sql }
+        if header.contains("markdown") { return .markdown }
 
         var trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
         // Baştaki yorumu atla: `// örnek istek\n{…}` de JSON'dur.
@@ -54,6 +56,8 @@ public enum Beautifier {
         case .html: return try MarkupFormatter.beautify(text, flavor: .html)
         case .javascript: return try ScriptFormatter.beautify(text)
         case .css: return try CSSFormatter.beautify(text)
+        case .sql: return try SQLFormatter.beautify(text)
+        case .markdown: return try MarkdownFormatter.beautify(text)
         case .plain: return text
         }
     }
@@ -74,6 +78,8 @@ public extension Beautifier.Kind {
         case .html: return "text/html"
         case .javascript: return "application/javascript"
         case .css: return "text/css"
+        case .sql: return "application/sql"
+        case .markdown: return "text/markdown"
         case .plain: return "text/plain"
         }
     }

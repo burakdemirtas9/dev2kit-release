@@ -103,15 +103,27 @@ struct CodeScanner {
     /// Konumdaki karakterle açılan tırnaklı metni (kaçışlara saygıyla) okur ve
     /// geçer: `"…"`, `'…'`, `` `…` ``, regex `/…/`. Kapanmamışsa nil döner ve
     /// konum değişmez. `multiline` değilse satır sonu kapanmamış sayılır.
-    mutating func readQuoted(multiline: Bool) -> String? {
-        let open = current
+    ///
+    /// SQL için: `closing` farklı kapanış (`[ad]`), `backslashEscapes: false`
+    /// (`'C:\'` geçerli), `doubledQuotes: true` (`'it''s'` tek metin).
+    mutating func readQuoted(
+        multiline: Bool,
+        closing: Character? = nil,
+        backslashEscapes: Bool = true,
+        doubledQuotes: Bool = false
+    ) -> String? {
+        let close = closing ?? current
         var i = index + 1
         while i < chars.count {
-            if chars[i] == "\\" {
+            if backslashEscapes, chars[i] == "\\" {
                 i += 2
                 continue
             }
-            if chars[i] == open {
+            if chars[i] == close {
+                if doubledQuotes, i + 1 < chars.count, chars[i + 1] == close {
+                    i += 2
+                    continue
+                }
                 let text = String(chars[index...i])
                 index = i + 1
                 return text

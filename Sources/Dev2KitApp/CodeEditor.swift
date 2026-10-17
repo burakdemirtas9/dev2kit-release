@@ -2,12 +2,14 @@ import AppKit
 import SwiftUI
 import Dev2KitCore
 
-enum CodeLanguage: Equatable {
+enum CodeLanguage: Hashable {
     case plain
     case json
     case markup      // XML / HTML
     case javascript
     case css
+    case sql
+    case markdown
 
     /// Katlanabilir mi ve hangi tarayıcıyla.
     ///
@@ -17,13 +19,14 @@ enum CodeLanguage: Equatable {
     func foldableRegions(in text: String) -> [FoldRegion] {
         switch self {
         case .json, .javascript, .css: return JSONFolding.regions(in: text)
+        case .sql, .markdown: return []
         case .markup: return MarkupFolding.regions(in: text)
         case .plain: return []
         }
     }
 
     var supportsFolding: Bool {
-        self != .plain
+        ![.plain, .sql, .markdown].contains(self)
     }
 
     /// Core'daki tür tahmininin arayüz karşılığı. XML ve HTML aynı
@@ -34,6 +37,8 @@ enum CodeLanguage: Equatable {
         case .xml, .html: self = .markup
         case .javascript: self = .javascript
         case .css: self = .css
+        case .sql: self = .sql
+        case .markdown: self = .markdown
         case .plain: self = .plain
         }
     }
@@ -88,6 +93,25 @@ enum SyntaxHighlighter {
         Rule(#"/\*[\s\S]*?\*/"#, Theme.syntaxComment),
     ]
 
+    /// SQL: anahtar kelime kırmızı (büyük/küçük harf duyarsız), sayı sarı,
+    /// string yeşil, tanımlayıcı (`"ad"`, `[ad]`) mor, yorum gri.
+    private static let sqlRules: [Rule] = [
+        Rule(#"(?i)\b(?:select|from|where|and|or|not|null|is|in|as|on|join|left|right|inner|outer|full|cross|group|by|order|having|limit|offset|insert|into|values|update|set|delete|create|table|alter|drop|distinct|union|all|case|when|then|else|end|between|like|asc|desc|with|returning|exists|true|false)\b"#, Theme.syntaxKeyword),
+        Rule(#"-?\b\d+(?:\.\d+)?\b"#, Theme.syntaxNumber),
+        Rule(#""[^"]*"|\[[^\]\n]*\]|`[^`]*`"#, Theme.syntaxKey),
+        Rule(#"'(?:''|[^'])*'"#, Theme.syntaxString),
+        Rule(#"--[^\n]*|/\*[\s\S]*?\*/"#, Theme.syntaxComment),
+    ]
+
+    /// Markdown: başlık mor, kod (satır içi ve blok çizgileri) yeşil, liste
+    /// işareti ve bağlantı adresi sarı.
+    private static let markdownRules: [Rule] = [
+        Rule(#"(?m)^\s*(?:[-*+]|\d+\.)\s"#, Theme.syntaxNumber),
+        Rule(#"\]\([^)\s]*\)"#, Theme.syntaxNumber),
+        Rule(#"(?m)^#{1,6}\s.*$"#, Theme.syntaxKey),
+        Rule(#"(?m)`[^`\n]+`|^\s*(?:```|~~~).*$"#, Theme.syntaxString),
+    ]
+
     private static func rules(for language: CodeLanguage) -> [Rule] {
         switch language {
         case .plain: return []
@@ -95,6 +119,8 @@ enum SyntaxHighlighter {
         case .markup: return markupRules
         case .javascript: return javascriptRules
         case .css: return cssRules
+        case .sql: return sqlRules
+        case .markdown: return markdownRules
         }
     }
 
