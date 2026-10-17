@@ -252,12 +252,22 @@ struct CodeEditor: NSViewRepresentable {
         return scrollView
     }
 
+    /// Editör kaldırılırken geri alma kayıtları da gider. (Kendi yığını
+    /// olduğu için zaten koordinatörle birlikte yok olur; açıkça temizlemek
+    /// AppKit'in yığını bir an daha tutması ihtimaline karşı.)
+    static func dismantleNSView(_ scrollView: NSScrollView, coordinator: Coordinator) {
+        coordinator.undoManager.removeAllActions()
+    }
+
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let textView = scrollView.documentView as? NSTextView else { return }
         context.coordinator.parent = self
         textView.isEditable = isEditable
         if textView.string != text {
             // Programatik değişim (ör. Beautify): metni değiştir, yeniden boya.
+            // Geri alma kayıtları eski metnin aralıklarını gösteriyor; bırakılsa
+            // ⌘Z var olmayan aralığı geri almaya çalışırdı. Temizlenir.
+            context.coordinator.undoManager.removeAllActions()
             textView.string = text
             context.coordinator.textChanged(textView)
         } else if context.coordinator.lastLanguage != language {
@@ -270,6 +280,20 @@ struct CodeEditor: NSViewRepresentable {
     /// gutter tıklaması, SwiftUI güncellemesi) — hepsi ana thread'dedir.
     @MainActor
     final class Coordinator: NSObject, NSTextViewDelegate {
+        /// Editörün KENDİ geri alma yığını.
+        ///
+        /// Pencerenin ortak yığınını kullanmak çökertiyordu (2026-10-18,
+        /// EXC_BAD_ACCESS `-[_NSUndoStack popAndInvoke]` → `_undoRedoTextOperation:`):
+        /// editör kaldırılınca (sekme/araç/mod değişimi, Text↔Tree) kayıtları
+        /// ortak yığında kalıyor, ⌘Z silinmiş metin görünümüne mesaj
+        /// gönderiyordu. Kendi yığını editörle birlikte yaşar ve ölür; bir
+        /// editördeki ⌘Z başka editörün yazısını da geri almaz.
+        let undoManager = UndoManager()
+
+        func undoManager(for view: NSTextView) -> UndoManager? {
+            undoManager
+        }
+
         var parent: CodeEditor
         var lastLanguage: CodeLanguage?
         private var scrollObserver: NSObjectProtocol?
