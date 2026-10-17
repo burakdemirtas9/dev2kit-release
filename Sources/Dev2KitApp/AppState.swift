@@ -765,12 +765,12 @@ final class AppState {
     }
 
     /// Arayüz için: environment + kaynak başına son durum.
-    var tokenStates: [String: TokenState] = [:]
+    var tokenStates: [TokenCacheKey: TokenState] = [:]
     /// Token'lar yalnızca bellekte; uygulama kapanınca gider. Diske, vault'a
     /// bile yazılmaz.
-    @ObservationIgnored var tokenCache: [String: TokenFactory.IssuedToken] = [:]
+    @ObservationIgnored var tokenCache: [TokenCacheKey: TokenFactory.IssuedToken] = [:]
     /// Süren alma işlemleri: aynı anda gelen istekler tek isteği paylaşır.
-    @ObservationIgnored var tokenFetches: [String: Task<TokenFactory.IssuedToken, Error>] = [:]
+    @ObservationIgnored var tokenFetches: [TokenCacheKey: Task<TokenFactory.IssuedToken, Error>] = [:]
 
     struct TokenError: LocalizedError {
         let variable: String
@@ -888,6 +888,7 @@ final class AppState {
     /// Yapısal değişiklikler (ekle/sil/sırala/içe aktar) için anında yazım.
     func persist() {
         pruneTabs()
+        dropStaleTokens()
         persistTask?.cancel()
         persistTask = nil
         writeWorkspace()
@@ -900,6 +901,7 @@ final class AppState {
     /// encode edip main thread'de diske basmak demekti — yazarken takılmanın
     /// ana sebebi buydu. Yazım durduktan 400ms sonra tek sefer yazılır.
     func persistSoon() {
+        dropStaleTokens()
         saveState = .pending
         persistTask?.cancel()
         persistTask = Task { [weak self] in

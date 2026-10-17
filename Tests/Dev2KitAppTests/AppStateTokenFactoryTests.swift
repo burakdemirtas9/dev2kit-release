@@ -169,3 +169,112 @@ final class AppStateTokenMigrationTests: XCTestCase {
         XCTAssertEqual(reopened.workspace.tokenFactoryRequests.count, 1)
     }
 }
+
+/// Bellekteki token, token isteğinin gönderilecek hali değişince düşer.
+@MainActor
+final class AppStateTokenCacheTests: XCTestCase {
+    private var harness: AppStateHarness!
+    private var state: AppState { harness.state }
+    private let token = TokenFactory.IssuedToken(value: "sahte-token", expiresAt: nil)
+
+    override func setUp() {
+        super.setUp()
+        harness = AppStateHarness()
+    }
+
+    override func tearDown() {
+        harness.tearDown()
+        harness = nil
+        super.tearDown()
+    }
+
+    /// `{{customerNo}}` kullanan bir token isteği, aktif environment ve
+    /// bellekte o hal için alınmış bir token.
+    private func prepare() throws -> UUID {
+        let environmentID = state.addEnvironment()
+        state.workspace.activeEnvironmentID = environmentID
+        state.environmentBinding(environmentID)?.wrappedValue.variables = [
+            KeyValueEntry(key: "customerNo", value: "111"),
+            KeyValueEntry(key: "pageSize", value: "20"),
+        ]
+        state.addTokenFactoryRequest()
+        var request = try XCTUnwrap(state.selectedRequest?.wrappedValue)
+        request.url = "https://auth/token"
+        request.body = .formURLEncoded(fields: [KeyValueEntry(key: "username", value: "{{customerNo}}")])
+        state.selectedRequest?.wrappedValue = request
+        try cacheToken()
+        return environmentID
+    }
+
+    private func cacheToken() throws {
+        let environment = state.activeEnvironment
+        let source = try XCTUnwrap(state.tokenSources(for: environment).first)
+        let key = state.tokenKey(source, environment: environment)
+        state.tokenCache[key] = token
+        state.tokenStates[key] = .valid(expiresAt: nil)
+    }
+
+    private func setVariable(_ name: String, to value: String, in environmentID: UUID) {
+        guard var environment = state.environmentBinding(environmentID)?.wrappedValue,
+              let index = environment.variables.firstIndex(where: { $0.key == name }) else {
+            return XCTFail("\(name) yok")
+        }
+        environment.variables[index].value = value
+        state.environmentBinding(environmentID)?.wrappedValue = environment
+    }
+
+    func testEditingTheBodyDropsTheToken() throws {
+        _ = try prepare()
+        var request = try XCTUnwrap(state.selectedRequest?.wrappedValue)
+        request.body = .formURLEncoded(fields: [KeyValueEntry(key: "username", value: "sabit")])
+        state.selectedRequest?.wrappedValue = request
+        XCTAssertTrue(state.tokenCache.isEmpty, "eski gövdenin token'ı bellekte kalmamalı")
+        XCTAssertTrue(state.tokenStates.isEmpty, "panelde durum noktası sönmeli")
+    }
+
+    func testChangingAUsedVariableDropsTheToken() throws {
+        let environmentID = try prepare()
+        setVariable("customerNo", to: "222", in: environmentID)
+        XCTAssertTrue(state.tokenCache.isEmpty, "111'in token'ı 222 için kullanılmamalı")
+    }
+
+    func testRenamingOrUnrelatedChangesKeepTheToken() throws {
+        let environmentID = try prepare()
+        var request = try XCTUnwrap(state.selectedRequest?.wrappedValue)
+        request.name = "Müşteri girişi"
+        state.selectedRequest?.wrappedValue = request
+        setVariable("pageSize", to: "50", in: environmentID)
+        XCTAssertEqual(state.tokenCache.count, 1)
+    }
+
+    func testDeletingTheTokenRequestDropsTheToken() throws {
+        _ = try prepare()
+        let id = try XCTUnwrap(state.selectedRequestID)
+        state.deleteRequest(id)
+        XCTAssertTrue(state.tokenCache.isEmpty)
+    }
+
+    func testManualResponseForAnOutdatedRequestIsNotStored() throws {
+        // Yanıt beklenirken istek düzenlendi: gelen token eski halin token'ı.
+        _ = try prepare()
+        state.tokenCache = [:]
+        state.tokenStates = [:]
+        let sent = try XCTUnwrap(state.selectedRequest?.wrappedValue)
+        var edited = sent
+        edited.url = "https://baska/token"
+        state.selectedRequest?.wrappedValue = edited
+
+        let response = ResponseData(
+            statusCode: 200,
+            headers: [],
+            body: Data(#"{"access_token":"eski-hal"}"#.utf8),
+            duration: 0,
+            finalURL: nil
+        )
+        state.absorbTokenResponse(sent, response: response, environment: state.activeEnvironment)
+        XCTAssertTrue(state.tokenCache.isEmpty)
+
+        state.absorbTokenResponse(edited, response: response, environment: state.activeEnvironment)
+        XCTAssertEqual(state.tokenCache.values.first?.value, "eski-hal")
+    }
+}

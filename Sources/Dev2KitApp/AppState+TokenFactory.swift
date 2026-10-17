@@ -79,12 +79,31 @@ extension AppState {
 
     // MARK: - Token yaşam döngüsü
 
-    /// Önbellek anahtarı: environment + istek + isteğin TAMAMI. Adres, gövde
-    /// ya da alan değişince eski token (süresi dolmamış olsa bile) kullanılmaz.
-    /// Environment ayrı: Dev'de alınan token Prod isteğine gitmez.
-    func tokenKey(_ source: TokenFactory.Source, environment: EnvironmentModel?) -> String {
-        let scope = environment?.id.uuidString ?? "none"
-        return "\(scope)/\(source.request.id.uuidString)/\(source.request.hashValue)"
+    /// Önbellek anahtarı; kural `TokenCacheKey`'te (Core, testli): istek,
+    /// yanıt ayarı ya da kullandığı environment değeri değişince token düşer.
+    func tokenKey(_ source: TokenFactory.Source, environment: EnvironmentModel?) -> TokenCacheKey {
+        TokenCacheKey(source: source, environment: environment)
+    }
+
+    /// Artık hiçbir gönderimde kullanılamayacak token'ları bellekten atar.
+    ///
+    /// Her workspace düzenlemesi kayıttan (`persist`/`persistSoon`) geçtiği
+    /// için oradan çağrılır: gövdeyi ya da `{{customerNo}}`'yu değiştirince eski
+    /// token kullanılmamakla kalmaz, bellekte de beklemez; paneldeki durum
+    /// noktası da söner. Yenisi arka planda değil, ilk ihtiyaçta alınır —
+    /// yazarken her tuşta token sunucusuna gidilmesin.
+    /// Anahtar workspace'in ŞU ANKİ halinde hâlâ kullanılabilir mi.
+    func isLive(_ key: TokenCacheKey) -> Bool {
+        TokenFactory.liveCacheKeys(in: workspace).contains(key)
+    }
+
+    func dropStaleTokens() {
+        guard !tokenCache.isEmpty || !tokenStates.isEmpty else { return }
+        let live = TokenFactory.liveCacheKeys(in: workspace)
+        tokenCache = tokenCache.filter { live.contains($0.key) }
+        let states = tokenStates.filter { live.contains($0.key) }
+        // Gözlenen durum: değişmediyse yazma, panel boşuna yeniden çizilmesin.
+        if states.count != tokenStates.count { tokenStates = states }
     }
 
     func tokenState(_ source: TokenFactory.Source, environment: EnvironmentModel?) -> TokenState? {
@@ -142,12 +161,16 @@ extension AppState {
         defer { tokenFetches[key] = nil }
         do {
             let token = try await task.value
-            tokenCache[key] = token
-            tokenStates[key] = .valid(expiresAt: token.expiresAt)
+            // Bekleyen gönderim token'ı yine kullanır; ama alınırken istek ya
+            // da değer değiştiyse eski hal için gelen token saklanmaz.
+            if isLive(key) {
+                tokenCache[key] = token
+                tokenStates[key] = .valid(expiresAt: token.expiresAt)
+            }
             return token
         } catch {
             tokenCache[key] = nil
-            tokenStates[key] = .failed(error.localizedDescription)
+            tokenStates[key] = isLive(key) ? .failed(error.localizedDescription) : nil
             throw TokenError(variable: source.variable, reason: error.localizedDescription)
         }
     }
@@ -183,16 +206,21 @@ extension AppState {
     /// Kullanıcı Token Factory isteğini kendisi gönderdi: yanıt token'ı
     /// güncellesin. "Token Factory işlemleri orada olsun" — isteği elle
     /// denemek ile token'ı yenilemek aynı hareket.
+    ///
+    /// Token, isteğin GÖNDERİLEN haline göre saklanır: yanıt beklenirken istek
+    /// düzenlendiyse bu yanıt eski halin token'ıdır, saklanmaz.
     func absorbTokenResponse(_ request: RequestModel, response: ResponseData, environment: EnvironmentModel?) {
-        guard let source = tokenSources(for: environment).first(where: { $0.request.id == request.id }) else { return }
+        guard tokenSources(for: environment).contains(where: { $0.request.id == request.id }),
+              let source = TokenFactory.sources(in: [request], environment: environment).first else { return }
         let key = tokenKey(source, environment: environment)
         do {
             let token = try TokenFactory.issue(statusCode: response.statusCode, body: response.body, output: source.output)
+            guard isLive(key) else { return }
             tokenCache[key] = token
             tokenStates[key] = .valid(expiresAt: token.expiresAt)
         } catch {
             tokenCache[key] = nil
-            tokenStates[key] = .failed(error.localizedDescription)
+            tokenStates[key] = isLive(key) ? .failed(error.localizedDescription) : nil
             showTokenAlert("{{\(source.variable)}} güncellenemedi: \(error.localizedDescription)", for: request.id)
         }
     }
