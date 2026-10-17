@@ -167,6 +167,17 @@ public enum TokenFactory {
         /// Zincirleme bilerek desteklenmiyor: döngü ve "hangisi önce" belirsizliği.
         case usesFactoryVariable(request: String, variable: String)
 
+        /// Bu sorun adı verilen isteği ilgilendiriyor mu.
+        public func involves(request name: String) -> Bool {
+            switch self {
+            case .invalidVariableName(let request, _), .emptyResponseField(let request),
+                 .usesFactoryVariable(let request, _):
+                return request == name
+            case .duplicateVariable(_, let requests):
+                return requests.contains(name)
+            }
+        }
+
         public var description: String {
             switch self {
             case .invalidVariableName(let request, let name):

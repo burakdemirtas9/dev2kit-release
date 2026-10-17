@@ -260,7 +260,7 @@ struct HistoryView: View {
             .disabled(entry.requestID == nil)
 
             Menu {
-                ForEach(appState.workspace.collections) { collection in
+                ForEach(appState.workspace.collections.filter { !$0.isTokenFactory }) { collection in
                     Button(collection.name) {
                         appState.restoreAsNewRequest(entry, to: collection.id)
                         notice = "\"\(collection.name)\" içine yeni istek eklendi."

@@ -45,6 +45,9 @@ struct RequestDetailView: View {
         GeometryReader { geometry in
             VStack(spacing: 0) {
                 VStack(spacing: 0) {
+                    if isTokenFactory {
+                        TokenFactoryBanner(variable: (request.tokenOutput ?? TokenOutput()).trimmedVariableName)
+                    }
                     requestBar
                     Divider()
                     editorTabs
@@ -63,7 +66,16 @@ struct RequestDetailView: View {
             .animation(nil, value: responseHeight)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .overlay(alignment: .bottom) {
+            if let alert = appState.tokenAlert, alert.requestID == request.id {
+                TokenAlertToast(alert: alert)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(.easeOut(duration: 0.2), value: appState.tokenAlert)
     }
+
+    private var isTokenFactory: Bool { appState.isTokenFactoryRequest(request.id) }
 
     private func splitter(total: CGFloat) -> some View {
         ZStack {
@@ -250,14 +262,15 @@ struct RequestDetailView: View {
         // Açık sekme AppState'te: ⌘1…⌘4 menü komutları view @State'ine erişemez.
         return VStack(spacing: 0) {
             Picker("", selection: $state.editorTab) {
-                ForEach(EditorTab.allCases) { tab in
+                ForEach(EditorTab.available(isTokenFactory: isTokenFactory)) { tab in
                     Text(tab.rawValue).tag(tab)
                 }
             }
             .pickerStyle(.segmented)
             .padding(10)
 
-            switch appState.editorTab {
+            // Token sekmesi açıkken normal bir isteğe geçilirse Headers'a düşülür.
+            switch appState.editorTab == .token && !isTokenFactory ? .headers : appState.editorTab {
             case .headers:
                 KeyValueEditor(entries: $request.headers, keyPlaceholder: "Header-Adi", valuePlaceholder: "değer veya {{secret:isim}}")
             case .body:
@@ -266,6 +279,8 @@ struct RequestDetailView: View {
                 AuthEditor(auth: $request.auth)
             case .params:
                 KeyValueEditor(entries: $request.queryParams, keyPlaceholder: "param", valuePlaceholder: "değer veya {{degisken}}")
+            case .token:
+                TokenOutputEditor(request: $request)
             }
         }
     }

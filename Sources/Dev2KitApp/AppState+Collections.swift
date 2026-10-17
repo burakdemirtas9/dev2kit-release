@@ -19,14 +19,14 @@ extension AppState {
         let trimmed = newName.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty,
               let index = workspace.collections.firstIndex(where: { $0.id == id }),
-              !workspace.collections[index].isUngrouped else { return }
+              workspace.collections[index].isRegular else { return }
         workspace.collections[index].name = trimmed
         persist()
     }
 
     func deleteCollection(_ id: UUID) {
-        // Koleksiyonsuz kap silinmez; içindeki istekler tek tek silinir.
-        guard workspace.collections.first(where: { $0.id == id })?.isUngrouped != true else { return }
+        // Koleksiyonsuz kap ve Token Factory silinmez; içindeki istekler tek tek silinir.
+        guard workspace.collections.first(where: { $0.id == id })?.isRegular == true else { return }
         let removed = workspace.collections.first { $0.id == id }?.requests.map(\.id) ?? []
         workspace.collections.removeAll { $0.id == id }
         removed.forEach(closeTab)
@@ -40,8 +40,8 @@ extension AppState {
               let from = workspace.collections.firstIndex(where: { $0.id == id }),
               let to = workspace.collections.firstIndex(where: { $0.id == targetID }),
               // Koleksiyonsuz kap hep en üstte: ne taşınır ne önüne bir şey konur.
-              !workspace.collections[from].isUngrouped,
-              !workspace.collections[to].isUngrouped else { return }
+              workspace.collections[from].isRegular,
+              workspace.collections[to].isRegular else { return }
         workspace.collections.move(
             fromOffsets: IndexSet(integer: from),
             toOffset: to > from ? to + 1 : to

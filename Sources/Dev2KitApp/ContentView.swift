@@ -310,7 +310,10 @@ struct SidebarView: View {
         // Filtreleme render başına bir kez: boş-sonuç kontrolü, liste ve
         // eşleşme sayacı aynı sonucu kullanır.
         // Boş "Koleksiyonsuz" kabı gösterilmez: içinde istek yokken bölüm yoktur.
-        let matches = appState.visibleCollections.filter { !($0.collection.isUngrouped && $0.requests.isEmpty) }
+        // Token Factory listede değil, altta kendi bölümünde (TokenFactoryPanel).
+        let matches = appState.visibleCollections.filter {
+            !($0.collection.isUngrouped && $0.requests.isEmpty) && !$0.collection.isTokenFactory
+        }
         // Kirli istekler render başına TEK kez hesaplanır; satırlar ve
         // başlıklar bu kümeye bakar (bkz. AppState.dirtyRequestIDs).
         let dirty = appState.dirtyRequestIDs
@@ -535,7 +538,12 @@ struct SidebarView: View {
         .safeAreaInset(edge: .top, spacing: 0) {
             searchBar(hitCount: RequestSearch.totalRequests(in: matches))
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) { bottomBar }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            VStack(spacing: 0) {
+                TokenFactoryPanel()
+                bottomBar
+            }
+        }
         .fileImporter(
             isPresented: $showingImporter,
             allowedContentTypes: [.json]

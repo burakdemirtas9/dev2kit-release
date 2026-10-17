@@ -106,8 +106,10 @@ struct Dev2KitApp: App {
                 Button(tab.rawValue) {
                     appState.editorTab = tab
                 }
-                // ⌘1…⌘4 — sekme sayısı 9'u geçmediği sürece güvenli.
+                // ⌘1…⌘5 — sekme sayısı 9'u geçmediği sürece güvenli.
                 .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
+                // Token sekmesi yalnızca Token Factory isteklerinde var.
+                .disabled(tab == .token && !(appState.selectedRequestID.map(appState.isTokenFactoryRequest) ?? false))
             }
             .disabled(appState.selectedRequestID == nil)
             Divider()

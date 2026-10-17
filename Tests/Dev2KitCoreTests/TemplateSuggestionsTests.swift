@@ -9,33 +9,33 @@ final class TemplateSuggestionsTests: XCTestCase {
                 KeyValueEntry(key: "baseUrl", value: "https://a"),
                 KeyValueEntry(key: "kapali", value: "x", enabled: false),
                 KeyValueEntry(key: "", value: "adsiz"),
-            ],
-            tokenVariables: [TokenVariable(name: "accessToken")]
+            ]
         )
     }
 
     func testDisabledAndEmptyVariablesAreSkipped() {
-        let options = TemplateSuggestions.options(environment: environment(), secretNames: [], matching: "")
+        let options = TemplateSuggestions.options(environment: environment(), secretNames: [], tokenVariables: ["accessToken"], matching: "")
         XCTAssertEqual(options, ["baseUrl", "accessToken"])
     }
 
     func testSecretsComeLastWithPrefix() {
-        let options = TemplateSuggestions.options(environment: environment(), secretNames: ["token"], matching: "")
+        let options = TemplateSuggestions.options(environment: environment(), secretNames: ["token"], tokenVariables: ["accessToken"], matching: "")
         XCTAssertEqual(options.last, "secret:token")
     }
 
     func testQueryFiltersCaseInsensitively() {
-        let options = TemplateSuggestions.options(environment: environment(), secretNames: ["token"], matching: "TOK")
+        let options = TemplateSuggestions.options(environment: environment(), secretNames: ["token"], tokenVariables: ["accessToken"], matching: "TOK")
         XCTAssertEqual(options, ["accessToken", "secret:token"])
     }
 
     func testTokenVariableDoesNotDuplicateEnvironmentVariable() {
         let environment = EnvironmentModel(
             name: "test",
-            variables: [KeyValueEntry(key: "accessToken", value: "x")],
-            tokenVariables: [TokenVariable(name: "accessToken")]
+            variables: [KeyValueEntry(key: "accessToken", value: "x")]
         )
-        let options = TemplateSuggestions.options(environment: environment, secretNames: [], matching: "")
+        let options = TemplateSuggestions.options(
+            environment: environment, secretNames: [], tokenVariables: ["accessToken"], matching: ""
+        )
         XCTAssertEqual(options, ["accessToken"])
     }
 

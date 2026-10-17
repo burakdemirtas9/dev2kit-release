@@ -1,0 +1,192 @@
+import Foundation
+import Dev2KitCore
+
+/// Token Factory: token üreten istekler ve ürettikleri token'ların bellekteki
+/// yaşam döngüsü. Kurallar (alan yolu, süre, çakışma) Core'da `TokenFactory`;
+/// burası yalnızca ağ çağrısını, önbelleği ve arayüz durumunu yönetir.
+///
+/// Token hiçbir zaman diske yazılmaz: ne workspace'e ne vault'a ne geçmişe.
+/// Gönderimde isteğe `{{secret:token-factory/<ad>}}` olarak bağlanır ve değer
+/// `OverlaySecretStore` ile yalnızca o gönderim için verilir.
+
+extension AppState {
+    // MARK: - Kaynaklar
+
+    func tokenSources(for environment: EnvironmentModel?) -> [TokenFactory.Source] {
+        TokenFactory.sources(in: workspace.tokenFactoryRequests, environment: environment)
+    }
+
+    func isTokenFactoryRequest(_ id: UUID) -> Bool {
+        collection(containing: id)?.isTokenFactory == true
+    }
+
+    /// Token Factory'ye yeni istek ekler ve açar. İlk istek varsayılan adları
+    /// alır (`token`, `access_token`); sonrakiler çakışmasın diye numaralanır.
+    func addTokenFactoryRequest() {
+        clearSearch()
+        let factoryID = workspace.ensureTokenFactoryCollection()
+        guard let index = workspace.collections.firstIndex(where: { $0.id == factoryID }) else { return }
+        let request = RequestModel(
+            name: "Token İsteği",
+            method: .post,
+            tokenOutput: TokenOutput(variableName: uniqueTokenVariableName(base: TokenOutput.defaultVariableName))
+        )
+        workspace.collections[index].requests.append(request)
+        selectedRequestID = request.id
+        pinTab(request.id)
+        persist()
+    }
+
+    /// Token Factory'de kullanılmayan değişken adı: `token`, `token2`, `token3`…
+    func uniqueTokenVariableName(base: String) -> String {
+        let root = TokenFactory.isValidVariableName(base) ? base : TokenOutput.defaultVariableName
+        let taken = Set(workspace.tokenFactoryRequests.map { ($0.tokenOutput ?? TokenOutput()).trimmedVariableName })
+        if !taken.contains(root) { return root }
+        return (2...).lazy.map { "\(root)\($0)" }.first { !taken.contains($0) } ?? root
+    }
+
+    // MARK: - Token yaşam döngüsü
+
+    /// Önbellek anahtarı: environment + istek + isteğin TAMAMI. Adres, gövde
+    /// ya da alan değişince eski token (süresi dolmamış olsa bile) kullanılmaz.
+    /// Environment ayrı: Dev'de alınan token Prod isteğine gitmez.
+    func tokenKey(_ source: TokenFactory.Source, environment: EnvironmentModel?) -> String {
+        let scope = environment?.id.uuidString ?? "none"
+        return "\(scope)/\(source.request.id.uuidString)/\(source.request.hashValue)"
+    }
+
+    func tokenState(_ source: TokenFactory.Source, environment: EnvironmentModel?) -> TokenState? {
+        tokenStates[tokenKey(source, environment: environment)]
+    }
+
+    /// Bellekteki token geçerliyse onu, değilse (yoksa ya da süresinin
+    /// bitmesine 10 sn'den az kaldıysa) yenisini döner.
+    func validToken(
+        _ source: TokenFactory.Source,
+        environment: EnvironmentModel?,
+        forceRefresh: Bool = false
+    ) async throws -> TokenFactory.IssuedToken {
+        let key = tokenKey(source, environment: environment)
+        if !forceRefresh, let cached = tokenCache[key], !cached.needsRefresh() { return cached }
+        if let running = tokenFetches[key] {
+            do {
+                return try await running.value
+            } catch {
+                throw TokenError(variable: source.variable, reason: error.localizedDescription)
+            }
+        }
+
+        // Token isteği environment'ın KENDİ değişkenleriyle gider; token
+        // değişkenleri bağlanmaz (token isteği başka token'a bağlı olamaz,
+        // bkz. `TokenFactory.Problem.usesFactoryVariable`).
+        let engine = engine
+        let store = secretStore
+        let policy = hostPolicy
+        let approvals = approvalStore.load()
+        let request = source.request
+        let output = source.output
+        let task = Task { () throws -> TokenFactory.IssuedToken in
+            let response: ResponseData
+            do {
+                response = try await engine.send(
+                    request,
+                    environment: environment,
+                    secretStore: store,
+                    hostPolicy: policy,
+                    approvedWarnings: approvals
+                )
+            } catch RequestEngineError.needsApproval {
+                // Onay ekranı token alırken gösterilemez; kullanıcı token
+                // isteğini bir kez kendisi gönderip onaylamalı.
+                throw TokenFetchError(
+                    message: "token isteği \"\(request.name)\" güvenlik onayı bekliyor. "
+                        + "Token Factory'de isteği açıp bir kez gönder ve onayla."
+                )
+            }
+            return try TokenFactory.issue(statusCode: response.statusCode, body: response.body, output: output)
+        }
+        tokenFetches[key] = task
+        tokenStates[key] = .fetching
+        defer { tokenFetches[key] = nil }
+        do {
+            let token = try await task.value
+            tokenCache[key] = token
+            tokenStates[key] = .valid(expiresAt: token.expiresAt)
+            return token
+        } catch {
+            tokenCache[key] = nil
+            tokenStates[key] = .failed(error.localizedDescription)
+            throw TokenError(variable: source.variable, reason: error.localizedDescription)
+        }
+    }
+
+    /// Gönderim için environment ve secret deposu: kullanılan her token
+    /// geçerli bir değere bağlanır. Biri alınamazsa istek gönderilmez.
+    func prepareTokens(
+        _ sources: [TokenFactory.Source],
+        environment: EnvironmentModel?
+    ) async throws -> (EnvironmentModel?, SecretStore) {
+        guard !sources.isEmpty else { return (environment, secretStore) }
+        var overrides: [String: String] = [:]
+        for source in sources {
+            overrides[source.secretName] = try await validToken(source, environment: environment).value
+        }
+        return (
+            TokenFactory.environmentForSend(environment, sources: sources),
+            OverlaySecretStore(base: secretStore, overrides: overrides)
+        )
+    }
+
+    func forgetToken(_ source: TokenFactory.Source, environment: EnvironmentModel?) {
+        let key = tokenKey(source, environment: environment)
+        tokenCache[key] = nil
+        tokenStates[key] = nil
+    }
+
+    /// Kullanıcı Token Factory isteğini kendisi gönderdi: yanıt token'ı
+    /// güncellesin. "Token Factory işlemleri orada olsun" — isteği elle
+    /// denemek ile token'ı yenilemek aynı hareket.
+    func absorbTokenResponse(_ request: RequestModel, response: ResponseData, environment: EnvironmentModel?) {
+        guard let source = tokenSources(for: environment).first(where: { $0.request.id == request.id }) else { return }
+        let key = tokenKey(source, environment: environment)
+        do {
+            let token = try TokenFactory.issue(statusCode: response.statusCode, body: response.body, output: source.output)
+            tokenCache[key] = token
+            tokenStates[key] = .valid(expiresAt: token.expiresAt)
+        } catch {
+            tokenCache[key] = nil
+            tokenStates[key] = .failed(error.localizedDescription)
+            showTokenAlert("{{\(source.variable)}} güncellenemedi: \(error.localizedDescription)", for: request.id)
+        }
+    }
+
+    /// cURL dışa aktarımı için: bellekte geçerli token varsa o, yoksa değişken
+    /// adı (`{{token}}`) yazılır. Token almak için ağa ÇIKILMAZ.
+    func cachedTokenBindings(for environment: EnvironmentModel?) -> (EnvironmentModel?, SecretStore) {
+        let sources = tokenSources(for: environment)
+        guard !sources.isEmpty else { return (environment, secretStore) }
+        var overrides: [String: String] = [:]
+        for source in sources {
+            let cached = tokenCache[tokenKey(source, environment: environment)]
+            overrides[source.secretName] = cached.flatMap { $0.needsRefresh() ? nil : $0.value }
+                ?? "{{\(source.variable)}}"
+        }
+        return (
+            TokenFactory.environmentForSend(environment, sources: sources),
+            OverlaySecretStore(base: secretStore, overrides: overrides)
+        )
+    }
+
+    func showTokenAlert(_ message: String, for requestID: UUID) {
+        tokenAlert = TokenAlert(requestID: requestID, message: message)
+    }
+
+    func dismissTokenAlert(_ id: UUID) {
+        if tokenAlert?.id == id { tokenAlert = nil }
+    }
+
+    struct TokenFetchError: LocalizedError {
+        let message: String
+        var errorDescription: String? { message }
+    }
+}

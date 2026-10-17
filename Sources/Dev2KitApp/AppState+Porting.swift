@@ -227,19 +227,8 @@ extension AppState {
     }
 
     func curlCommand(for request: RequestModel, includeSecrets: Bool) -> String {
-        // Token değişkenleri: bellekte geçerli token varsa o, yoksa değişken adı yazılır.
-        var environment = activeEnvironment
-        var store = secretStore
-        if let active = activeEnvironment, !active.tokenVariables.isEmpty {
-            var overrides: [String: String] = [:]
-            for variable in active.tokenVariables {
-                let cached = tokenCache[tokenKey(variable, in: active)]
-                overrides[variable.secretName] = cached.flatMap { $0.isExpired() ? nil : $0.accessToken }
-                    ?? "{{\(variable.trimmedName)}}"
-            }
-            environment = TokenVariables.environmentForSend(active)
-            store = OverlaySecretStore(base: secretStore, overrides: overrides)
-        }
+        // Token Factory: bellekte geçerli token varsa o, yoksa değişken adı yazılır.
+        let (environment, store) = cachedTokenBindings(for: activeEnvironment)
         do {
             return try CurlExporter.export(
                 request,

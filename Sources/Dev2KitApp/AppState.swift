@@ -50,8 +50,15 @@ enum EditorTab: String, CaseIterable, Identifiable {
     case body = "Body"
     case auth = "Auth"
     case params = "Query"
+    /// Yalnızca Token Factory isteklerinde: yanıttaki alan ve değişken.
+    case token = "Token"
 
     var id: String { rawValue }
+
+    /// İstekte gösterilecek sekmeler.
+    static func available(isTokenFactory: Bool) -> [EditorTab] {
+        isTokenFactory ? allCases : allCases.filter { $0 != .token }
+    }
 }
 
 /// Uygulamanın tek merkezi durumu. Workspace değişiklikleri debounce'suz,
@@ -233,8 +240,9 @@ final class AppState {
     }
 
     /// Sidebar'da gösterilecek koleksiyonlar; arama boşsa hepsi.
+    /// Token Factory hariç: o, listenin altında kendi bölümünde.
     var visibleCollections: [RequestSearch.Match] {
-        RequestSearch.filter(workspace.collections, query: searchQuery)
+        RequestSearch.filter(workspace.collections.filter { !$0.isTokenFactory }, query: searchQuery)
     }
 
     /// Arama sonucundaki ilk istek — arama alanında ⏎ ile seçilir.
@@ -441,6 +449,11 @@ final class AppState {
             workspace.collections = [CollectionModel(name: "İlk Koleksiyon", requests: [RequestModel()])]
             persist()
         }
+        // Eski environment "token değişkenleri" Token Factory'ye taşınır; bir
+        // kez çalışır (taşınanlar environment'tan silinir).
+        if TokenFactoryMigration.migrate(&workspace) > 0 {
+            persist()
+        }
         history = historyStore.entries()
         engine.tlsProfiles = workspace.tlsProfiles
         engine.trustStoreAllowsLongValidity = trustStoreAllowsLongValidity
@@ -581,6 +594,10 @@ final class AppState {
     func addRequestToCurrentCollection() {
         clearSearch()
         if let id = selectedRequestID, let current = collection(containing: id) {
+            if current.isTokenFactory {
+                addTokenFactoryRequest()
+                return
+            }
             addRequest(to: current.id)
             return
         }
@@ -604,6 +621,13 @@ final class AppState {
             suffix: "kopya",
             existingNames: workspace.collections[location.collection].requests.map(\.name)
         )
+        // Token Factory'de kopya aynı değişkeni yazmaya kalkmasın: çakışma
+        // uyarısıyla başlamak yerine boş bir ad alır.
+        if workspace.collections[location.collection].isTokenFactory {
+            var output = copy.tokenOutput ?? TokenOutput()
+            output.variableName = uniqueTokenVariableName(base: output.trimmedVariableName)
+            copy.tokenOutput = output
+        }
         workspace.collections[location.collection].requests.insert(copy, at: location.request + 1)
         selectedRequestID = copy.id
         pinTab(copy.id)
@@ -619,9 +643,14 @@ final class AppState {
     /// Ad çakışması tek istekteki kuralla aynı: "isim taşınan", "isim taşınan 2"…
     func moveRequests(_ ids: Set<UUID>, toCollection targetID: UUID) {
         guard !ids.isEmpty,
-              let target = workspace.collections.firstIndex(where: { $0.id == targetID }) else { return }
+              let target = workspace.collections.firstIndex(where: { $0.id == targetID }),
+              // Token Factory'ye taşınarak girilmez, taşınarak çıkılmaz: oradaki
+              // istek tüm isteklere token yazar; bunun bir taşıma yan etkisi
+              // olarak başlaması ya da bitmesi beklenmez.
+              !workspace.collections[target].isTokenFactory else { return }
         var moved: [RequestModel] = []
-        for index in workspace.collections.indices where index != target {
+        for index in workspace.collections.indices
+        where index != target && !workspace.collections[index].isTokenFactory {
             let picked = workspace.collections[index].requests.filter { ids.contains($0.id) }
             guard !picked.isEmpty else { continue }
             workspace.collections[index].requests.removeAll { ids.contains($0.id) }
@@ -727,7 +756,7 @@ final class AppState {
 
     @ObservationIgnored var inFlight: [UUID: Task<Void, Never>] = [:]
 
-    // MARK: - Token değişkenleri (davranış: AppState+Sending)
+    // MARK: - Token Factory (davranış: AppState+TokenFactory)
 
     enum TokenState: Equatable {
         case fetching
@@ -735,18 +764,30 @@ final class AppState {
         case failed(String)
     }
 
-    /// Arayüz için: environment + değişken başına son durum.
+    /// Arayüz için: environment + kaynak başına son durum.
     var tokenStates: [String: TokenState] = [:]
-    /// Token'lar yalnızca bellekte; uygulama kapanınca gider.
-    @ObservationIgnored var tokenCache: [String: OAuth2Token] = [:]
+    /// Token'lar yalnızca bellekte; uygulama kapanınca gider. Diske, vault'a
+    /// bile yazılmaz.
+    @ObservationIgnored var tokenCache: [String: TokenFactory.IssuedToken] = [:]
     /// Süren alma işlemleri: aynı anda gelen istekler tek isteği paylaşır.
-    @ObservationIgnored var tokenFetches: [String: Task<OAuth2Token, Error>] = [:]
+    @ObservationIgnored var tokenFetches: [String: Task<TokenFactory.IssuedToken, Error>] = [:]
 
     struct TokenError: LocalizedError {
         let variable: String
         let reason: String
         var errorDescription: String? { "{{\(variable)}} için token alınamadı; istek gönderilmedi. \(reason)" }
     }
+
+    /// Alttan çıkıp kendiliğinden kaybolan uyarı. Yalnızca ait olduğu istek
+    /// açıkken görünür; kimlik her gösterimde yenilenir ki aynı metin art
+    /// arda gelse de zamanlayıcı baştan başlasın.
+    struct TokenAlert: Equatable, Identifiable {
+        let id = UUID()
+        let requestID: UUID
+        let message: String
+    }
+
+    var tokenAlert: TokenAlert?
 
     // MARK: - OAuth2 durumu (davranış: AppState+Sending)
 
@@ -831,6 +872,7 @@ final class AppState {
         TemplateSuggestions.options(
             environment: activeEnvironment,
             secretNames: secretNames,
+            tokenVariables: tokenSources(for: activeEnvironment).map(\.variable),
             matching: token
         )
     }

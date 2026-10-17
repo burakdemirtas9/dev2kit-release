@@ -4,7 +4,8 @@ import SwiftUI
 import Dev2KitCore
 
 /// Gönderim akışı: istek gönderme, yanıt durumu, güvenlik onayları, iptal;
-/// ayrıca gönderimden önce hazırlanması gereken token değişkenleri ve OAuth2.
+/// ayrıca gönderimden önce hazırlanması gereken Token Factory token'ları
+/// (bkz. AppState+TokenFactory) ve OAuth2.
 /// Hepsi tek zincir olduğu için aynı dosyada: gönder → (gerekirse) token al →
 /// (gerekirse) onay iste → yanıtı yaz → geçmişe kaydet.
 
@@ -29,15 +30,28 @@ extension AppState {
         // Önceki denemeden kalan öneri yeni istekle karışmasın.
         tlsSuggestion = nil
         let environment = activeEnvironment
-        let usedTokens = TokenVariables.referenced(by: request, environment: environment)
+        // Token Factory isteğinin kendisi token değişkenlerine bağlanmaz (o
+        // token'ı ÜRETEN istek); diğer istekler kullandıkları token'ları alır.
+        let isTokenRequest = isTokenFactoryRequest(id)
+        let usedTokens = isTokenRequest
+            ? []
+            : TokenFactory.referenced(by: request, environment: environment, sources: tokenSources(for: environment))
 
         inFlight[id] = Task { [weak self] in
             guard let self else { return }
             do {
                 await self.ensureValidToken(request)
-                // Token değişkeni kullanan istekte önce geçerli token hazırlanır;
-                // süresi dolmamışsa bellektekiyle hiç ağa çıkılmadan devam edilir.
-                let (sendEnvironment, sendStore) = try await self.prepareTokens(usedTokens, environment: environment)
+                // Token kullanan istekte önce geçerli token hazırlanır; süresinin
+                // bitmesine 10 sn'den fazla varsa bellektekiyle hiç ağa
+                // çıkılmadan devam edilir. Alınamazsa istek GÖNDERİLMEZ.
+                let sendEnvironment: EnvironmentModel?
+                let sendStore: SecretStore
+                do {
+                    (sendEnvironment, sendStore) = try await self.prepareTokens(usedTokens, environment: environment)
+                } catch let error as TokenError {
+                    self.showTokenAlert(error.localizedDescription, for: id)
+                    throw error
+                }
                 let response = try await engine.send(
                     request,
                     environment: sendEnvironment,
@@ -48,8 +62,11 @@ extension AppState {
                 // Token sunucuda erken geçersiz kılınmış olabilir: bir sonraki
                 // gönderim yenisini alsın. İstek bilerek yeniden gönderilmez;
                 // kullanıcı 401'i görür ve tekrar gönderir.
-                if response.statusCode == 401, let environment {
-                    usedTokens.forEach { self.forgetToken($0, in: environment) }
+                if response.statusCode == 401 {
+                    usedTokens.forEach { self.forgetToken($0, environment: environment) }
+                }
+                if isTokenRequest {
+                    self.absorbTokenResponse(request, response: response, environment: environment)
                 }
                 let display = await Task.detached { AppState.makeDisplay(response) }.value
                 try Task.checkCancellation()
@@ -120,76 +137,6 @@ extension AppState {
         inFlight[id]?.cancel()
         inFlight[id] = nil
         setResponse(.idle, for: id)
-    }
-
-    /// Anahtar değişkenin ayarlarını da içerir: token adresi, client ya da
-    /// scope değişince eski token (süresi dolmamış olsa bile) kullanılmaz.
-    func tokenKey(_ variable: TokenVariable, in environment: EnvironmentModel) -> String {
-        "\(environment.id.uuidString)/\(variable.id.uuidString)/\(variable.hashValue)"
-    }
-
-    func tokenState(_ variable: TokenVariable, in environment: EnvironmentModel) -> TokenState? {
-        tokenStates[tokenKey(variable, in: environment)]
-    }
-
-    /// Gönderim için environment ve secret deposunu hazırlar: kullanılan her
-    /// token değişkeni geçerli bir token'a bağlanır.
-    private func prepareTokens(
-        _ variables: [TokenVariable],
-        environment: EnvironmentModel?
-    ) async throws -> (EnvironmentModel?, SecretStore) {
-        guard let environment, !variables.isEmpty else { return (environment, secretStore) }
-        var overrides: [String: String] = [:]
-        for variable in variables {
-            overrides[variable.secretName] = try await validToken(variable, in: environment).accessToken
-        }
-        return (TokenVariables.environmentForSend(environment), OverlaySecretStore(base: secretStore, overrides: overrides))
-    }
-
-    /// Bellekteki token geçerliyse onu, değilse yenisini döner.
-    func validToken(_ variable: TokenVariable, in environment: EnvironmentModel, forceRefresh: Bool = false) async throws -> OAuth2Token {
-        let key = tokenKey(variable, in: environment)
-        if !forceRefresh, let cached = tokenCache[key], !cached.isExpired() { return cached }
-        if let running = tokenFetches[key] {
-            do {
-                return try await running.value
-            } catch {
-                throw TokenError(variable: variable.trimmedName, reason: error.localizedDescription)
-            }
-        }
-
-        let resolver = VariableResolver(environment: environment, secretStore: secretStore)
-        let service = oauthService
-        let policy = hostPolicy
-        let task = Task { () throws -> OAuth2Token in
-            try await service.clientCredentials(
-                tokenURL: try resolver.resolve(variable.tokenURL),
-                clientID: try resolver.resolve(variable.clientID),
-                clientSecret: try resolver.resolve(variable.clientSecret),
-                scope: try resolver.resolve(variable.scope),
-                authentication: variable.clientAuthentication,
-                hostPolicy: policy
-            )
-        }
-        tokenFetches[key] = task
-        tokenStates[key] = .fetching
-        defer { tokenFetches[key] = nil }
-        do {
-            let token = try await task.value
-            tokenCache[key] = token
-            tokenStates[key] = .valid(expiresAt: token.expiresAt)
-            return token
-        } catch {
-            tokenCache[key] = nil
-            tokenStates[key] = .failed(error.localizedDescription)
-            throw TokenError(variable: variable.trimmedName, reason: error.localizedDescription)
-        }
-    }
-
-    func forgetToken(_ variable: TokenVariable, in environment: EnvironmentModel) {
-        let key = tokenKey(variable, in: environment)
-        tokenCache[key] = nil
-        tokenStates[key] = nil
     }
 
     /// Gönderimden önce token'ın geçerli olduğundan emin olur; süresi dolmuşsa

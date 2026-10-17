@@ -68,7 +68,7 @@ struct CurlImportView: View {
 
             HStack {
                 Picker("Ekle:", selection: $targetCollectionID) {
-                    ForEach(appState.workspace.collections) { collection in
+                    ForEach(appState.workspace.collections.filter { !$0.isTokenFactory }) { collection in
                         Text(collection.name).tag(UUID?.some(collection.id))
                     }
                 }
