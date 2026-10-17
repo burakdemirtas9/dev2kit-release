@@ -44,6 +44,7 @@ struct BodyEditor: View {
         case .xml: return "XML"
         case .html: return "HTML"
         case .javascript: return "JavaScript"
+        case .css: return "CSS"
         }
     }
 

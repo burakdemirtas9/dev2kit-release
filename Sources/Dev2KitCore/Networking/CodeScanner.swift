@@ -210,6 +210,14 @@ struct IndentedWriter {
         text += "\n" + String(repeating: indent, count: level)
     }
 
+    /// Bir boş satır bırakıp yeni satıra geçer (CSS kuralları arası gibi).
+    mutating func blankLine() {
+        trimTrailing()
+        lineClosed = false
+        guard !text.isEmpty else { return }
+        text += "\n\n" + String(repeating: indent, count: level)
+    }
+
     /// Kaynakta aynı satırda duran yorum kodun yanında kalır; kendi satırındaki
     /// yorum kendi satırında. Ardından gelen kod yeni satıra iner; yalnızca
     /// satır içi `/* */` yorumundan sonra aynı satırda devam edilir.

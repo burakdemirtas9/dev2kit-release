@@ -7,6 +7,7 @@ enum CodeLanguage: Equatable {
     case json
     case markup      // XML / HTML
     case javascript
+    case css
 
     /// Katlanabilir mi ve hangi tarayıcıyla.
     ///
@@ -15,7 +16,7 @@ enum CodeLanguage: Equatable {
     /// derleyici eksik kalan yeri göstersin.
     func foldableRegions(in text: String) -> [FoldRegion] {
         switch self {
-        case .json, .javascript: return JSONFolding.regions(in: text)
+        case .json, .javascript, .css: return JSONFolding.regions(in: text)
         case .markup: return MarkupFolding.regions(in: text)
         case .plain: return []
         }
@@ -32,6 +33,7 @@ enum CodeLanguage: Equatable {
         case .json: self = .json
         case .xml, .html: self = .markup
         case .javascript: self = .javascript
+        case .css: self = .css
         case .plain: self = .plain
         }
     }
@@ -75,12 +77,24 @@ enum SyntaxHighlighter {
         Rule(#"//[^\n]*|/\*[\s\S]*?\*/"#, Theme.syntaxComment),
     ]
 
+    /// CSS: özellik adı mor, sayı (birimiyle) sarı, string yeşil, `@` kuralları
+    /// ve `!important` kırmızı, yorum gri. Sonraki kural öncekini ezer.
+    private static let cssRules: [Rule] = [
+        Rule(#"([\w-]+)\s*:"#, Theme.syntaxKey, group: 1),
+        Rule(#"-?\b\d+(?:\.\d+)?(?:px|em|rem|%|vh|vw|s|ms|deg|fr)?\b"#, Theme.syntaxNumber),
+        Rule(#"#[0-9a-fA-F]{3,8}\b"#, Theme.syntaxNumber),
+        Rule(#"@[\w-]+|!important"#, Theme.syntaxKeyword),
+        Rule(#""[^"]*"|'[^']*'"#, Theme.syntaxString),
+        Rule(#"/\*[\s\S]*?\*/"#, Theme.syntaxComment),
+    ]
+
     private static func rules(for language: CodeLanguage) -> [Rule] {
         switch language {
         case .plain: return []
         case .json: return jsonRules
         case .markup: return markupRules
         case .javascript: return javascriptRules
+        case .css: return cssRules
         }
     }
 
