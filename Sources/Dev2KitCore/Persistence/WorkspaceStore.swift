@@ -18,6 +18,32 @@ public struct WorkspaceStore: Sendable {
         return try JSONDecoder().decode(WorkspaceModel.self, from: data)
     }
 
+    /// Okunamayan workspace dosyasını aynı klasöre yedekler ve yedeğin adresini döner:
+    /// `workspace.bozuk-20261017-224512.json`.
+    ///
+    /// Neden: okuma başarısız olunca uygulama boş workspace ile açılıyor ve ilk
+    /// kayıt bozuk dosyanın ÜZERİNE yazıyordu — uyarı ekrana geldiğinde veri
+    /// zaten gitmiş oluyordu. Dosya bozuk olabilir ama içindeki istekler elle
+    /// kurtarılabilir; ezilmeden önce kenara alınır. Kopyalanır, taşınmaz:
+    /// yedek alınamazsa asıl dosya yerinde kalsın.
+    @discardableResult
+    public func backUpUnreadableFile(now: Date = Date()) throws -> URL {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyyMMdd-HHmmss"
+        let directory = fileURL.deletingLastPathComponent()
+        let stem = fileURL.deletingPathExtension().lastPathComponent
+        let base = "\(stem).bozuk-\(formatter.string(from: now))"
+        var backup = directory.appendingPathComponent("\(base).json")
+        var attempt = 2
+        while FileManager.default.fileExists(atPath: backup.path) {
+            backup = directory.appendingPathComponent("\(base)-\(attempt).json")
+            attempt += 1
+        }
+        try FileManager.default.copyItem(at: fileURL, to: backup)
+        return backup
+    }
+
     public func save(_ workspace: WorkspaceModel) throws {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys] // git diff'leri stabil kalsın

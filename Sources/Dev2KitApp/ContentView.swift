@@ -153,10 +153,13 @@ struct ContentView: View {
         .onChange(of: appState.tlsSettingsRequest) {
             showingTLS = true
         }
-        .alert("Hata", isPresented: .constant(state.saveError != nil)) {
-            Button("Tamam") { state.saveError = nil }
+        // Açılış uyarısı önce: kayıt hatası gelse de kaybolmasın.
+        .alert("Hata", isPresented: .constant(state.startupWarning != nil || state.saveError != nil)) {
+            Button("Tamam") {
+                if state.startupWarning != nil { state.startupWarning = nil } else { state.saveError = nil }
+            }
         } message: {
-            Text(state.saveError ?? "")
+            Text(state.startupWarning ?? state.saveError ?? "")
         }
         .alert("Koleksiyon Aktarımı", isPresented: .constant(state.portingMessage != nil)) {
             Button("Tamam") { state.portingMessage = nil }

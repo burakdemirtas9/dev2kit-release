@@ -163,6 +163,10 @@ final class AppState {
     }
 
     var saveError: String?
+    /// Açılışta workspace okunamadı uyarısı. `saveError`'dan ayrı: başarılı
+    /// ilk kayıt `saveError`'ı temizliyor, uyarı kullanıcı görmeden siliniyordu.
+    /// Yalnızca kullanıcı kapatınca gider.
+    var startupWarning: String?
 
     // MARK: - Sidebar arama
 
@@ -441,9 +445,22 @@ final class AppState {
         do {
             self.workspace = try store.load()
         } catch {
-            // Bozuk dosyada veriyi ezmemek için boş workspace ile devam edip uyarı gösterilir.
+            // Boş workspace ile devam edilir; aşağıdaki ilk kayıt dosyanın
+            // üzerine yazacağı için bozuk dosya ÖNCE yedeklenir. Yedek
+            // alınamazsa bu oturumda hiç yazılmaz: veri ezilmektense
+            // değişiklikler kaydedilmesin.
             self.workspace = WorkspaceModel()
-            self.saveError = "Workspace okunamadı: \(error.localizedDescription)"
+            do {
+                let backup = try store.backUpUnreadableFile()
+                self.startupWarning = "Workspace okunamadı: \(error.localizedDescription)\n\n"
+                    + "Okunamayan dosya yedeklendi:\n\(backup.path)\n\nBoş bir workspace ile açıldı."
+            } catch let backupError {
+                self.persistenceBlocked = true
+                self.startupWarning = "Workspace okunamadı: \(error.localizedDescription)\n\n"
+                    + "Dosya yedeklenemedi (\(backupError.localizedDescription)). Üzerine yazılmaması için "
+                    + "bu oturumda değişiklikler KAYDEDİLMEYECEK. Dosyayı düzeltip ya da kenara alıp "
+                    + "uygulamayı yeniden aç:\n\(store.fileURL.path)"
+            }
         }
         if workspace.collections.isEmpty {
             workspace.collections = [CollectionModel(name: "İlk Koleksiyon", requests: [RequestModel()])]
@@ -919,9 +936,16 @@ final class AppState {
     }
 
     @ObservationIgnored private var persistTask: Task<Void, Never>?
+    /// Okunamayan workspace dosyası yedeklenemedi: üzerine yazılmasın diye bu
+    /// oturumda kayıt yapılmaz (bkz. `init`).
+    @ObservationIgnored private(set) var persistenceBlocked = false
 
     private func writeWorkspace() {
         persistTask = nil
+        guard !persistenceBlocked else {
+            saveState = .failed("Workspace dosyası okunamadığı için kayıt kapalı")
+            return
+        }
         // Encode + disk yazımı arka planda; MainActor yalnızca sonucu işler.
         saver.save(workspace) { error in
             MainActor.assumeIsolated {
