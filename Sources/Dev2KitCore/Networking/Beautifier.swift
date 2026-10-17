@@ -8,7 +8,9 @@ import Foundation
 /// değişsin diye burada toplandı.
 ///
 /// Biçimlendiricilerin kendisi ayrı: `JSONFormatter`, `MarkupFormatter`,
-/// `ScriptFormatter`. Buradaki iş yalnızca "hangisi" kararı ve tek tip hata.
+/// `ScriptFormatter`. Buradaki iş yalnızca "hangisi" kararı. Hepsi aynı
+/// ortak parçaları kullanır (`CodeScanner`, `IndentedWriter`, `BeautifyError`);
+/// yeni bir tür eklenirken tarayıcı/yazıcı yeniden yazılmaz, bunlar kullanılır.
 public enum Beautifier {
     public enum Kind: String, Sendable, CaseIterable {
         case json, xml, html, javascript, plain
@@ -32,7 +34,11 @@ public enum Beautifier {
         if header.contains("html") { return .html }
         if header.contains("javascript") { return .javascript }
 
-        let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        var trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Baştaki yorumu atla: `// örnek istek\n{…}` de JSON'dur.
+        if trimmed.hasPrefix("/") {
+            trimmed = CodeScanner.strippingComments(trimmed).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
         if trimmed.hasPrefix("{") || trimmed.hasPrefix("[") { return .json }
         if trimmed.hasPrefix("<") { return .xml }
         return .plain

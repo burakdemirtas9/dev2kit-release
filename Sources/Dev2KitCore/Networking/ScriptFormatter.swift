@@ -7,190 +7,118 @@ import Foundation
 /// literalleri atomik olarak korunur; girinti `{}` `[]` `()` dengesine göre
 /// kurulur. Boş satırlar normalize edilir.
 public enum ScriptFormatter {
-    public struct FormatError: Error, LocalizedError, Equatable {
-        public let message: String
-        public var errorDescription: String? { message }
-    }
+    static let language = "JavaScript"
 
     public static func beautify(_ text: String, indent: String = "  ") throws -> String {
-        let chars = Array(text.trimmingCharacters(in: .whitespacesAndNewlines))
-        guard !chars.isEmpty else {
-            throw FormatError(message: "Geçersiz JavaScript: içerik boş")
-        }
-
-        var out = ""
-        var level = 0
+        var scanner = CodeScanner(try BeautifyError.requireContent(text, language: language))
+        var writer = IndentedWriter(indent: indent)
         var stack: [Character] = []
-        var index = 0
-        /// Regex literal mi bölme operatörü mü ayırmak için son anlamlı karakter.
-        var lastMeaningful: Character?
 
-        func trimTrailing() {
-            while let last = out.last, last == " " || last == "\n" { out.removeLast() }
-        }
-        func newline() {
-            trimTrailing()
-            guard !out.isEmpty else { return }
-            out += "\n" + String(repeating: indent, count: level)
-        }
-        func append(_ piece: String) {
-            out += piece
-            if let last = piece.last, !last.isWhitespace { lastMeaningful = last }
-        }
-        func nextNonSpace(after position: Int) -> Character? {
-            var i = position
-            while i < chars.count, chars[i].isWhitespace { i += 1 }
-            return i < chars.count ? chars[i] : nil
-        }
         /// `/` bu konumda regex başlatıyor mu? Önceki anlamlı karakter bir
         /// değer sonuysa (identifier, sayı, `)`, `]`) bölme operatörüdür.
         var regexAllowed: Bool {
-            guard let last = lastMeaningful else { return true }
+            guard let last = writer.lastMeaningful else { return true }
             return !(last.isLetter || last.isNumber || last == ")" || last == "]" || last == "_" || last == "$")
         }
-        func readUntil(_ terminator: String, from: Int) -> Int? {
-            let needle = Array(terminator)
-            var i = from
-            while i + needle.count <= chars.count {
-                if Array(chars[i..<(i + needle.count)]) == needle { return i + needle.count - 1 }
-                i += 1
-            }
-            return nil
-        }
-        /// Kaçış karakterlerine saygı duyarak kapanış sınırlayıcısını bulur.
-        func readDelimited(open: Character, from: Int) -> Int? {
-            var i = from + 1
-            while i < chars.count {
-                if chars[i] == "\\" { i += 2; continue }
-                if chars[i] == open { return i }
-                if open != "`", chars[i] == "\n" { return nil }
-                i += 1
-            }
-            return nil
-        }
 
-        while index < chars.count {
-            let ch = chars[index]
+        while !scanner.isAtEnd {
+            let ch = scanner.current
 
             if ch.isWhitespace {
-                if let last = out.last, last != " ", last != "\n" { out += " " }
-                index += 1
+                writer.space()
+                scanner.index += 1
                 continue
             }
 
-            // Yorumlar
-            if ch == "/", index + 1 < chars.count, chars[index + 1] == "/" {
-                var end = index
-                while end < chars.count, chars[end] != "\n" { end += 1 }
-                newline()
-                append(String(chars[index..<end]))
-                newline()
-                index = end
-                continue
-            }
-            if ch == "/", index + 1 < chars.count, chars[index + 1] == "*" {
-                guard let end = readUntil("*/", from: index + 2) else {
-                    throw FormatError(message: "Geçersiz JavaScript: /* yorumu */ ile kapatılmamış.")
-                }
-                newline()
-                append(String(chars[index...end]))
-                newline()
-                index = end + 1
+            if let comment = try scanner.readComment(language: language) {
+                writer.comment(comment)
                 continue
             }
 
             // String ve template literal
             if ch == "\"" || ch == "'" || ch == "`" {
-                guard let end = readDelimited(open: ch, from: index) else {
-                    throw FormatError(message: "Geçersiz JavaScript: \(ch) ile açılan metin kapatılmamış.")
+                guard let quoted = scanner.readQuoted(multiline: ch == "`") else {
+                    throw BeautifyError.invalid(language, "\(ch) ile açılan metin kapatılmamış.")
                 }
-                append(String(chars[index...end]))
-                index = end + 1
+                writer.append(quoted)
                 continue
             }
 
-            // Regex literal
-            if ch == "/", regexAllowed, let end = readDelimited(open: "/", from: index) {
-                var last = end
-                while last + 1 < chars.count, chars[last + 1].isLetter { last += 1 }
-                append(String(chars[index...last]))
-                index = last + 1
+            // Regex literal (bayraklarıyla: /a/gi)
+            if ch == "/", regexAllowed, var literal = scanner.readQuoted(multiline: false) {
+                while !scanner.isAtEnd, scanner.current.isLetter {
+                    literal.append(scanner.current)
+                    scanner.index += 1
+                }
+                writer.append(literal)
                 continue
             }
 
             switch ch {
             case "{":
+                writer.trimTrailing()
                 // Boş gövde tek satırda kalsın: {}
-                if nextNonSpace(after: index + 1) == "}" {
-                    trimTrailing()
-                    append(out.isEmpty ? "{}" : " {}")
-                    var skip = index + 1
-                    while chars[skip] != "}" { skip += 1 }
-                    index = skip + 1
+                if scanner.nextNonWhitespace(after: scanner.index + 1) == "}" {
+                    writer.append(writer.isEmpty ? "{}" : " {}")
+                    scanner.index += 1
+                    while scanner.current != "}" { scanner.index += 1 }
+                    scanner.index += 1
                     continue
                 }
-                trimTrailing()
-                append(out.isEmpty ? "{" : " {")
+                writer.append(writer.isEmpty ? "{" : " {")
                 stack.append("{")
-                level += 1
-                newline()
-                index += 1
+                writer.level += 1
+                writer.newline()
 
             case "}":
                 guard stack.last == "{" else {
-                    throw FormatError(message: "Geçersiz JavaScript: eşleşmeyen } karakteri.")
+                    throw BeautifyError.invalid(language, "eşleşmeyen } karakteri.")
                 }
                 stack.removeLast()
-                level = max(0, level - 1)
-                newline()
-                append("}")
-                index += 1
+                writer.level = max(0, writer.level - 1)
+                writer.newline()
+                writer.append("}")
 
             case "(", "[":
-                append(String(ch))
+                writer.append(String(ch))
                 stack.append(ch)
-                index += 1
 
             case ")", "]":
                 let expected: Character = ch == ")" ? "(" : "["
                 guard stack.last == expected else {
-                    throw FormatError(message: "Geçersiz JavaScript: eşleşmeyen \(ch) karakteri.")
+                    throw BeautifyError.invalid(language, "eşleşmeyen \(ch) karakteri.")
                 }
                 stack.removeLast()
-                trimTrailing()
-                append(String(ch))
-                index += 1
+                writer.trimTrailing()
+                writer.append(String(ch))
 
             case ";":
-                trimTrailing()
-                append(";")
+                writer.trimTrailing()
+                writer.append(";")
                 // for(;;) içindeki ; satır sonu yapmamalı.
-                if !stack.contains("(") { newline() }
-                index += 1
+                if !stack.contains("(") { writer.newline() }
 
             case ",":
-                trimTrailing()
-                append(",")
+                writer.trimTrailing()
+                writer.append(",")
                 // Nesne literalinde her alan kendi satırında; dizi ve
                 // argüman listeleri satır içinde kalır.
-                if stack.last == "{" { newline() } else { append(" ") }
-                index += 1
+                if stack.last == "{" { writer.newline() } else { writer.append(" ") }
 
             case ":":
-                trimTrailing()
-                append(": ")
-                index += 1
+                writer.trimTrailing()
+                writer.append(": ")
 
             default:
-                append(String(ch))
-                index += 1
+                writer.append(String(ch))
             }
+            scanner.index += 1
         }
 
         if let unclosed = stack.last {
-            throw FormatError(message: "Geçersiz JavaScript: \(unclosed) kapatılmamış.")
+            throw BeautifyError.invalid(language, "\(unclosed) kapatılmamış.")
         }
-        trimTrailing()
-        return out
+        writer.trimTrailing()
+        return writer.text
     }
 }

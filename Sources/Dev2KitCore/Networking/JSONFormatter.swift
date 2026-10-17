@@ -4,94 +4,92 @@ import Foundation
 /// JSONSerialization ile pretty-print key sırasını bozduğu için, doğrulama
 /// JSONSerialization'a bırakılır ama biçimlendirme sıra koruyan bir
 /// karakter tarayıcısıyla yapılır.
+///
+/// Yorumlar (`//`, `/* */`, JSONC) kabul edilir ve yerinde korunur: Postman
+/// gövdeleri ve yapılandırma örnekleri sık sık yorum içeriyor; normal
+/// beautifier'lar bunları biçimlendirir, hata vermez. Doğrulama yorumlar
+/// ayıklanmış metin üzerinde yapılır.
 public enum JSONFormatter {
-    public enum FormatError: Error, LocalizedError {
-        case invalidJSON(String)
-
-        public var errorDescription: String? {
-            switch self {
-            case .invalidJSON(let detail):
-                return "Geçersiz JSON: \(detail)"
-            }
-        }
-    }
+    static let language = "JSON"
 
     /// Geçerli JSON'u 2 boşluk girintiyle biçimlendirir; geçersizse hata fırlatır.
     public static func beautify(_ text: String, indent: String = "  ") throws -> String {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            throw FormatError.invalidJSON("içerik boş")
+        let trimmed = try BeautifyError.requireContent(text, language: language)
+        let withoutComments = CodeScanner.strippingComments(trimmed)
+        guard !withoutComments.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw BeautifyError.invalid(language, "yorumlardan başka içerik yok")
         }
         do {
-            _ = try JSONSerialization.jsonObject(with: Data(trimmed.utf8), options: [.fragmentsAllowed])
+            _ = try JSONSerialization.jsonObject(with: Data(withoutComments.utf8), options: [.fragmentsAllowed])
         } catch {
             let nsError = error as NSError
             let detail = (nsError.userInfo[NSDebugDescriptionErrorKey] as? String)
                 ?? nsError.localizedDescription
-            throw FormatError.invalidJSON(detail)
+            throw BeautifyError.invalid(language, detail)
         }
-        return reindent(trimmed, indent: indent)
+        return try reindent(trimmed, indent: indent)
     }
 
     /// Doğrulanmış JSON'u yeniden girintiler. String içeriğine dokunmaz,
-    /// key/eleman sırasını korur.
-    private static func reindent(_ text: String, indent: String) -> String {
-        var out = ""
-        var depth = 0
-        var inString = false
-        var escaped = false
+    /// key/eleman sırasını ve yorumları korur.
+    private static func reindent(_ text: String, indent: String) throws -> String {
+        var scanner = CodeScanner(text)
+        var writer = IndentedWriter(indent: indent)
         // Açılış parantezinden beri anlamlı karakter yazılmadıysa true;
         // boş {} / [] tek satırda kalır.
         var pendingNewline = false
 
-        func newline() {
-            out += "\n" + String(repeating: indent, count: depth)
-        }
-
-        for ch in text {
-            if inString {
-                out.append(ch)
-                if escaped {
-                    escaped = false
-                } else if ch == "\\" {
-                    escaped = true
-                } else if ch == "\"" {
-                    inString = false
-                }
+        while !scanner.isAtEnd {
+            let ch = scanner.current
+            if ch.isWhitespace {
+                scanner.index += 1
                 continue
             }
-            if ch.isWhitespace { continue }
+            if let comment = try scanner.readComment(language: language) {
+                if pendingNewline, !comment.isTrailing {
+                    writer.newline()
+                    pendingNewline = false
+                }
+                writer.comment(comment)
+                continue
+            }
             if ch == "}" || ch == "]" {
-                depth = max(0, depth - 1)
+                writer.level = max(0, writer.level - 1)
                 if pendingNewline {
                     pendingNewline = false
                 } else {
-                    newline()
+                    writer.newline()
                 }
-                out.append(ch)
+                writer.append(String(ch))
+                scanner.index += 1
                 continue
             }
             if pendingNewline {
-                newline()
+                writer.newline()
                 pendingNewline = false
             }
             switch ch {
             case "\"":
-                inString = true
-                out.append(ch)
+                // Doğrulamadan geçti: string kapalı. Yine de savunmacı.
+                guard let quoted = scanner.readQuoted(multiline: false) else {
+                    throw BeautifyError.invalid(language, "string kapatılmamış")
+                }
+                writer.append(quoted)
+                continue
             case "{", "[":
-                out.append(ch)
-                depth += 1
+                writer.append(String(ch))
+                writer.level += 1
                 pendingNewline = true
             case ",":
-                out.append(ch)
-                newline()
+                writer.append(",")
+                writer.newline()
             case ":":
-                out += ": "
+                writer.append(": ")
             default:
-                out.append(ch)
+                writer.append(String(ch))
             }
+            scanner.index += 1
         }
-        return out
+        return writer.text
     }
 }

@@ -5,6 +5,9 @@ import Foundation
 /// Etiket yapısını kendi tarayıcısıyla çözer; `XMLDocument` kullanılmadı çünkü
 /// o, HTML'in gevşek yapısını (kapatılmayan `<li>`, void elementler) reddediyor
 /// ve yorum/işlem talimatlarını yeniden yazarken kaybediyor.
+///
+/// Tarama ve yazım ortak parçalarla (`CodeScanner`, `IndentedWriter`,
+/// `BeautifyError`); burada yalnızca etiket kuralları var.
 public enum MarkupFormatter {
     public enum Flavor: Sendable {
         case xml
@@ -16,11 +19,6 @@ public enum MarkupFormatter {
             case .html: return "HTML"
             }
         }
-    }
-
-    public struct FormatError: Error, LocalizedError, Equatable {
-        public let message: String
-        public var errorDescription: String? { message }
     }
 
     /// HTML'de kapanışı olmayan elementler; derinliği artırmazlar.
@@ -60,10 +58,7 @@ public enum MarkupFormatter {
     }
 
     public static func beautify(_ text: String, flavor: Flavor, indent: String = "  ") throws -> String {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            throw FormatError(message: "Geçersiz \(flavor.label): içerik boş")
-        }
+        let trimmed = try BeautifyError.requireContent(text, language: flavor.label)
         let tokens = try tokenize(trimmed, flavor: flavor)
         return try render(tokens, flavor: flavor, indent: indent)
     }
@@ -95,29 +90,15 @@ public enum MarkupFormatter {
     }
 
     /// Etiketin kapanış `>` konumunu bulur; tırnak içindeki `>` yok sayılır.
+    /// Yorum, CDATA ve işlem talimatı kendi kapanışına kadar tek parçadır:
+    /// `<!-- <b> -->` içindeki etiket etiket sayılmaz.
     private static func findTagEnd(_ chars: [Character], from start: Int, flavor: Flavor) throws -> Int {
-        func find(_ terminator: [Character], from: Int) throws -> Int {
-            var i = from
-            while i + terminator.count <= chars.count {
-                if Array(chars[i..<(i + terminator.count)]) == terminator {
-                    return i + terminator.count - 1
-                }
-                i += 1
+        let scanner = CodeScanner(chars: chars, index: start)
+        for (open, close) in [("<!--", "-->"), ("<![CDATA[", "]]>"), ("<?", "?>")] where scanner.hasPrefix(open) {
+            guard let end = scanner.position(of: close, from: start + open.count) else {
+                throw BeautifyError.invalid(flavor.label, "\"\(close)\" kapanışı bulunamadı.")
             }
-            throw FormatError(
-                message: "Geçersiz \(flavor.label): \"\(String(terminator))\" kapanışı bulunamadı."
-            )
-        }
-
-        let rest = chars.count - start
-        if rest >= 4, String(chars[start..<(start + 4)]) == "<!--" {
-            return try find(Array("-->"), from: start + 4)
-        }
-        if rest >= 9, String(chars[start..<(start + 9)]) == "<![CDATA[" {
-            return try find(Array("]]>"), from: start + 9)
-        }
-        if rest >= 2, chars[start + 1] == "?" {
-            return try find(Array("?>"), from: start + 2)
+            return end
         }
 
         var i = start + 1
@@ -133,7 +114,7 @@ public enum MarkupFormatter {
             }
             i += 1
         }
-        throw FormatError(message: "Geçersiz \(flavor.label): \"<\" etiketi \">\" ile kapatılmamış.")
+        throw BeautifyError.invalid(flavor.label, "\"<\" etiketi \">\" ile kapatılmamış.")
     }
 
     private static func classify(_ raw: String) -> Token {
@@ -164,12 +145,14 @@ public enum MarkupFormatter {
     // MARK: - Yazım
 
     private static func render(_ tokens: [Token], flavor: Flavor, indent: String) throws -> String {
-        var lines: [String] = []
+        var writer = IndentedWriter(indent: indent)
         var stack: [String] = []
         var index = 0
 
         func emit(_ text: String) {
-            lines.append(String(repeating: indent, count: stack.count) + text)
+            writer.level = stack.count
+            writer.newline()
+            writer.append(text)
         }
 
         while index < tokens.count {
@@ -224,9 +207,7 @@ public enum MarkupFormatter {
                         index += 1
                         continue
                     }
-                    throw FormatError(
-                        message: "Geçersiz XML: </\(name)> kapanışının açılışı yok."
-                    )
+                    throw BeautifyError.invalid(flavor.label, "</\(name)> kapanışının açılışı yok.")
                 }
                 if top == name {
                     stack.removeLast()
@@ -239,8 +220,9 @@ public enum MarkupFormatter {
                     index += 1
                     continue
                 } else {
-                    throw FormatError(
-                        message: "Geçersiz XML: </\(name)> kapanışı beklenmiyordu, açık etiket <\(top)>."
+                    throw BeautifyError.invalid(
+                        flavor.label,
+                        "</\(name)> kapanışı beklenmiyordu, açık etiket <\(top)>."
                     )
                 }
                 index += 1
@@ -248,8 +230,8 @@ public enum MarkupFormatter {
         }
 
         if let unclosed = stack.last, flavor == .xml {
-            throw FormatError(message: "Geçersiz XML: <\(unclosed)> etiketi kapatılmamış.")
+            throw BeautifyError.invalid(flavor.label, "<\(unclosed)> etiketi kapatılmamış.")
         }
-        return lines.joined(separator: "\n")
+        return writer.text
     }
 }
