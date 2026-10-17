@@ -158,17 +158,43 @@ public final class RequestEngine: @unchecked Sendable {
 
     /// Kapsamın oturumu. `ephemeral` yapılandırma çerezleri YALNIZCA bellekte
     /// tutar; oturum kimlik bilgileri diske hiç yazılmaz, uygulama kapanınca gider.
-    private func session(for scope: Scope, skipsValidation: Bool = false) -> URLSession {
+    func session(for scope: Scope, skipsValidation: Bool = false) -> URLSession {
         let key = SessionKey(scope: scope, skipsValidation: skipsValidation)
         lock.lock(); defer { lock.unlock() }
         if let existing = sessions[key] { return existing }
+        let session = Self.makeSession(cookieStorage: nil)
+        sessions[key] = session
+        return session
+    }
+
+    /// `cookieStorage` verilirse o kavanoz devralınır (bkz. `dropPooledConnections`).
+    private static func makeSession(cookieStorage: HTTPCookieStorage?) -> URLSession {
         let config = URLSessionConfiguration.ephemeral
         config.httpCookieAcceptPolicy = .always
         config.httpShouldSetCookies = true
         config.urlCache = nil
-        let session = URLSession(configuration: config)
-        sessions[key] = session
-        return session
+        if let cookieStorage { config.httpCookieStorage = cookieStorage }
+        return URLSession(configuration: config)
+    }
+
+    /// Havuzdaki bağlantıları bırakır; sonraki istekler yeni el sıkışmayla
+    /// (yani güncel güven yapılandırmasıyla) doğrulanır.
+    ///
+    /// Neden gerekli: sertifika yalnızca el sıkışmada doğrulanıyor. Ölçüldü:
+    /// CA güven deposundan kaldırıldıktan sonra da istekler havuzdaki eski
+    /// bağlantıdan (`isReusedConnection == true`) geçmeye devam ediyordu;
+    /// ancak uygulama kapatılıp açılınca hata geliyordu. "Artık güvenme"
+    /// kararının hemen uygulanması gerekiyor.
+    ///
+    /// Oturumlar yeniden kurulur ama çerez kavanozu devralınır: güven ayarı
+    /// değiştirmek kullanıcının oturum girişlerini silmemeli. Uçmakta olan
+    /// istekler eski oturumda tamamlanır (`finishTasksAndInvalidate`).
+    func dropPooledConnections() {
+        lock.lock()
+        let old = sessions
+        sessions = old.mapValues { Self.makeSession(cookieStorage: $0.configuration.httpCookieStorage) }
+        lock.unlock()
+        old.values.forEach { $0.finishTasksAndInvalidate() }
     }
 
     /// Kapsamın açılmış oturumları (doğrulamalı ve varsa doğrulamasız).
@@ -193,21 +219,38 @@ public final class RequestEngine: @unchecked Sendable {
 
     /// Host bazlı TLS profilleri. Gönderimden önce çözülür ki dosya/parola
     /// hataları anlaşılır mesajla dönsün, TLS el sıkışma hatası olarak değil.
-    public var tlsProfiles: [TLSProfile] = []
+    ///
+    /// Aşağıdaki üç güven ayarı DEĞİŞİNCE havuz boşaltılır (bkz.
+    /// `dropPooledConnections`). Motorun içinde: çağıran taraf unutamasın.
+    /// Değişmeyen atamada boşaltılmaz — TLS ekranı her açılışta depoyu
+    /// yeniden yüklüyor, her seferinde bağlantıları koparmanın gereği yok.
+    public var tlsProfiles: [TLSProfile] = [] {
+        didSet { if tlsProfiles != oldValue { dropPooledConnections() } }
+    }
     /// Kurum güven deposundaki CA'lar (cacerts dizini). Her istekte dosya
     /// okumamak için burada tutulur; değişince AppState yeniler.
-    public var trustStoreCertificates: [SecCertificate] = []
+    public var trustStoreCertificates: [SecCertificate] = [] {
+        didSet {
+            // DER baytlarıyla: aynı dosya yeniden okununca yeni nesne gelir.
+            let der = { (list: [SecCertificate]) in list.map { SecCertificateCopyData($0) as Data } }
+            if der(trustStoreCertificates) != der(oldValue) { dropPooledConnections() }
+        }
+    }
     /// Zinciri güven deposundaki bir CA'ya çıkan sertifikalarda ömür üst
     /// sınırı aranmasın mı. Kullanıcının Güven Deposu'nda açık seçimi;
     /// public köklere çıkan zincirleri etkilemez.
-    public var trustStoreAllowsLongValidity = false
+    public var trustStoreAllowsLongValidity = false {
+        didSet { if trustStoreAllowsLongValidity != oldValue { dropPooledConnections() } }
+    }
 
     /// Host başına son görülen sunucu sertifikası.
     ///
     /// Sertifika yalnızca TLS el sıkışmasında görülür; bağlantı havuzdan
     /// yeniden kullanıldığında el sıkışma olmaz ve künye sertifikasız kalırdı.
     /// İlk bağlantıda görülen künye burada saklanıp sonraki yanıtlara eklenir.
-    /// Yalnızca gösterim içindir — doğrulama her seferinde gerçek zincirle yapılır.
+    /// Yalnızca gösterim içindir — doğrulama el sıkışmada gerçek zincirle
+    /// yapılır; güven ayarı değişince havuz boşaltıldığı için eski bir karar
+    /// yeni ayarın yerine geçmez.
     private let certificateLock = NSLock()
     private var certificateCache: [String: CertificateSummary] = [:]
 
