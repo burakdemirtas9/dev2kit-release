@@ -211,7 +211,7 @@ extension AppState {
     /// Dışarıdan gelen (curl vb.) isteği koleksiyona ekler ve seçer.
     /// Ad çakışması koleksiyon import'uyla aynı kurala göre çözülür.
     func addImportedRequest(_ request: RequestModel, to collectionID: UUID) {
-        guard let index = workspace.collections.firstIndex(where: { $0.id == collectionID }) else { return }
+        guard let index = workspace.collections.firstIndex(id: collectionID) else { return }
         // Seçilen istek görünür olmalı: arama filtresine uymayabilir ya da
         // hedef koleksiyon kapalı olabilir.
         clearSearch()
@@ -221,8 +221,7 @@ extension AppState {
         let existing = workspace.collections[index].requests.map(\.name)
         copy.name = CollectionPorting.uniqueName(copy.name, suffix: "2", existingNames: existing)
         workspace.collections[index].requests.append(copy)
-        selectedRequestID = copy.id
-        pinTab(copy.id)
+        showRequest(copy.id)
         persist()
     }
 
@@ -239,5 +238,46 @@ extension AppState {
         } catch {
             return "# cURL üretilemedi: \(error.localizedDescription)"
         }
+    }
+}
+
+// MARK: - İçe aktarma tipleri
+
+extension AppState {
+    struct OpenAPIFetchError: LocalizedError {
+        let message: String
+        var errorDescription: String? { message }
+    }
+
+    enum KibanaImportTarget {
+        case newRequest(CollectionDestination)
+        case selectedRequest
+    }
+
+    enum ImportSource {
+        case dev2kit
+        case postman
+    }
+
+    /// İncelemeden geçmiş, onay bekleyen içe aktarma.
+    struct PreparedImport: Identifiable {
+        let review: CollectionReview
+        let wasRenamed: Bool
+        var id: UUID { review.id }
+    }
+
+    /// Kullanıcının kararını bekleyen dosya içe aktarması; kenar çubuğu
+    /// inceleme ekranını bunun için açar.
+    struct PendingImport: Identifiable {
+        let id = UUID()
+        let items: [PreparedImport]
+    }
+
+    struct ImportFailure: Error {
+        let message: String
+    }
+
+    var importContext: ImportReviewer.Context {
+        ImportReviewer.Context(policy: hostPolicy, vaultSecretNames: Set(secretNames))
     }
 }

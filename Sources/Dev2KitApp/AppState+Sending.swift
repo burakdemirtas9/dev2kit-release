@@ -218,3 +218,60 @@ extension AppState {
         }
     }
 }
+
+// MARK: - Yanıt durumu ve OAuth2 token kaydı
+
+extension AppState {
+    enum ResponseState {
+        case idle
+        case loading
+        case success(ResponseDisplay)
+        case failure(String)
+        /// Kesin güvenlik engeli; istek gönderilmedi.
+        case blocked([SecurityFinding])
+        /// Güvenlik uyarıları; istek gönderilmedi, kullanıcının kararı bekleniyor.
+        case needsApproval([SecurityFinding])
+    }
+
+    /// Yanıtın gösterime hazır hali. Pretty-print ve dil tespiti yanıt gelince
+    /// BİR KEZ, arka planda yapılır; her render'da yeniden JSON parse etmek
+    /// büyük yanıtlarda paneli kilitliyordu.
+    struct ResponseDisplay: Sendable {
+        let data: ResponseData
+        let prettyText: String
+        let language: CodeLanguage
+        /// Önizlenebiliyorsa türü. Gövdenin ilk byte'larına bakmak her
+        /// render'da yapılacak iş değil; tür tespitiyle birlikte bir kez.
+        let previewKind: ResponsePreview.Kind?
+    }
+
+    /// Ana thread dışında çalışır: büyük gövdeleri biçimlendirmek pahalıdır.
+    nonisolated static func makeDisplay(_ response: ResponseData) -> ResponseDisplay {
+        let contentType = response.headers
+            .first { $0.name.lowercased() == "content-type" }?.value ?? ""
+        let text = response.bodyText ?? "(ikili veri: \(response.body.count) byte)"
+        // Tür tahmini ve biçimlendirme tek yerde: Beautifier (Core, testli).
+        let kind = Beautifier.kind(contentType: contentType, body: text)
+        return ResponseDisplay(
+            data: response,
+            prettyText: Beautifier.beautifiedOrOriginal(text, as: kind),
+            language: CodeLanguage(kind),
+            previewKind: ResponsePreview.kind(contentType: contentType, body: response.body)
+        )
+    }
+
+    /// Token'ı vault'a yazar. Adı `store` DEĞİL: `store` aynı zamanda
+    /// workspace deposunun adı, uzantı dosyalarında çağrı karışıyordu.
+    func saveToken(_ token: OAuth2Token, for config: OAuth2Config) throws {
+        let data = try JSONEncoder().encode(token)
+        // Token vault'a yazılır; workspace dosyasına ASLA.
+        try secretStore.setSecret(String(decoding: data, as: UTF8.self), forName: config.tokenSecretName)
+        invalidateSecretNames()
+    }
+
+    func clearToken(for config: OAuth2Config) {
+        try? secretStore.deleteSecret(forName: config.tokenSecretName)
+        invalidateSecretNames()
+        authMessage = "Token silindi."
+    }
+}

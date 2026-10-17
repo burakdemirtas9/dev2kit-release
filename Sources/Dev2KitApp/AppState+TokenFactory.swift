@@ -25,15 +25,14 @@ extension AppState {
     func addTokenFactoryRequest() {
         clearSearch()
         let factoryID = workspace.ensureTokenFactoryCollection()
-        guard let index = workspace.collections.firstIndex(where: { $0.id == factoryID }) else { return }
+        guard let index = workspace.collections.firstIndex(id: factoryID) else { return }
         let request = RequestModel(
             name: "Token İsteği",
             method: .post,
             tokenOutput: TokenOutput(variableName: uniqueTokenVariableName(base: TokenOutput.defaultVariableName))
         )
         workspace.collections[index].requests.append(request)
-        selectedRequestID = request.id
-        pinTab(request.id)
+        showRequest(request.id)
         persist()
     }
 
@@ -51,7 +50,7 @@ extension AppState {
         guard !picked.isEmpty else { return }
         clearSearch()
         let factoryID = workspace.ensureTokenFactoryCollection()
-        guard let index = workspace.collections.firstIndex(where: { $0.id == factoryID }) else { return }
+        guard let index = workspace.collections.firstIndex(id: factoryID) else { return }
         for var request in picked {
             request.id = UUID()
             request.name = CollectionPorting.uniqueName(
@@ -63,8 +62,7 @@ extension AppState {
             workspace.collections[index].requests.append(request)
         }
         guard let last = workspace.collections[index].requests.last else { return }
-        selectedRequestID = last.id
-        pinTab(last.id)
+        showRequest(last.id)
         editorTab = .token
         persist()
     }
@@ -260,8 +258,7 @@ extension AppState {
     /// Öneriden ilgili Token Factory isteğine gider (token içeriğini kontrol et).
     func openTokenRequest(producing variable: String) {
         guard let source = tokenSources(for: activeEnvironment).first(where: { $0.variable == variable }) else { return }
-        selectedRequestID = source.request.id
-        pinTab(source.request.id)
+        showRequest(source.request.id)
         editorTab = .token
     }
 
@@ -276,5 +273,30 @@ extension AppState {
     struct TokenFetchError: LocalizedError {
         let message: String
         var errorDescription: String? { message }
+    }
+}
+
+// MARK: - Tipler
+
+extension AppState {
+    enum TokenState: Equatable {
+        case fetching
+        case valid(expiresAt: Date?)
+        case failed(String)
+    }
+
+    struct TokenError: LocalizedError {
+        let variable: String
+        let reason: String
+        var errorDescription: String? { "{{\(variable)}} için token alınamadı; istek gönderilmedi. \(reason)" }
+    }
+
+    /// Alttan çıkıp kendiliğinden kaybolan uyarı. Yalnızca ait olduğu istek
+    /// açıkken görünür; kimlik her gösterimde yenilenir ki aynı metin art
+    /// arda gelse de zamanlayıcı baştan başlasın.
+    struct TokenAlert: Equatable, Identifiable {
+        let id = UUID()
+        let requestID: UUID
+        let message: String
     }
 }

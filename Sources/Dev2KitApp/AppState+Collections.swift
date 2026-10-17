@@ -18,7 +18,7 @@ extension AppState {
     func renameCollection(_ id: UUID, to newName: String) {
         let trimmed = newName.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty,
-              let index = workspace.collections.firstIndex(where: { $0.id == id }),
+              let index = workspace.collections.firstIndex(id: id),
               workspace.collections[index].isRegular else { return }
         workspace.collections[index].name = trimmed
         persist()
@@ -37,8 +37,8 @@ extension AppState {
     /// Sürükle-bırak canlı sıralama: sürüklenen koleksiyonu hedefin konumuna taşır.
     func moveCollection(_ id: UUID, before targetID: UUID) {
         guard id != targetID,
-              let from = workspace.collections.firstIndex(where: { $0.id == id }),
-              let to = workspace.collections.firstIndex(where: { $0.id == targetID }),
+              let from = workspace.collections.firstIndex(id: id),
+              let to = workspace.collections.firstIndex(id: targetID),
               // Koleksiyonsuz kap hep en üstte: ne taşınır ne önüne bir şey konur.
               workspace.collections[from].isRegular,
               workspace.collections[to].isRegular else { return }
@@ -68,7 +68,7 @@ extension AppState {
     }
 
     func environmentBinding(_ id: UUID) -> Binding<EnvironmentModel>? {
-        guard let index = workspace.environments.firstIndex(where: { $0.id == id }) else { return nil }
+        guard let index = workspace.environments.firstIndex(id: id) else { return nil }
         let fallback = workspace.environments[index]
         return Binding(
             // Index saklanmaz: environment silinince eski index başka kaydı ezerdi.
@@ -76,7 +76,7 @@ extension AppState {
                 self.workspace.environments.first { $0.id == id } ?? fallback
             },
             set: { newValue in
-                guard let current = self.workspace.environments.firstIndex(where: { $0.id == id }) else { return }
+                guard let current = self.workspace.environments.firstIndex(id: id) else { return }
                 self.workspace.environments[current] = newValue
                 self.persistSoon()
             }

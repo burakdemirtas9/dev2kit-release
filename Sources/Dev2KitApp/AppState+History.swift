@@ -32,8 +32,7 @@ extension AppState {
             return request.id
         }
         guard let id = restored else { return false }
-        selectedRequestID = id
-        pinTab(id)
+        showRequest(id)
         persist()
         return true
     }
@@ -71,5 +70,17 @@ extension AppState {
             responsePreview: preview
         )
         history = historyStore.append(entry, settings: historySettings)
+    }
+}
+
+// MARK: - Geçmiş dosyası
+
+extension AppState {
+    /// Geçmiş dosyasının diskteki boyutu.
+    var historyFileSize: Int { historyStore.fileSizeBytes() }
+
+    func clearHistory(environmentName: String?) {
+        historyStore.deleteEntries(environmentName: environmentName)
+        reloadHistory()
     }
 }

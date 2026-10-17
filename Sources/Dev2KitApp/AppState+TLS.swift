@@ -53,7 +53,7 @@ extension AppState {
         return Binding(
             get: { self.workspace.tlsProfiles.first { $0.id == id } ?? fallback },
             set: { newValue in
-                guard let index = self.workspace.tlsProfiles.firstIndex(where: { $0.id == id }) else { return }
+                guard let index = self.workspace.tlsProfiles.firstIndex(id: id) else { return }
                 self.workspace.tlsProfiles[index] = newValue
                 self.syncTLSProfiles()
                 self.persistSoon()
@@ -113,7 +113,7 @@ extension AppState {
     func acceptTLSSuggestion() {
         defer { tlsSuggestion = nil }
         guard let match = tlsSuggestion,
-              let index = workspace.tlsProfiles.firstIndex(where: { $0.id == match.profileID }),
+              let index = workspace.tlsProfiles.firstIndex(id: match.profileID),
               !workspace.tlsProfiles[index].hostPatterns.contains(match.hostToAdd)
         else { return }
         workspace.tlsProfiles[index].hostPatterns.append(match.hostToAdd)
