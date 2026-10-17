@@ -24,9 +24,23 @@ public enum ScriptFormatter {
         while !scanner.isAtEnd {
             let ch = scanner.current
 
+            // Boşluk. Satır sonu içeren boşluk, parantez/köşeli parantez
+            // dışında SATIR SONU olarak kalır: noktalı virgülsüz kodda satırları
+            // birleştirmek kodu bozuyordu (`let a = 1⏎let b = 2` →
+            // `let a = 1 let b = 2`) ve `return⏎x`'in anlamını değiştiriyordu
+            // (ASI). Ardışık boş satırlar teke iner.
             if ch.isWhitespace {
-                writer.space()
-                scanner.index += 1
+                var sawNewline = false
+                while !scanner.isAtEnd, scanner.current.isWhitespace {
+                    if scanner.current.isNewline { sawNewline = true }
+                    scanner.index += 1
+                }
+                let inParens = stack.last == "(" || stack.last == "[" || stack.last == "<"
+                if sawNewline, !inParens, !writer.isEmpty {
+                    writer.newline()
+                } else {
+                    writer.space()
+                }
                 continue
             }
 
@@ -71,6 +85,7 @@ public enum ScriptFormatter {
                 writer.newline()
 
             case "}":
+                while stack.last == "<" { stack.removeLast() }
                 guard stack.last == "{" else {
                     throw BeautifyError.invalid(language, "eşleşmeyen } karakteri.")
                 }
@@ -83,7 +98,26 @@ public enum ScriptFormatter {
                 writer.append(String(ch))
                 stack.append(ch)
 
+            // TypeScript generic'i: `Map<string, number>`. `<` bir adın HEMEN
+            // ardından (boşluksuz) gelip ardından ad/parantez geliyorsa açılış
+            // sayılır; içindeki virgül satır kırmaz. Karşılaştırma (`a<b`) yanlışlıkla
+            // açılış sayılırsa zararsız: kapanış parantezinde düşürülür.
+            case "<":
+                writer.append("<")
+                let previous = scanner.index > 0 ? scanner.chars[scanner.index - 1] : " "
+                let next = scanner.peek() ?? " "
+                if previous.isLetter || previous.isNumber || previous == "_" || previous == "$" || previous == ">",
+                   next.isLetter || next == "{" || next == "[" || next == "(" || next == "'" || next == "\"" || next == ">" {
+                    stack.append("<")
+                }
+
+            case ">":
+                writer.append(">")
+                if stack.last == "<" { stack.removeLast() }
+
             case ")", "]":
+                // Kapatılmamış `<` karşılaştırmaydı, generic değil: düşür.
+                while stack.last == "<" { stack.removeLast() }
                 let expected: Character = ch == ")" ? "(" : "["
                 guard stack.last == expected else {
                     throw BeautifyError.invalid(language, "eşleşmeyen \(ch) karakteri.")
@@ -115,6 +149,7 @@ public enum ScriptFormatter {
             scanner.index += 1
         }
 
+        while stack.last == "<" { stack.removeLast() }
         if let unclosed = stack.last {
             throw BeautifyError.invalid(language, "\(unclosed) kapatılmamış.")
         }

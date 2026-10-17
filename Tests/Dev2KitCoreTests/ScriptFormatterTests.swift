@@ -77,3 +77,33 @@ final class ScriptFormatterTests: XCTestCase {
         XCTAssertThrowsError(try ScriptFormatter.beautify("  "))
     }
 }
+
+/// 2026-10-18'de bulunan hatalar: satır sonları siliniyordu (ASI), TS
+/// generic'lerindeki virgül satır kırıyordu.
+final class ScriptFormatterLineBreakTests: XCTestCase {
+    func testNewlinesWithoutSemicolonsArePreserved() throws {
+        XCTAssertEqual(try ScriptFormatter.beautify("let a = 1\nlet b = 2\nfoo()"), "let a = 1\nlet b = 2\nfoo()")
+    }
+
+    func testReturnFollowedByNewlineKeepsItsMeaning() throws {
+        // `return⏎x` undefined döndürür; birleştirmek anlamı değiştirirdi.
+        let result = try ScriptFormatter.beautify("function f() {\n  return\n  x\n}")
+        XCTAssertEqual(result, "function f() {\n  return\n  x\n}")
+    }
+
+    func testBlankLinesCollapseAndArgumentsStayInline() throws {
+        XCTAssertEqual(try ScriptFormatter.beautify("a()\n\n\nb()"), "a()\nb()")
+        XCTAssertEqual(try ScriptFormatter.beautify("f(1,\n  2)"), "f(1, 2)")
+    }
+
+    func testTypeScriptGenericsStayOnOneLine() throws {
+        let result = try ScriptFormatter.beautify("function id<T>(x: T): Array<T> { const m: Map<string, number> = new Map(); return [x] }")
+        XCTAssertTrue(result.contains("const m: Map<string, number> = new Map();"), result)
+    }
+
+    func testComparisonsAreNotMistakenForGenerics() throws {
+        let result = try ScriptFormatter.beautify("if (a<b) { x(1, 2) } const o = {a: 1, b: 2}")
+        XCTAssertTrue(result.contains("if (a<b) {"), result)
+        XCTAssertTrue(result.contains("a: 1,\n"), "nesne alanları yine ayrı satırda: \(result)")
+    }
+}

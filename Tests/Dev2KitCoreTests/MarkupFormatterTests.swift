@@ -162,3 +162,35 @@ extension MarkupFormatterTests {
         XCTAssertThrowsError(try MarkupFormatter.beautify("<ul><li>bir<li>iki</ul>", flavor: .xml))
     }
 }
+
+/// 2026-10-18: script/style içeriği etiket sanılıyor, pre içeriği yeniden
+/// girintilenip değişiyordu.
+final class MarkupRawTextTests: XCTestCase {
+    func testScriptContentIsNotParsedAsTags() throws {
+        let result = try MarkupFormatter.beautify("<head><script>if (a < b) { x() }</script></head>", flavor: .html)
+        XCTAssertEqual(result, "<head>\n  <script>\n    if (a < b) { x() }\n  </script>\n</head>")
+    }
+
+    func testStyleKeepsItsOwnIndentation() throws {
+        let result = try MarkupFormatter.beautify("<style>\n      a {\n        color: red;\n      }\n</style>", flavor: .html)
+        XCTAssertEqual(result, "<style>\n  a {\n    color: red;\n  }\n</style>")
+    }
+
+    func testPreAndTextareaAreKeptByteForByte() throws {
+        let result = try MarkupFormatter.beautify("<div><pre>  a\n   b </pre><textarea> x\n</textarea></div>", flavor: .html)
+        XCTAssertTrue(result.contains("<pre>  a\n   b </pre>"), result)
+        XCTAssertTrue(result.contains("<textarea> x\n</textarea>"), result)
+    }
+
+    func testClosingTagMatchIsCaseInsensitiveAndWholeWord() throws {
+        let result = try MarkupFormatter.beautify("<SCRIPT>var s = '</scripts>';</SCRIPT><p>x</p>", flavor: .html)
+        XCTAssertTrue(result.contains("var s = '</scripts>';"), result)
+        XCTAssertTrue(result.contains("<p>x</p>"), result)
+    }
+
+    func testXMLIsUnaffected() throws {
+        // XML'de script sıradan bir eleman.
+        XCTAssertEqual(try MarkupFormatter.beautify("<a><script><b/></script></a>", flavor: .xml),
+                       "<a>\n  <script>\n    <b/>\n  </script>\n</a>")
+    }
+}

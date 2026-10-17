@@ -22,7 +22,7 @@ public enum MarkupFormatter {
     }
 
     /// HTML'de kapanışı olmayan elementler; derinliği artırmazlar.
-    private static let voidElements: Set<String> = [
+    static let voidElements: Set<String> = [
         "area", "base", "br", "col", "embed", "hr", "img", "input",
         "link", "meta", "param", "source", "track", "wbr",
     ]
@@ -35,7 +35,7 @@ public enum MarkupFormatter {
     /// Sınır: `<p>`nin bir blok element (`<div>`, `<table>`…) açılınca da
     /// kapandığı kural burada YOK — tam HTML ayrıştırma modeli gerektirir ve
     /// girintiden başka bir şeyi etkilemez.
-    private static let closedByOpening: [String: Set<String>] = [
+    static let closedByOpening: [String: Set<String>] = [
         "li": ["li"],
         "p": ["p"],
         "dt": ["dt", "dd"],
@@ -55,7 +55,16 @@ public enum MarkupFormatter {
         /// `<br/>`, `<?xml?>`, `<!-- -->`, `<!DOCTYPE>` — derinliği değiştirmez.
         case standalone(raw: String)
         case text(String)
+        /// HTML'de `<script>`/`<style>` (yeniden girintilenir) ve `<pre>`/
+        /// `<textarea>` (`verbatim`: bayt bayt korunur) içeriği. Etiket
+        /// sayılmaz: script içindeki `a < b` etiket sanılıp kod bozuluyordu,
+        /// `<pre>` içindeki boşluklar yeniden girintilenip içerik değişiyordu.
+        case rawText(String, verbatim: Bool)
     }
+
+    /// İçeriği etiket olarak taranmayan HTML elementleri.
+    static let rawTextElements: Set<String> = ["script", "style"]
+    static let verbatimElements: Set<String> = ["pre", "textarea"]
 
     public static func beautify(_ text: String, flavor: Flavor, indent: String = "  ") throws -> String {
         let trimmed = try BeautifyError.requireContent(text, language: flavor.label)
@@ -74,8 +83,21 @@ public enum MarkupFormatter {
             if chars[index] == "<" {
                 let end = try findTagEnd(chars, from: index, flavor: flavor)
                 let raw = String(chars[index...end])
-                tokens.append(classify(raw))
+                let token = classify(raw)
+                tokens.append(token)
                 index = end + 1
+                // HTML ham içerik: kapanış etiketine kadar olduğu gibi al.
+                if flavor == .html, case .open(_, let name) = token {
+                    let lowered = name.lowercased()
+                    let verbatim = verbatimElements.contains(lowered)
+                    if verbatim || rawTextElements.contains(lowered),
+                       let close = closingTagStart(chars, name: lowered, from: index) {
+                        if close > index {
+                            tokens.append(.rawText(String(chars[index..<close]), verbatim: verbatim))
+                        }
+                        index = close
+                    }
+                }
             } else {
                 var next = index
                 while next < chars.count, chars[next] != "<" { next += 1 }
@@ -87,6 +109,20 @@ public enum MarkupFormatter {
             }
         }
         return tokens
+    }
+
+    /// `</name` (büyük/küçük harf duyarsız) başlangıcı; yoksa nil.
+    private static func closingTagStart(_ chars: [Character], name: String, from start: Int) -> Int? {
+        let needle = Array("</" + name)
+        var i = start
+        while i + needle.count <= chars.count {
+            if chars[i] == "<", zip(chars[i..<(i + needle.count)], needle).allSatisfy({ $0.lowercased() == $1.lowercased() }) {
+                let after = i + needle.count
+                if after >= chars.count || !(chars[after].isLetter || chars[after].isNumber) { return i }
+            }
+            i += 1
+        }
+        return nil
     }
 
     /// Etiketin kapanış `>` konumunu bulur; tırnak içindeki `>` yok sayılır.
@@ -115,6 +151,24 @@ public enum MarkupFormatter {
             i += 1
         }
         throw BeautifyError.invalid(flavor.label, "\"<\" etiketi \">\" ile kapatılmamış.")
+    }
+
+    private static func isVerbatim(_ token: Token) -> Bool {
+        if case .rawText(_, true) = token { return true }
+        return false
+    }
+
+    /// Script/style içeriğinin satırları: baştaki/sondaki boş satırlar
+    /// atılır, ortak girinti çıkarılır (kendi iç düzeni korunur).
+    private static func dedented(_ content: String) -> [String] {
+        var lines = content.components(separatedBy: "\n").map { $0.replacingOccurrences(of: "\r", with: "") }
+        while let first = lines.first, first.trimmingCharacters(in: .whitespaces).isEmpty { lines.removeFirst() }
+        while let last = lines.last, last.trimmingCharacters(in: .whitespaces).isEmpty { lines.removeLast() }
+        let common = lines.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+            .map { $0.prefix { $0 == " " || $0 == "\t" }.count }
+            .min() ?? 0
+        return lines.map { String($0.dropFirst(min(common, $0.prefix { $0 == " " || $0 == "\t" }.count))) }
+            .map { $0.trimmingCharacters(in: .whitespaces).isEmpty ? "" : $0 }
     }
 
     private static func classify(_ raw: String) -> Token {
@@ -164,6 +218,32 @@ public enum MarkupFormatter {
             case .text(let content):
                 emit(content)
                 index += 1
+
+            case .rawText(let content, let verbatim):
+                if verbatim {
+                    // Önceki satıra (açılış etiketine) yapıştır: içerik olduğu gibi.
+                    writer.append(content)
+                } else {
+                    for line in dedented(content) { emit(line) }
+                }
+                index += 1
+
+            case .open(let raw, let name) where index + 1 < tokens.count && isVerbatim(tokens[index + 1]):
+                // `<pre>içerik</pre>`: açılış, içerik ve kapanış arasına
+                // satır sonu ya da girinti girmez.
+                if flavor == .html, let closes = closedByOpening[name.lowercased()] {
+                    while let top = stack.last, closes.contains(top.lowercased()) { stack.removeLast() }
+                }
+                emit(raw)
+                if case .rawText(let content, _) = tokens[index + 1] { writer.append(content) }
+                index += 2
+                if index < tokens.count, case .close(let closeRaw, let closeName) = tokens[index],
+                   closeName.lowercased() == name.lowercased() {
+                    writer.append(closeRaw)
+                    index += 1
+                } else {
+                    stack.append(name)
+                }
 
             case .open(let raw, let name):
                 // Örtük kapanış: <li> açılınca açık duran <li> kapanmış sayılır.
