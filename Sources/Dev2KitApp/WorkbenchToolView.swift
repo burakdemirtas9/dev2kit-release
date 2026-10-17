@@ -9,6 +9,8 @@ struct WorkbenchToolView: View {
     @Environment(WorkbenchState.self) private var workbench
     @StateObject private var inputSearch = EditorSearchController()
     @StateObject private var outputSearch = EditorSearchController()
+    @StateObject private var inputFolding = CodeFoldingController()
+    @StateObject private var outputFolding = CodeFoldingController()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -100,6 +102,7 @@ struct WorkbenchToolView: View {
                         .controlSize(.small)
                         .help("Restore the cleared input")
                 }
+                FoldButtons(folding: inputFolding, english: true)
                 SearchToggleButton(search: inputSearch, strings: .english)
                 Button {
                     workbench.clearInput()
@@ -118,6 +121,7 @@ struct WorkbenchToolView: View {
             CodeEditor(
                 text: Binding(get: { workbench.input }, set: { workbench.input = $0 }),
                 language: workbench.highlightsSyntax ? CodeLanguage(workbench.tool.syntax) : .plain,
+                folding: CodeLanguage(workbench.tool.syntax).supportsFolding ? inputFolding : nil,
                 search: inputSearch,
                 errorOffset: issueOffset,
                 onFocus: { workbench.focus(.input) }
@@ -158,6 +162,7 @@ struct WorkbenchToolView: View {
                     .help("Show the output as text or as a tree of the input")
                 }
                 if !showsTree {
+                    FoldButtons(folding: outputFolding, english: true)
                     SearchToggleButton(search: outputSearch, strings: .english)
                     Button {
                         workbench.toggleOutputEditing()
@@ -203,10 +208,13 @@ struct WorkbenchToolView: View {
                         text: Binding(get: { workbench.displayedOutput }, set: { workbench.editOutput($0) }),
                         language: workbench.outputStats.bytes <= WorkbenchState.highlightLimit ? CodeLanguage(outputSyntax) : .plain,
                         isEditable: workbench.isEditingOutput,
+                        folding: CodeLanguage(outputSyntax).supportsFolding ? outputFolding : nil,
                         search: outputSearch,
                         onFocus: { workbench.focus(.output) }
                     )
-                    .id(workbench.document.id)
+                    // Katlama editör kurulurken bağlanır: çıktının dili eylemle
+                    // değişince (Escape → düz metin) editör yeniden kurulmalı.
+                    .id("\(workbench.document.id)-\(outputSyntax)")
                 }
             }
             .frame(maxHeight: .infinity)
@@ -407,22 +415,130 @@ struct CopyButton: View {
     }
 }
 
-/// JSON ağacı. Satırlara tıklama hareketi BAĞLANMAZ (UI-KURALLARI §2c);
-/// satır sonundaki düğmeler: yapraklarda kalem (değeri satır içinde düzenler)
-/// ve kopyala (DEĞERİ kopyalar), yol sağ tıkta. Çocuk düğümler açıldıkça
-/// oluşur (`JSONTreeNode.children`).
+/// JSON ağacı: açık dalları kendisi takip eden düz liste.
+///
+/// `OutlineGroup` dalları koddan açıp kapatmaya izin vermiyor ("tümünü aç/
+/// kapat" yapılamıyordu); burada görünen satırlar Core'da hesaplanır
+/// (`visibleRows`), kapalı dalların düğümleri hiç oluşmaz. Açık dallar ve
+/// seçim yol kimliğiyle tutulur: girdi değişip ağaç yeniden kurulsa da
+/// yerinde kalır.
+///
+/// Satırlara tıklama hareketi BAĞLANMAZ (UI-KURALLARI §2c): seçim listenin
+/// kendi seçimi, açma/kapama ok düğmesiyle; kalem ve kopyala satır sonunda,
+/// yol sağ tıkta ve breadcrumb'da.
 struct JSONTreeView: View {
     let root: JSONTreeNode
     /// Düzenlenen yaprak değer; hata metni döner (satırda gösterilir).
     let onEdit: ([JSONPathStep], String) -> String?
 
+    @State private var expanded: Set<String> = []
+    @State private var selection: String?
+    @State private var limitNotice = false
+
     var body: some View {
-        List {
-            OutlineGroup(root.children ?? [root], children: \.children) { node in
-                JSONTreeRow(node: node, onEdit: onEdit)
+        let rows = root.visibleRows(expanded: expanded)
+        let selectedNode = rows.first { $0.id == selection }?.node
+        ScrollViewReader { proxy in
+            VStack(spacing: 0) {
+                treeBar(selected: selectedNode, proxy: proxy)
+                Divider()
+                List(selection: $selection) {
+                    ForEach(rows) { row in
+                        HStack(spacing: 4) {
+                            Color.clear.frame(width: CGFloat(row.depth) * 14, height: 1)
+                            if row.node.isExpandable {
+                                Button {
+                                    toggle(row.node.id)
+                                } label: {
+                                    Image(systemName: expanded.contains(row.node.id) ? "chevron.down" : "chevron.right")
+                                        .font(.caption2.weight(.semibold))
+                                        .frame(width: 14)
+                                        .iconHitTarget(18)
+                                }
+                                .buttonStyle(.plain)
+                                .foregroundStyle(.secondary)
+                                .accessibilityLabel(expanded.contains(row.node.id) ? "Collapse" : "Expand")
+                            } else {
+                                Color.clear.frame(width: 18, height: 1)
+                            }
+                            JSONTreeRow(node: row.node, onEdit: onEdit)
+                        }
+                        .tag(row.id)
+                        .id(row.id)
+                    }
+                }
+                .listStyle(.inset)
             }
         }
-        .listStyle(.inset)
+    }
+
+    /// Üst şerit: seçili düğümün yolu (breadcrumb) ve tümünü kapat/aç.
+    private func treeBar(selected: JSONTreeNode?, proxy: ScrollViewProxy) -> some View {
+        HStack(spacing: 4) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 2) {
+                    Button("root") {
+                        selection = nil
+                        if let first = root.children?.first { proxy.scrollTo(first.id, anchor: .top) }
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(selected == nil ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
+                    if let selected {
+                        let trail = root.ancestry(to: selected)
+                        ForEach(trail, id: \.id) { node in
+                            Image(systemName: "chevron.compact.right").foregroundStyle(.tertiary)
+                            Button(node.label) {
+                                // Üst düğüme git: görünür olsun diye yolu açık tut.
+                                for ancestor in root.ancestry(to: node).dropLast() { expanded.insert(ancestor.id) }
+                                selection = node.id
+                                proxy.scrollTo(node.id, anchor: .center)
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(node.id == selected.id ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
+                            .help(node.path)
+                        }
+                    }
+                }
+                .font(.system(.caption, design: .monospaced))
+            }
+            if let selected, !selected.path.isEmpty {
+                CopyButton(text: selected.path, help: "Copy path: \(selected.path)")
+            }
+            if limitNotice {
+                Text("Expanded first \(JSONTreeNode.expandAllLimit) branches")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            Button {
+                expanded.removeAll()
+                limitNotice = false
+            } label: {
+                Image(systemName: "arrow.down.right.and.arrow.up.left").iconHitTarget(20)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .disabled(expanded.isEmpty)
+            .help("Collapse all")
+            .accessibilityLabel("Collapse all")
+            Button {
+                let result = root.expandableIDs()
+                expanded = result.ids
+                limitNotice = result.truncated
+            } label: {
+                Image(systemName: "arrow.up.left.and.arrow.down.right").iconHitTarget(20)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .disabled(!(root.children ?? []).contains(where: \.isExpandable))
+            .help("Expand all (up to \(JSONTreeNode.expandAllLimit) branches)")
+            .accessibilityLabel("Expand all")
+        }
+        .padding(.horizontal, 10)
+        .frame(height: 28)
+    }
+
+    private func toggle(_ id: String) {
+        if expanded.contains(id) { expanded.remove(id) } else { expanded.insert(id) }
     }
 
     /// Metin değeri tırnaksız ham haliyle (token'ı kopyalayan kullanıcı

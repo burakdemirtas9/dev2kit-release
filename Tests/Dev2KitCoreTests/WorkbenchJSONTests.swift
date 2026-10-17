@@ -247,3 +247,38 @@ final class JSONTreeEditTests: XCTestCase {
         XCTAssertEqual(one.editableText, "1")
     }
 }
+
+final class JSONTreeNavigationTests: XCTestCase {
+    private let root = JSONTreeNode(value: try! JSONDocument.parse(#"{"data":{"items":[{"token":"x"},{"token":"y"}]},"ok":true,"bos":{}}"#))
+
+    func testOnlyExpandedBranchesProduceRows() {
+        XCTAssertEqual(root.visibleRows(expanded: []).map(\.id), ["data", "ok", "bos"])
+        let rows = root.visibleRows(expanded: ["data", "data.items"])
+        XCTAssertEqual(rows.map(\.id), ["data", "data.items", "data.items[0]", "data.items[1]", "ok", "bos"])
+        XCTAssertEqual(rows.map(\.depth), [0, 1, 2, 2, 0, 0])
+    }
+
+    func testExpandAllOpensEveryNonEmptyBranchUpToTheLimit() {
+        let all = root.expandableIDs()
+        XCTAssertEqual(all.ids, ["data", "data.items", "data.items[0]", "data.items[1]"], "boş nesne açılabilir değil")
+        XCTAssertFalse(all.truncated)
+        let limited = root.expandableIDs(limit: 2)
+        XCTAssertEqual(limited.ids, ["data", "data.items"], "önce üst seviyeler")
+        XCTAssertTrue(limited.truncated)
+    }
+
+    func testAncestryForBreadcrumb() throws {
+        let rows = root.visibleRows(expanded: ["data", "data.items", "data.items[1]"])
+        let token = try XCTUnwrap(rows.first { $0.id == "data.items[1].token" }?.node)
+        XCTAssertEqual(root.ancestry(to: token).map(\.label), ["data", "items", "[1]", "token"])
+        // Girdi değişip düğüm kalmadıysa boş.
+        let other = JSONTreeNode(value: try JSONDocument.parse(#"{"data":{}}"#))
+        XCTAssertTrue(other.ancestry(to: token).isEmpty)
+    }
+
+    func testPrimitiveRootIsASingleRow() throws {
+        let scalar = JSONTreeNode(value: try JSONDocument.parse("42"))
+        XCTAssertEqual(scalar.visibleRows(expanded: []).count, 1)
+        XCTAssertTrue(scalar.expandableIDs().ids.isEmpty)
+    }
+}

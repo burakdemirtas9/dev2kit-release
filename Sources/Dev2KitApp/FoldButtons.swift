@@ -9,6 +9,8 @@ import SwiftUI
 /// kullanıcıda "geçiş" hangi yöne gideceği belirsiz olurdu.
 struct FoldButtons: View {
     @ObservedObject var folding: CodeFoldingController
+    /// Workbench arayüzü İngilizce (docs/V2.md).
+    var english = false
 
     var body: some View {
         if folding.isAvailable {
@@ -19,8 +21,8 @@ struct FoldButtons: View {
                     Image(systemName: "arrow.down.right.and.arrow.up.left")
                         .iconHitTarget(20)
                 }
-                .help("Tüm blokları kapat")
-                .accessibilityLabel("Tüm blokları kapat")
+                .help(english ? "Collapse all" : "Tüm blokları kapat")
+                .accessibilityLabel(english ? "Collapse all" : "Tüm blokları kapat")
 
                 Button {
                     folding.expandAll()
@@ -28,8 +30,8 @@ struct FoldButtons: View {
                     Image(systemName: "arrow.up.left.and.arrow.down.right")
                         .iconHitTarget(20)
                 }
-                .help("Tüm blokları aç")
-                .accessibilityLabel("Tüm blokları aç")
+                .help(english ? "Expand all" : "Tüm blokları aç")
+                .accessibilityLabel(english ? "Expand all" : "Tüm blokları aç")
                 .disabled(!folding.hasFolded)
             }
             .buttonStyle(.plain)

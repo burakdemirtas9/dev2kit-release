@@ -289,3 +289,66 @@ public extension JSONValue {
         throw WorkbenchIssue(message: "Düzenlenen değer girdide artık yok")
     }
 }
+
+/// Ağaç görünümünde bir satır: düğüm ve girinti derinliği.
+public struct JSONTreeRow: Identifiable, Sendable {
+    public let node: JSONTreeNode
+    public let depth: Int
+    public var id: String { node.id }
+}
+
+public extension JSONTreeNode {
+    /// "Tümünü aç" en fazla bu kadar dalı açar: 50 MB'lık bir belgede on
+    /// binlerce dalı birden açmak listeyi kilitlerdi.
+    static let expandAllLimit = 5_000
+
+    /// Açılabilir mi (boş olmayan nesne/dizi).
+    var isExpandable: Bool { !(children?.isEmpty ?? true) }
+
+    /// Görünen satırlar, sırayla: kökün çocukları ve yalnızca AÇIK dalların
+    /// çocukları. Kapalı dalların düğümleri hiç oluşmaz (bellek, docs/V2.md).
+    /// Kök bir nesne/dizi değilse tek satır olarak kendisi.
+    func visibleRows(expanded: Set<String>) -> [JSONTreeRow] {
+        guard let children else { return [JSONTreeRow(node: self, depth: 0)] }
+        var rows: [JSONTreeRow] = []
+        func walk(_ nodes: [JSONTreeNode], depth: Int) {
+            for node in nodes {
+                rows.append(JSONTreeRow(node: node, depth: depth))
+                if expanded.contains(node.id), let children = node.children { walk(children, depth: depth + 1) }
+            }
+        }
+        walk(children, depth: 0)
+        return rows
+    }
+
+    /// "Tümünü aç" için açılabilir düğümlerin kimlikleri; `limit`e ulaşınca
+    /// durur (`truncated`). Genişlik öncelikli: önce üst seviyeler açılır.
+    func expandableIDs(limit: Int = expandAllLimit) -> (ids: Set<String>, truncated: Bool) {
+        var ids = Set<String>()
+        var queue = children ?? []
+        var head = 0
+        while head < queue.count {
+            let node = queue[head]
+            head += 1
+            guard node.isExpandable else { continue }
+            if ids.count >= limit { return (ids, true) }
+            ids.insert(node.id)
+            queue.append(contentsOf: node.children ?? [])
+        }
+        return (ids, false)
+    }
+
+    /// Kökten verilen düğüme giden düğümler (kök hariç, düğüm dahil):
+    /// breadcrumb. Düğüm artık yoksa (girdi değişti) boş.
+    func ancestry(to target: JSONTreeNode) -> [JSONTreeNode] {
+        var path: [JSONTreeNode] = []
+        var current = self
+        for depth in target.steps.indices {
+            let prefix = Array(target.steps.prefix(depth + 1))
+            guard let next = current.children?.first(where: { $0.steps == prefix }) else { return [] }
+            path.append(next)
+            current = next
+        }
+        return path
+    }
+}
