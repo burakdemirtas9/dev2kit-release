@@ -28,10 +28,11 @@ enum Theme {
     // MARK: Sözdizimi renkleri
     /// JSON key / markup tag: gf-purple; koyu zeminde sönük kaldığı için dark'ta gf-lilac-300.
     static let syntaxKey = dynamicColor(light: "#5d3ebc", dark: "#aa9cd5")
-    /// String: gf-yellow; beyaz zeminde okunmadığı için light'ta gf-yellow-600.
-    static let syntaxString = dynamicColor(light: "#e3bd49", dark: "#ffd300")
-    /// Sayılar: gf-up.
-    static let syntaxNumber = dynamicColor(light: "#008c29", dark: "#00a832")
+    /// String: gf-up (yeşil). Sayılar: gf-yellow; beyaz zeminde okunmadığı
+    /// için light'ta gf-yellow-600. (2026-10-18'e kadar tersiydi; kullanıcı
+    /// kararıyla yer değiştirdi — JSON araçlarındaki yaygın alışkanlık.)
+    static let syntaxString = dynamicColor(light: "#008c29", dark: "#00a832")
+    static let syntaxNumber = dynamicColor(light: "#e3bd49", dark: "#ffd300")
     /// Keyword / true-false-null: gf-down.
     static let syntaxKeyword = dynamicColor(light: "#e23737", dark: "#e23737")
     /// Attribute adları: gf-purple-700; dark'ta gf-lilac-200.
