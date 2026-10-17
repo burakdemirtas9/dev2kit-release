@@ -6,20 +6,20 @@ import Foundation
 /// log sistemine (Kibana) bu kimlikle gidilir. Yanıtın içinden elle kopyalamak
 /// yerine arayüz tek tıkla verir.
 ///
-/// Arama sırası bilinçli: daha özel olan başlık daha genel olana tercih edilir.
-/// `x-correlation-id` varken `x-request-id` gösterilmez — ikisi farklı şeyler
-/// olabilir ve kullanıcı genelde ilkini arar.
+/// Şimdilik yalnızca `X-B3-TraceId`: kurumdaki log araması bu kimlikle
+/// yapılıyor; `X-Request-Id` gibi gateway'in eklediği başka kimlikler rozette
+/// yanlış değeri öne çıkarıyordu. Yeni başlık eklenecekse `headerNames`'e
+/// (öncelik sırasıyla) ve `explanations`'a eklenir.
 public enum CorrelationID {
     /// Sırayla aranan başlıklar. Küçük harfle karşılaştırılır.
     public static let headerNames = [
-        "x-correlation-id",
-        "correlation-id",
-        "x-request-id",
-        "request-id",
         "x-b3-traceid",
-        "traceparent",
-        "x-amzn-trace-id",
-        "x-trace-id",
+    ]
+
+    /// Rozetin ipucunda "bu ne" açıklaması; anahtar küçük harfli başlık adı.
+    static let explanations = [
+        "x-b3-traceid": "B3 (Zipkin) izleme kimliği: isteğin geçtiği tüm servislerde aynı kalır. "
+            + "Kibana'da bu değerle arayınca isteğin bütün servislerdeki logları gelir.",
     ]
 
     public struct Match: Sendable, Equatable {
@@ -27,6 +27,12 @@ public enum CorrelationID {
         public let headerName: String
         /// Gösterilecek/kopyalanacak değer.
         public let value: String
+
+        /// Kimliğin ne olduğu, ne işe yaradığı; bilinmeyen başlıkta genel metin.
+        public var explanation: String {
+            CorrelationID.explanations[headerName.lowercased()]
+                ?? "İzleme kimliği: log sisteminde bu isteği bulmak için kullanılır."
+        }
 
         public init(headerName: String, value: String) {
             self.headerName = headerName

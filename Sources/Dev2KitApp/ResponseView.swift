@@ -307,7 +307,7 @@ struct ResponseView: View {
         }
         .buttonStyle(.plain)
         .foregroundStyle(.secondary)
-        .help("\(correlation.headerName): \(correlation.value)\nTıkla, panoya kopyalansın")
+        .help("\(correlation.explanation)\n\n\(correlation.headerName): \(correlation.value)\n\nTıkla, panoya kopyalansın.")
         .accessibilityLabel("İzleme kimliğini kopyala")
     }
 
