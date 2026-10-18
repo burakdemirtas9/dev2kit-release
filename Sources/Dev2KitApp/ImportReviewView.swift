@@ -48,7 +48,7 @@ struct ImportReviewView: View {
             HStack {
                 Text(review.collection.name).font(.headline)
                 Text("\(review.requests.count) istek")
-                    .font(.caption)
+                    .font(.secondaryText)
                     .foregroundStyle(.secondary)
             }
             let flagged = review.requests
@@ -64,7 +64,7 @@ struct ImportReviewView: View {
             }
             ForEach(review.notes, id: \.self) { note in
                 Label(note, systemImage: "info.circle")
-                    .font(.caption)
+                    .font(.secondaryText)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -75,12 +75,12 @@ struct ImportReviewView: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
                 Text(review.request.method.rawValue)
-                    .font(.system(.caption, design: .monospaced)).bold()
+                    .font(.secondaryMono).bold()
                     .foregroundStyle(Theme.purple)
                 Text(review.request.name).fontWeight(.medium)
                 if review.isBlocked {
                     Text("aktarılmayacak")
-                        .font(.caption2.bold())
+                        .font(.tinyText.bold())
                         .padding(.horizontal, 5).padding(.vertical, 1)
                         .foregroundStyle(Theme.down)
                         .background(Theme.down.opacity(0.12), in: Capsule())
@@ -94,7 +94,7 @@ struct ImportReviewView: View {
                     VStack(alignment: .leading, spacing: 1) {
                         Text(finding.title).font(.callout)
                         Text(finding.detail)
-                            .font(.caption)
+                            .font(.secondaryText)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }

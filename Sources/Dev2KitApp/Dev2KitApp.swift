@@ -37,6 +37,7 @@ struct Dev2KitApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var appState = AppState()
     @State private var workbench = WorkbenchState()
+    @AppStorage(EditorZoom.key) private var editorFontSize = EditorZoom.standard
 
     /// Workbench'teyken API Client'a ait kısayollar devre dışı (docs/V2.md).
     private var apiClientCommandsDisabled: Bool { !appState.isAPIClient }
@@ -118,6 +119,19 @@ struct Dev2KitApp: App {
             }
             .keyboardShortcut("f", modifiers: [.command, .shift])
             .disabled(apiClientCommandsDisabled)
+        }
+        // Kod editörlerinin yazı boyutu: iki modda da (gövde, yanıt, Workbench).
+        CommandGroup(after: .toolbar) {
+            Divider()
+            Button("Yazıyı Büyüt") { editorFontSize = EditorZoom.zoomed(editorFontSize, by: 1) }
+                .keyboardShortcut("+", modifiers: .command)
+                .disabled(editorFontSize >= EditorZoom.range.upperBound)
+            Button("Yazıyı Küçült") { editorFontSize = EditorZoom.zoomed(editorFontSize, by: -1) }
+                .keyboardShortcut("-", modifiers: .command)
+                .disabled(editorFontSize <= EditorZoom.range.lowerBound)
+            Button("Gerçek Boyut") { editorFontSize = EditorZoom.standard }
+                .keyboardShortcut("0", modifiers: .command)
+                .disabled(editorFontSize == EditorZoom.standard)
         }
         CommandMenu("İstek") {
             ForEach(Array(EditorTab.allCases.enumerated()), id: \.element) { index, tab in

@@ -31,7 +31,7 @@ struct ResponseTimingPopover: View {
                 // DNS/TCP/TLS satırlarının yokluğu eksik ölçüm değil.
                 Label("Bağlantı yeniden kullanıldı — DNS, TCP ve TLS aşamaları yaşanmadı.",
                       systemImage: "arrow.triangle.2.circlepath")
-                    .font(.caption)
+                    .font(.secondaryText)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -44,7 +44,7 @@ struct ResponseTimingPopover: View {
         let isSlowest = timing.slowest?.kind == phase.kind
         return HStack(spacing: 8) {
             Text(Self.label(phase.kind))
-                .font(.caption)
+                .font(.secondaryText)
                 .foregroundStyle(.secondary)
                 .frame(width: 110, alignment: .leading)
 
@@ -60,7 +60,7 @@ struct ResponseTimingPopover: View {
             .frame(height: 12)
 
             Text(Self.format(phase.duration))
-                .font(.system(.caption, design: .monospaced))
+                .font(.secondaryMono)
                 .foregroundStyle(isSlowest ? .primary : .secondary)
                 .fontWeight(isSlowest ? .semibold : .regular)
                 .frame(width: 72, alignment: .trailing)

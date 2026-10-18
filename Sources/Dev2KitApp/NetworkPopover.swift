@@ -78,11 +78,11 @@ struct NetworkPopover: View {
     private func row(_ title: String, _ value: String, warning: Bool = false) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             Text(title)
-                .font(.caption)
+                .font(.secondaryText)
                 .foregroundStyle(.secondary)
                 .frame(width: 110, alignment: .leading)
             Text(value)
-                .font(.system(.caption, design: .monospaced))
+                .font(.secondaryMono)
                 .foregroundStyle(warning ? Theme.down : .primary)
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)

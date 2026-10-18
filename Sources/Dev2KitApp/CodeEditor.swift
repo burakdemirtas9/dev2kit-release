@@ -217,7 +217,8 @@ struct CodeEditor: NSViewRepresentable {
     /// hangi bölmede (girdi/çıktı) arama açacağını buradan bilir.
     var onFocus: (() -> Void)?
 
-    static let font = NSFont.monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
+    /// Yazı boyutu (⌘+ / ⌘− / ⌘0, bkz. `EditorZoom`): tüm editörler ortak.
+    @AppStorage(EditorZoom.key) private var fontSize = EditorZoom.standard
 
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
@@ -227,7 +228,8 @@ struct CodeEditor: NSViewRepresentable {
         let scrollView = NSTextView.scrollableTextView()
         let textView = scrollView.documentView as! NSTextView
         textView.delegate = context.coordinator
-        textView.font = Self.font
+        textView.font = EditorZoom.font(fontSize)
+        context.coordinator.fontSize = fontSize
         textView.isRichText = false
         textView.allowsUndo = true
         textView.isAutomaticQuoteSubstitutionEnabled = false
@@ -246,6 +248,7 @@ struct CodeEditor: NSViewRepresentable {
         if let folding {
             // Gutter: satır numaraları + katlama okları.
             let gutter = EditorGutter(scrollView: scrollView, textView: textView)
+            gutter.fontSize = EditorZoom.gutterSize(fontSize)
             gutter.onToggleFold = { [weak coordinator = context.coordinator] line in
                 coordinator?.toggleFold(line: line, in: textView)
             }
@@ -318,6 +321,9 @@ struct CodeEditor: NSViewRepresentable {
             context.coordinator.textChanged(textView)
         }
         context.coordinator.markError(at: errorOffset, in: textView)
+        if context.coordinator.fontSize != fontSize {
+            context.coordinator.applyFontSize(fontSize, to: textView)
+        }
     }
 
     /// `@MainActor`: bu sınıfın tüm çağrıları AppKit'ten gelir (delegate'ler,
@@ -339,6 +345,8 @@ struct CodeEditor: NSViewRepresentable {
         }
 
         var parent: CodeEditor
+        /// Editörün şu an kullandığı yazı boyutu.
+        var fontSize = EditorZoom.standard
         var lastLanguage: CodeLanguage?
         private var scrollObserver: NSObjectProtocol?
         /// Gutter ve katlama durumu yalnızca `folding` verildiğinde kurulur.
@@ -413,10 +421,21 @@ struct CodeEditor: NSViewRepresentable {
         }
 
         /// Metin (ya da dil) değişti: temel biçim tüm belgeye, renk görünen bölgeye.
+        /// ⌘+ / ⌘−: yazı ve satır numaraları yeniden boyutlanır, renk korunur.
+        func applyFontSize(_ size: Double, to textView: NSTextView) {
+            fontSize = size
+            textView.font = EditorZoom.font(size)
+            if let storage = textView.textStorage {
+                SyntaxHighlighter.applyBaseAttributes(storage, font: EditorZoom.font(size))
+            }
+            colorizeVisible(textView)
+            gutter?.fontSize = EditorZoom.gutterSize(size)
+        }
+
         func textChanged(_ textView: NSTextView) {
             lastLanguage = parent.language
             guard let storage = textView.textStorage else { return }
-            SyntaxHighlighter.applyBaseAttributes(storage, font: CodeEditor.font)
+            SyntaxHighlighter.applyBaseAttributes(storage, font: EditorZoom.font(fontSize))
             colorizeVisible(textView)
             refreshRegions(textView)
             // Metin dışarıdan değişmiş olabilir (Beautify, yeni yanıt): eski

@@ -99,7 +99,7 @@ private struct EnvironmentDetail: View {
                 if isActive {
                     Label("Aktif", systemImage: "checkmark.circle.fill")
                         .foregroundStyle(Theme.up)
-                        .font(.caption)
+                        .font(.secondaryText)
                 } else {
                     Button("Aktif Yap", action: makeActive)
                 }
@@ -108,7 +108,7 @@ private struct EnvironmentDetail: View {
             .padding(.top, 10)
 
             Text("Değişkenler — isteklerde {{isim}} olarak kullanılır. Secret değerleri buraya değil Secrets'a yaz.")
-                .font(.caption)
+                .font(.secondaryText)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 10)
 
@@ -140,19 +140,19 @@ private struct TokenFactoryVariablesNote: View {
                 .font(.headline)
             if sources.isEmpty {
                 Text("Bu environment'ta Token Factory değişkeni yok. Sol panelin altındaki Token Factory'den ekleyebilirsin.")
-                    .font(.caption)
+                    .font(.secondaryText)
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(sources, id: \.request.id) { source in
                     HStack(spacing: 6) {
                         Text("{{\(source.variable)}}")
-                            .font(.system(.caption, design: .monospaced))
+                            .font(.secondaryMono)
                         Text("← \(source.request.name)")
-                            .font(.caption)
+                            .font(.secondaryText)
                             .foregroundStyle(.secondary)
                         if shadowed.contains(source.variable) {
                             Label("aynı adlı değişkeni ezer", systemImage: "exclamationmark.triangle.fill")
-                                .font(.caption)
+                                .font(.secondaryText)
                                 .foregroundStyle(Theme.warning)
                                 .help("Bu environment'ta \(source.variable) adlı bir değişken de var; isteklerde Token Factory'deki token kullanılır.")
                         }

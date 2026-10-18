@@ -43,7 +43,7 @@ struct HistoryView: View {
             filters
             if let notice {
                 Label(notice, systemImage: "info.circle")
-                    .font(.caption)
+                    .font(.secondaryText)
                     .foregroundStyle(Theme.up)
             }
 
@@ -72,12 +72,12 @@ struct HistoryView: View {
             Text("Geçmiş")
                 .font(.title2).bold()
             Text("\(appState.history.count) kayıt · \(ByteCountFormatter.string(fromByteCount: Int64(appState.historyFileSize), countStyle: .file))")
-                .font(.caption)
+                .font(.secondaryText)
                 .foregroundStyle(.secondary)
             Spacer()
             if !appState.historySettings.isEnabled {
                 Label("Kayıt kapalı", systemImage: "pause.circle")
-                    .font(.caption)
+                    .font(.secondaryText)
                     .foregroundStyle(Theme.warning)
             }
             Button {
@@ -144,11 +144,11 @@ struct HistoryView: View {
                     .lineLimit(1)
                 Spacer()
                 Text(entry.date.formatted(date: .omitted, time: .standard))
-                    .font(.caption2)
+                    .font(.tinyText)
                     .foregroundStyle(.tertiary)
             }
             Text(entry.url)
-                .font(.system(.caption, design: .monospaced))
+                .font(.secondaryMono)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
         }
@@ -164,7 +164,7 @@ struct HistoryView: View {
                     .foregroundStyle(entry.outcome.isSuccess ? Theme.up : (status < 500 ? Theme.warning : Theme.down))
             case .failed:
                 Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.caption2)
+                    .font(.tinyText)
                     .foregroundStyle(Theme.down)
             }
         }
@@ -184,7 +184,7 @@ struct HistoryView: View {
                         Divider()
                         Text("Yanıt önizlemesi").font(.subheadline).bold()
                         Text(preview)
-                            .font(.system(.caption, design: .monospaced))
+                            .font(.secondaryMono)
                             .textSelection(.enabled)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
@@ -225,22 +225,22 @@ struct HistoryView: View {
         VStack(alignment: .leading, spacing: 3) {
             Text("İstek").font(.subheadline).bold()
             Text("\(snapshot.method.rawValue) \(snapshot.url)")
-                .font(.system(.caption, design: .monospaced))
+                .font(.secondaryMono)
                 .textSelection(.enabled)
             ForEach(snapshot.headers) { header in
                 Text("\(header.key): \(header.value)")
-                    .font(.system(.caption2, design: .monospaced))
+                    .font(.tinyMono)
                     .foregroundStyle(.secondary)
             }
             if case .raw(let content, _) = snapshot.body, !content.isEmpty {
                 Text(content)
-                    .font(.system(.caption2, design: .monospaced))
+                    .font(.tinyMono)
                     .foregroundStyle(.secondary)
                     .lineLimit(8)
             }
             Label("Kimlik bilgileri \(HistoryRedactor.mask) ile maskelenir; geri yüklemede mevcut değerler korunur.",
                   systemImage: "lock.shield")
-                .font(.caption2)
+                .font(.tinyText)
                 .foregroundStyle(.tertiary)
                 .padding(.top, 2)
         }
@@ -276,11 +276,11 @@ struct HistoryView: View {
     private func label(_ title: String, _ value: String) -> some View {
         HStack(alignment: .top, spacing: 6) {
             Text(title)
-                .font(.caption)
+                .font(.secondaryText)
                 .foregroundStyle(.secondary)
                 .frame(width: 90, alignment: .leading)
             Text(value)
-                .font(.caption)
+                .font(.secondaryText)
                 .textSelection(.enabled)
         }
     }
@@ -325,7 +325,7 @@ struct HistorySettingsView: View {
                     Toggle("Geçmişi tut", isOn: $state.historySettings.isEnabled)
                 } footer: {
                     Text("Kapalıyken hiçbir gönderim kaydedilmez. Mevcut kayıtlar silinmez.")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(.secondaryText).foregroundStyle(.secondary)
                 }
 
                 Section {
@@ -356,7 +356,7 @@ struct HistorySettingsView: View {
                     Text("Saklama")
                 } footer: {
                     Text("Üç sınır birlikte çalışır; hangisi önce dolarsa en eski kayıtlar düşer. Gövde sınırı tek bir büyük isteğin dosyayı şişirmesini engeller — kırpılan gövdenin başı saklanır.")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(.secondaryText).foregroundStyle(.secondary)
                 }
 
                 Section {
@@ -366,7 +366,7 @@ struct HistorySettingsView: View {
                         "Yanıtlar token ve kişisel veri içerebilir. Saklanırsa bilinen kimlik alanları maskelenir ve boyut sınırlanır, ama yine de riski artırır.",
                         systemImage: "exclamationmark.triangle"
                     )
-                    .font(.caption)
+                    .font(.secondaryText)
                     .foregroundStyle(Theme.warning)
                 }
 
@@ -375,7 +375,7 @@ struct HistorySettingsView: View {
                         "Kayıtlar AES-GCM ile şifrelenmiş dosyada tutulur; isteğin şablon hali saklanır, çözülmüş secret değerleri asla yazılmaz.",
                         systemImage: "lock.shield"
                     )
-                    .font(.caption)
+                    .font(.secondaryText)
                     .foregroundStyle(.secondary)
                 }
             }

@@ -29,7 +29,7 @@ struct WorkbenchSidebar: View {
         VStack(spacing: 0) {
             HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass")
-                    .font(.caption)
+                    .font(.secondaryText)
                     .foregroundStyle(.secondary)
                 TextField("Search tools", text: $state.searchQuery)
                     .textFieldStyle(.plain)

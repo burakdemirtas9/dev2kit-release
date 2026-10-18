@@ -17,7 +17,7 @@ struct SecretsView: View {
             Text("Secrets")
                 .font(.title2).bold()
             Text("Değerler AES-GCM ile şifrelenmiş yerel vault'ta saklanır; koleksiyon dosyalarına asla düz metin yazılmaz. İsteklerde {{secret:isim}} olarak kullan.")
-                .font(.caption)
+                .font(.secondaryText)
                 .foregroundStyle(.secondary)
 
             List {
@@ -49,7 +49,7 @@ struct SecretsView: View {
             .textFieldStyle(.roundedBorder)
 
             if let errorMessage {
-                Text(errorMessage).foregroundStyle(.red).font(.caption)
+                Text(errorMessage).foregroundStyle(.red).font(.secondaryText)
             }
 
             HStack {

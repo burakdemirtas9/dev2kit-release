@@ -52,7 +52,7 @@ struct OAuth2Editor: View {
 
             if let message = appState.authMessage {
                 Text(message)
-                    .font(.caption)
+                    .font(.secondaryText)
                     .foregroundStyle(message.contains("tamamlandı") ? Theme.up : Theme.down)
                     .lineLimit(3)
             }
@@ -61,7 +61,7 @@ struct OAuth2Editor: View {
                 "Sistem tarayıcısı kullanılır; uygulama parolanı hiç görmez. Token şifreli vault'ta saklanır, koleksiyon dosyasına yazılmaz. Yönlendirme yalnızca 127.0.0.1'e bağlanır.",
                 systemImage: "lock.shield"
             )
-            .font(.caption)
+            .font(.secondaryText)
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
         }
@@ -84,10 +84,10 @@ struct OAuth2Editor: View {
                     Text("· yenilenebilir").foregroundStyle(.tertiary)
                 }
             }
-            .font(.caption)
+            .font(.secondaryText)
         } else {
             Label("Henüz token yok", systemImage: "circle.dashed")
-                .font(.caption)
+                .font(.secondaryText)
                 .foregroundStyle(.secondary)
         }
     }
@@ -95,7 +95,7 @@ struct OAuth2Editor: View {
     private func row(_ title: String, _ placeholder: String, _ text: Binding<String>) -> some View {
         GridRow {
             Text(title)
-                .font(.caption)
+                .font(.secondaryText)
                 .foregroundStyle(.secondary)
                 .gridColumnAlignment(.trailing)
             TemplateTextField(placeholder: placeholder, text: text)

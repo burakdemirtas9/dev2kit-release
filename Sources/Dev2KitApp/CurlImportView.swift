@@ -21,7 +21,7 @@ struct CurlImportView: View {
             Text("cURL'den İstek")
                 .font(.title2).bold()
             Text("Tarayıcının \"Copy as cURL\" çıktısını ya da dokümandaki örneği yapıştır.")
-                .font(.caption)
+                .font(.secondaryText)
                 .foregroundStyle(.secondary)
 
             CodeEditor(text: $command, language: .plain)
@@ -55,7 +55,7 @@ struct CurlImportView: View {
 
             if let parseError {
                 Label(parseError, systemImage: "xmark.octagon.fill")
-                    .font(.caption)
+                    .font(.secondaryText)
                     .foregroundStyle(Theme.down)
                     .lineLimit(2)
             }
@@ -95,24 +95,24 @@ struct CurlImportView: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
                     Text(request.method.rawValue)
-                        .font(.system(.caption, design: .monospaced)).bold()
+                        .font(.secondaryMono).bold()
                         .foregroundStyle(Theme.purple)
                     Text(request.url)
-                        .font(.system(.caption, design: .monospaced))
+                        .font(.secondaryMono)
                         .lineLimit(2)
                 }
                 Text(details(request))
-                    .font(.caption)
+                    .font(.secondaryText)
                     .foregroundStyle(.secondary)
                 ForEach(findings, id: \.self) { finding in
                     Label("\(finding.title): \(finding.detail)", systemImage: finding.severity == .block ? "xmark.octagon.fill" : "exclamationmark.shield.fill")
-                        .font(.caption)
+                        .font(.secondaryText)
                         .foregroundStyle(finding.severity == .block ? Theme.down : (finding.severity == .warn ? Theme.warning : .secondary))
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 ForEach(result.warnings, id: \.self) { warning in
                     Label(warning, systemImage: "exclamationmark.triangle.fill")
-                        .font(.caption)
+                        .font(.secondaryText)
                         .foregroundStyle(Theme.warning)
                         .fixedSize(horizontal: false, vertical: true)
                 }

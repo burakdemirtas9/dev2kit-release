@@ -29,7 +29,7 @@ struct KeyValueEditor: View {
             toolbar
             if let message {
                 Label(message.text, systemImage: message.isError ? "xmark.octagon.fill" : "checkmark.circle.fill")
-                    .font(.caption)
+                    .font(.secondaryText)
                     .foregroundStyle(message.isError ? Theme.down : Theme.up)
                     .lineLimit(2)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -123,7 +123,7 @@ struct KeyValueEditor: View {
                 entries.append(KeyValueEntry())
             } label: {
                 Label("Satır Ekle", systemImage: "plus")
-                    .font(.caption)
+                    .font(.secondaryText)
                     .rowHitTarget(minHeight: 20)
             }
             .buttonStyle(.plain)

@@ -120,7 +120,7 @@ struct EditorSearchBar: View {
     ) -> some View {
         Button(action: action) {
             Text(title)
-                .font(.system(.caption, design: .monospaced))
+                .font(.secondaryMono)
                 .iconHitTarget(20)
                 .background(
                     isOn ? Theme.accent.opacity(0.25) : .clear,

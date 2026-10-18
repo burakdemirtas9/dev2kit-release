@@ -98,13 +98,13 @@ struct DiffCheckerView: View {
     private func inputPane(_ title: String, text: Binding<String>, language: CodeLanguage, issue: String?) -> some View {
         VStack(spacing: 0) {
             HStack(spacing: 6) {
-                Text(title).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                Text(title).font(.secondaryText.weight(.semibold)).foregroundStyle(.secondary)
                 Text(text.wrappedValue.isEmpty ? "" : TextStats.size(text.wrappedValue.utf8.count))
-                    .font(.caption2.monospacedDigit())
+                    .font(.tinyText.monospacedDigit())
                     .foregroundStyle(.tertiary)
                 if let issue {
                     Label("Compared as-is: \(issue)", systemImage: "exclamationmark.triangle.fill")
-                        .font(.caption2)
+                        .font(.tinyText)
                         .foregroundStyle(Theme.warning)
                         .lineLimit(1)
                         .help(issue)
@@ -213,7 +213,7 @@ private struct DiffResultView: View {
                     .accessibilityLabel("Next difference")
             }
         }
-        .font(.caption)
+        .font(.secondaryText)
         .padding(.horizontal, 14)
         .frame(height: 30)
         .background(.bar)
@@ -225,6 +225,8 @@ private struct DiffResultView: View {
 private struct DiffLinesView: View {
     let rows: [DiffRow]
     let highlighted: Int?
+    /// Kod editörleriyle aynı yazı boyutu (⌘+ / ⌘−).
+    @AppStorage(EditorZoom.key) private var fontSize = EditorZoom.standard
 
     var body: some View {
         ScrollView {
@@ -241,7 +243,7 @@ private struct DiffLinesView: View {
                     .id(row.id)
                 }
             }
-            .font(.system(size: 12, design: .monospaced))
+            .font(.system(size: fontSize - 1, design: .monospaced))
         }
     }
 

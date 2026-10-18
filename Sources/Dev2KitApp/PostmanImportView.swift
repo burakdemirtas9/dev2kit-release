@@ -47,14 +47,14 @@ struct PostmanImportView: View {
 
             if let errorMessage {
                 Label(errorMessage, systemImage: "xmark.octagon.fill")
-                    .font(.caption)
+                    .font(.secondaryText)
                     .foregroundStyle(Theme.down)
                     .lineLimit(3)
             }
             if let lastResultMessage {
                 ScrollView {
                     Text(lastResultMessage)
-                        .font(.caption)
+                        .font(.secondaryText)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -95,10 +95,10 @@ struct PostmanImportView: View {
             Text("Postman koleksiyonların hesabına senkronlanır; buradan otomatik çekmek için bir Postman API anahtarı gerekir:")
                 .font(.callout)
             Text("postman.co → sağ üst profil → Settings → API Keys → Generate API Key")
-                .font(.system(.caption, design: .monospaced))
+                .font(.secondaryMono)
                 .foregroundStyle(.secondary)
             Text("Anahtar şifreli vault'ta saklanır ve yalnızca api.getpostman.com'a gönderilir.")
-                .font(.caption)
+                .font(.secondaryText)
                 .foregroundStyle(.secondary)
 
             HStack {
@@ -163,7 +163,7 @@ struct PostmanImportView: View {
                             Text(summary.name)
                             Spacer()
                             Text("Aktarıldı")
-                                .font(.caption)
+                                .font(.secondaryText)
                                 .foregroundStyle(.secondary)
                         } else {
                             Toggle(isOn: Binding(

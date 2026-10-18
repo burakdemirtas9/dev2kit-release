@@ -254,7 +254,7 @@ struct ResponseView: View {
                         Text("\(index + 1).")
                             .foregroundStyle(.secondary)
                         Text("\(step.statusCode)")
-                            .font(.system(.caption, design: .monospaced)).bold()
+                            .font(.secondaryMono).bold()
                             .foregroundStyle(Theme.warning)
                         Text(step.to.absoluteString)
                             .font(.system(.body, design: .monospaced))
@@ -265,7 +265,7 @@ struct ResponseView: View {
                             "Farklı host: \(step.strippedHeaders.joined(separator: ", ")) başlıkları düşürüldü",
                             systemImage: "lock.shield.fill"
                         )
-                        .font(.caption)
+                        .font(.secondaryText)
                         .foregroundStyle(Theme.up)
                     }
                 }
@@ -273,12 +273,12 @@ struct ResponseView: View {
             }
             if let stop = response.redirectStop {
                 Label("Zincir kesildi: \(stop.explanation)", systemImage: "hand.raised.fill")
-                    .font(.caption)
+                    .font(.secondaryText)
                     .foregroundStyle(Theme.down)
             }
             if let final = response.finalURL {
                 Label("Son adres: \(final.absoluteString)", systemImage: "flag.checkered")
-                    .font(.caption)
+                    .font(.secondaryText)
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
             }
@@ -298,7 +298,7 @@ struct ResponseView: View {
             HStack(spacing: 4) {
                 Image(systemName: copiedCorrelationID ? "checkmark" : "number")
                 Text(copiedCorrelationID ? "Kopyalandı" : CorrelationID.shortened(correlation.value))
-                    .font(.system(.caption, design: .monospaced))
+                    .font(.secondaryMono)
             }
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
@@ -373,18 +373,18 @@ struct ResponseView: View {
             }
             if response.certificateValidationSkipped {
                 Label("Sertifika doğrulanmadı", systemImage: "exclamationmark.shield.fill")
-                    .font(.caption)
+                    .font(.secondaryText)
                     .foregroundStyle(Theme.down)
                     .help("Bu yanıt, sunucu sertifikası doğrulanmadan kurulan bir bağlantıdan geldi. Kaynağın gerçekten o sunucu olduğu garanti değil.")
             }
             if !response.redirects.isEmpty {
                 Label("\(response.redirects.count) yönlendirme", systemImage: "arrow.triangle.turn.up.right.diamond")
-                    .font(.caption)
+                    .font(.secondaryText)
                     .foregroundStyle(Theme.warning)
             }
             if let stop = response.redirectStop {
                 Label(stop.explanation, systemImage: "hand.raised.fill")
-                    .font(.caption)
+                    .font(.secondaryText)
                     .foregroundStyle(Theme.down)
             }
             Spacer()

@@ -22,7 +22,16 @@ final class EditorGutter: NSRulerView {
 
     private var textView: NSTextView? { clientView as? NSTextView }
 
-    private static let font = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .regular)
+    /// Editörle orantılı (⌘+ / ⌘−); varsayılanda 10 pt.
+    var fontSize: Double = 10 {
+        didSet {
+            guard fontSize != oldValue else { return }
+            font = NSFont.monospacedDigitSystemFont(ofSize: fontSize, weight: .regular)
+            updateThickness()
+            needsDisplay = true
+        }
+    }
+    private var font = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .regular)
     private static let arrowWidth: CGFloat = 12
 
     init(scrollView: NSScrollView, textView: NSTextView) {
@@ -42,10 +51,16 @@ final class EditorGutter: NSRulerView {
             starts.append(index + 1)
         }
         lineStarts = starts
-        // Genişlik satır sayısının basamağına göre: 4 haneli belgede numara kırpılmasın.
-        let digits = max(2, String(starts.count).count)
-        ruleThickness = CGFloat(digits) * 7 + Self.arrowWidth + 12
+        updateThickness()
         needsDisplay = true
+    }
+
+    /// Genişlik satır sayısının basamağına ve yazı boyutuna göre: 4 haneli
+    /// belgede ya da büyütülmüş yazıda numara kırpılmasın. Rakam genişliği
+    /// yazı boyutunun ~%70'i (10 pt'de 7 px, eski sabit değer).
+    private func updateThickness() {
+        let digits = max(2, String(lineStarts.count).count)
+        ruleThickness = CGFloat(digits) * CGFloat(fontSize) * 0.7 + Self.arrowWidth + 12
     }
 
     /// Karakter indeksinden satır numarası (0'dan başlar).
@@ -113,7 +128,7 @@ final class EditorGutter: NSRulerView {
     private func drawNumber(_ number: Int, at y: CGFloat, height: CGFloat) {
         let text = "\(number)" as NSString
         let attributes: [NSAttributedString.Key: Any] = [
-            .font: Self.font,
+            .font: font,
             .foregroundColor: NSColor.tertiaryLabelColor,
         ]
         let size = text.size(withAttributes: attributes)

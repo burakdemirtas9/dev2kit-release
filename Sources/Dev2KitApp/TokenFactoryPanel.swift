@@ -52,7 +52,7 @@ struct TokenFactoryPanel: View {
                         .fill(Theme.purple.opacity(0.12))
                         .strokeBorder(Theme.purple, lineWidth: 2)
                     Label("Bırak: Token Factory'ye kopyalanır", systemImage: "plus.square.on.square")
-                        .font(.caption.weight(.semibold))
+                        .font(.secondaryText.weight(.semibold))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 4)
@@ -85,7 +85,7 @@ struct TokenFactoryPanel: View {
             } label: {
                 HStack(spacing: 5) {
                     Image(systemName: collapsed ? "chevron.right" : "chevron.down")
-                        .font(.caption2.weight(.semibold))
+                        .font(.tinyText.weight(.semibold))
                         .foregroundStyle(.secondary)
                         .frame(width: 14)
                     Image(systemName: "key.viewfinder")
@@ -93,11 +93,11 @@ struct TokenFactoryPanel: View {
                     Text(CollectionModel.tokenFactoryName)
                         .font(.callout.weight(.semibold))
                     Text("\(count)")
-                        .font(.caption2)
+                        .font(.tinyText)
                         .foregroundStyle(.tertiary)
                     if hasProblems {
                         Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.caption2)
+                            .font(.tinyText)
                             .foregroundStyle(Theme.down)
                             .help("Token Factory yapılandırmasında sorun var")
                     }
@@ -126,14 +126,14 @@ struct TokenFactoryPanel: View {
     private var emptyState: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Token üreten istekleri buraya ekle. Diğer istekler token'ı {{token}} ile kullanır.")
-                .font(.caption)
+                .font(.secondaryText)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             Button {
                 appState.addTokenFactoryRequest()
             } label: {
                 Label("Token İsteği Ekle", systemImage: "plus")
-                    .font(.caption)
+                    .font(.secondaryText)
                     .rowHitTarget(minHeight: 20)
             }
             .buttonStyle(.plain)
@@ -196,7 +196,7 @@ struct TokenFactoryPanel: View {
     private func indicator(state: AppState.TokenState?, hasProblem: Bool) -> some View {
         if hasProblem {
             Image(systemName: "exclamationmark.triangle.fill")
-                .font(.caption2).foregroundStyle(Theme.down)
+                .font(.tinyText).foregroundStyle(Theme.down)
                 .accessibilityLabel("yapılandırma sorunu")
         } else {
             switch state {

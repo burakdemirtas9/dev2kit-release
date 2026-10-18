@@ -50,7 +50,7 @@ struct OpenAPIImportView: View {
 
             if let errorMessage {
                 Label(errorMessage, systemImage: "xmark.octagon.fill")
-                    .font(.caption)
+                    .font(.secondaryText)
                     .foregroundStyle(Theme.down)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -103,7 +103,7 @@ struct OpenAPIImportView: View {
     private var addressInput: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Doküman ya da Swagger UI adresi (ör. http://localhost:8080/v3/api-docs veya …/swagger-ui/index.html). OpenAPI 3 ve Swagger 2, JSON biçiminde.")
-                .font(.caption)
+                .font(.secondaryText)
                 .foregroundStyle(.secondary)
             HStack {
                 TextField("http://localhost:8080/v3/api-docs", text: $address)
@@ -120,7 +120,7 @@ struct OpenAPIImportView: View {
     private var jsonInput: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("/v3/api-docs yanıtını yapıştır ya da kayıtlı JSON dosyasını seç. OpenAPI 3 ve Swagger 2.")
-                .font(.caption)
+                .font(.secondaryText)
                 .foregroundStyle(.secondary)
             CodeEditor(text: $json, language: .json)
                 .frame(height: 100)
@@ -155,11 +155,11 @@ struct OpenAPIImportView: View {
                     Text("v\(version)").foregroundStyle(.secondary)
                 }
                 Text(document.specVersion.hasPrefix("2") ? "Swagger \(document.specVersion)" : "OpenAPI \(document.specVersion)")
-                    .font(.caption)
+                    .font(.secondaryText)
                     .foregroundStyle(.secondary)
                 Spacer()
                 Text("\(document.operationCount) işlem")
-                    .font(.caption)
+                    .font(.secondaryText)
                     .foregroundStyle(.secondary)
             }
             LabeledContent("Sunucu") {
@@ -169,7 +169,7 @@ struct OpenAPIImportView: View {
                         .font(.system(.callout, design: .monospaced))
                     if document.serverURL == nil {
                         Text("Dokümanda mutlak sunucu adresi yok; isteklerin gideceği adresi gir.")
-                            .font(.caption)
+                            .font(.secondaryText)
                             .foregroundStyle(Theme.warning)
                     }
                 }
@@ -196,16 +196,16 @@ struct OpenAPIImportView: View {
         if let environment = appState.activeEnvironment, !server.isEmpty {
             if environment.variables.contains(where: { $0.key == name }) {
                 Label("{{\(name)}} \"\(environment.name)\" environment'ında zaten tanımlı; değeri değiştirilmez.", systemImage: "checkmark.circle")
-                    .font(.caption)
+                    .font(.secondaryText)
                     .foregroundStyle(Theme.up)
             } else {
                 Toggle("{{\(name)}} = \(server) olarak \"\(environment.name)\" environment'ına ekle", isOn: $addServerToEnvironment)
                     .toggleStyle(.checkbox)
-                    .font(.caption)
+                    .font(.secondaryText)
             }
         } else if appState.activeEnvironment == nil {
             Label("Aktif environment yok; {{\(name)}} değişkenini bir environment'a elle ekle.", systemImage: "exclamationmark.triangle")
-                .font(.caption)
+                .font(.secondaryText)
                 .foregroundStyle(Theme.warning)
         }
     }

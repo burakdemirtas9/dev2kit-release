@@ -32,18 +32,18 @@ struct KibanaImportView: View {
             Text("Kibana'dan İstek")
                 .font(.title2).bold()
             Text("Kibana'da kaydı açıp JSON halini kopyala ya da dışa aktarılan dosyayı seç. Yalnızca test/dev/uat/prep logları aktarılır.")
-                .font(.caption)
+                .font(.secondaryText)
                 .foregroundStyle(.secondary)
 
             input
             if let parseError {
                 Label(parseError, systemImage: "xmark.octagon.fill")
-                    .font(.caption)
+                    .font(.secondaryText)
                     .foregroundStyle(Theme.down)
             }
             ForEach(result?.rejected ?? [], id: \.self) { reason in
                 Label(reason, systemImage: "hand.raised.fill")
-                    .font(.caption)
+                    .font(.secondaryText)
                     .foregroundStyle(Theme.down)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -119,19 +119,19 @@ struct KibanaImportView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 Text(entry.method.rawValue)
-                    .font(.system(.caption, design: .monospaced)).bold()
+                    .font(.secondaryMono).bold()
                     .foregroundStyle(Theme.purple)
                 Text(entry.path)
-                    .font(.system(.caption, design: .monospaced))
+                    .font(.secondaryMono)
                     .lineLimit(1)
                 Spacer()
                 Text("\(entry.environment) · \(entry.serviceName)\(entry.loggedStatus.map { " · \($0)" } ?? "")")
-                    .font(.caption)
+                    .font(.secondaryText)
                     .foregroundStyle(.secondary)
             }
             ForEach(entry.warnings, id: \.self) { warning in
                 Label(warning, systemImage: "exclamationmark.triangle.fill")
-                    .font(.caption)
+                    .font(.secondaryText)
                     .foregroundStyle(Theme.warning)
             }
 
@@ -168,7 +168,7 @@ struct KibanaImportView: View {
         HStack(spacing: 8) {
             Text(title).fontWeight(.semibold)
             Text(detail)
-                .font(.system(.caption, design: .monospaced))
+                .font(.secondaryMono)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .truncationMode(.middle)
@@ -197,7 +197,7 @@ struct KibanaImportView: View {
                     .foregroundStyle(Theme.warning)
             }
         }
-        .font(.caption)
+        .font(.secondaryText)
         .padding(.leading, 20)
     }
 
@@ -226,7 +226,7 @@ struct KibanaImportView: View {
             let droppedNames = dropped(entry).map(\.name).joined(separator: ", ")
             if !droppedNames.isEmpty {
                 Label("\(droppedNames) her zaman atılır: hedefle ve gövdeyle çakışır.", systemImage: "nosign")
-                    .font(.caption)
+                    .font(.secondaryText)
                     .foregroundStyle(.secondary)
             }
         }
@@ -239,11 +239,11 @@ struct KibanaImportView: View {
             switch category {
             case .sensitive:
                 Text("token/cookie vault'a taşınır · kişisel veri düz metin kalır (KVKK)")
-                    .font(.caption)
+                    .font(.secondaryText)
                     .foregroundStyle(Theme.warning)
             case .infrastructure:
                 Text("başka bir isteğin izine ait")
-                    .font(.caption)
+                    .font(.secondaryText)
                     .foregroundStyle(.secondary)
             default:
                 EmptyView()
@@ -256,7 +256,7 @@ struct KibanaImportView: View {
     private func headerRow(_ header: ClassifiedHeader) -> some View {
         HStack(spacing: 8) {
             Text(header.name)
-                .font(.system(.caption, design: .monospaced))
+                .font(.secondaryMono)
             Group {
                 if header.sensitiveKind != nil {
                     Text("•••• (\(header.value.count) karakter)")
@@ -264,7 +264,7 @@ struct KibanaImportView: View {
                     Text(header.value)
                 }
             }
-            .font(.system(.caption, design: .monospaced))
+            .font(.secondaryMono)
             .foregroundStyle(.secondary)
             .lineLimit(1)
             .truncationMode(.middle)
@@ -281,7 +281,7 @@ struct KibanaImportView: View {
 
     private func tag(_ text: String, color: Color) -> some View {
         Text(text)
-            .font(.caption2).bold()
+            .font(.tinyText).bold()
             .padding(.horizontal, 5).padding(.vertical, 1)
             .foregroundStyle(color)
             .background(color.opacity(0.12), in: Capsule())
@@ -293,7 +293,7 @@ struct KibanaImportView: View {
         VStack(alignment: .trailing, spacing: 6) {
             if let importError {
                 Label(importError, systemImage: "xmark.octagon.fill")
-                    .font(.caption)
+                    .font(.secondaryText)
                     .foregroundStyle(Theme.down)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -348,7 +348,7 @@ struct KibanaImportView: View {
                         .frame(width: 170)
                     if appState.existingCollection(named: newCollectionName) != nil {
                         Text("Bu adla bir koleksiyon var; ona eklenir.")
-                            .font(.caption2)
+                            .font(.tinyText)
                             .foregroundStyle(.secondary)
                     }
                 }

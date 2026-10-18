@@ -44,10 +44,10 @@ struct TemplateTextField: View {
                         } label: {
                             HStack(spacing: 6) {
                                 Image(systemName: suggestion.hasPrefix("secret:") ? "key.fill" : "curlybraces")
-                                    .font(.caption2)
+                                    .font(.tinyText)
                                     .foregroundStyle(Theme.purple)
                                 Text(suggestion)
-                                    .font(.system(.caption, design: .monospaced))
+                                    .font(.secondaryMono)
                             }
                             .padding(.vertical, 4)
                             .padding(.horizontal, 8)

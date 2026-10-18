@@ -23,7 +23,7 @@ struct ResponseSizePopover: View {
             if let ratio = size.compressionRatio {
                 // Sıkıştırma kazancı: tel üzerindeki gövde vs açılmış hali.
                 Text("Gövde sıkıştırılmış: \(Self.bytes(size.responseBody)) → \(Self.bytes(size.responseBodyDecoded)) · %\(Int(ratio * 100)) kazanç")
-                    .font(.caption)
+                    .font(.secondaryText)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -61,11 +61,11 @@ struct ResponseSizePopover: View {
     private func row(_ title: String, _ value: Int64) -> some View {
         HStack {
             Text(title)
-                .font(.caption)
+                .font(.secondaryText)
                 .foregroundStyle(.secondary)
             Spacer()
             Text(Self.bytes(value))
-                .font(.system(.caption, design: .monospaced))
+                .font(.secondaryMono)
                 .foregroundStyle(.secondary)
         }
     }

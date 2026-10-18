@@ -219,7 +219,7 @@ struct RequestDetailView: View {
                     showingRevertConfirm = true
                 } label: {
                     Label("son gönderilenden farklı", systemImage: "circle.fill")
-                        .font(.caption)
+                        .font(.secondaryText)
                         .labelStyle(DirtyLabelStyle())
                         .frame(minHeight: 20)
                         .contentShape(Rectangle())
@@ -243,15 +243,15 @@ struct RequestDetailView: View {
             EmptyView()
         case .pending:
             Label("Kaydediliyor…", systemImage: "arrow.triangle.2.circlepath")
-                .font(.caption2)
+                .font(.tinyText)
                 .foregroundStyle(.tertiary)
         case .saved(let date):
             Label("Kaydedildi \(date.formatted(date: .omitted, time: .shortened))", systemImage: "checkmark.circle")
-                .font(.caption2)
+                .font(.tinyText)
                 .foregroundStyle(.tertiary)
         case .failed(let message):
             Label(message, systemImage: "exclamationmark.triangle.fill")
-                .font(.caption2)
+                .font(.tinyText)
                 .foregroundStyle(Theme.down)
                 .lineLimit(1)
         }

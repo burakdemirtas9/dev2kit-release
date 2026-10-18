@@ -28,7 +28,7 @@ struct AuthEditor: View {
             // Sol sütun: auth türü dropdown'ı (Postman yerleşimi)
             VStack(alignment: .leading, spacing: 6) {
                 Text("Auth Türü")
-                    .font(.caption)
+                    .font(.secondaryText)
                     .foregroundStyle(.secondary)
                 Picker("", selection: kind) {
                     ForEach(AuthKind.allCases) { Text(Self.label($0)).tag($0) }
@@ -94,7 +94,7 @@ struct AuthEditor: View {
                         "Düz metin secret yazma: değeri Secrets'a ekleyip {{secret:isim}} olarak referans ver — {{ yazınca öneriler açılır.",
                         systemImage: "lock.shield"
                     )
-                    .font(.caption)
+                    .font(.secondaryText)
                     .foregroundStyle(.secondary)
                 }
                 Spacer()

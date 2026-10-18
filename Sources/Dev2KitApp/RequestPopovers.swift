@@ -25,7 +25,7 @@ struct CurlPopover: View {
 
             ScrollView {
                 Text(curlText)
-                    .font(.system(.caption, design: .monospaced))
+                    .font(.secondaryMono)
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(8)
@@ -39,7 +39,7 @@ struct CurlPopover: View {
             if includeSecrets {
                 Label("Dikkat: kopyalanan komut gerçek secret değerlerini içerecek.",
                       systemImage: "exclamationmark.triangle.fill")
-                    .font(.caption)
+                    .font(.secondaryText)
                     .foregroundStyle(Theme.warning)
             }
 
@@ -89,14 +89,14 @@ struct RequestOptionsPopover: View {
                             "Trafik şifresiz hale gelebilir; yalnızca bilinçli test için aç.",
                             systemImage: "exclamationmark.triangle.fill"
                         )
-                        .font(.caption)
+                        .font(.secondaryText)
                         .foregroundStyle(Theme.warning)
                     }
                     Label(
                         "Farklı bir host'a yönlendirmede Authorization ve Cookie başlıkları otomatik düşürülür.",
                         systemImage: "lock.shield"
                     )
-                    .font(.caption)
+                    .font(.secondaryText)
                     .foregroundStyle(.secondary)
                 }
             }
@@ -107,7 +107,7 @@ struct RequestOptionsPopover: View {
                     "Çerezler yalnızca bellekte ve environment başına ayrı tutulur; diske yazılmaz.",
                     systemImage: "info.circle"
                 )
-                .font(.caption)
+                .font(.secondaryText)
                 .foregroundStyle(.secondary)
             }
         }

@@ -86,7 +86,7 @@ struct BodyEditor: View {
             toolbar
             if let formatError {
                 Label(formatError, systemImage: "xmark.octagon.fill")
-                    .font(.caption)
+                    .font(.secondaryText)
                     .foregroundStyle(Theme.down)
                     .lineLimit(2)
             }

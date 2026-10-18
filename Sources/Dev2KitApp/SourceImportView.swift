@@ -26,7 +26,7 @@ struct SourceImportView: View {
             Text("Kaynak Koddan Giden İstekler")
                 .font(.title2).bold()
             Text("Spring Boot projesinin klasörünü seç. Servisin dışarıya attığı istekler (Feign, HTTP Interface, RestTemplate, WebClient, RestClient) koleksiyona çevrilir. Kod yalnızca okunur: derlenmez, çalıştırılmaz, internete çıkılmaz. src/test, target ve build atlanır.")
-                .font(.caption)
+                .font(.secondaryText)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -39,13 +39,13 @@ struct SourceImportView: View {
                 .disabled(scanning)
                 if scanning {
                     ProgressView().controlSize(.small)
-                    Text("Taranıyor…").font(.caption).foregroundStyle(.secondary)
+                    Text("Taranıyor…").font(.secondaryText).foregroundStyle(.secondary)
                 }
             }
 
             if let errorMessage {
                 Label(errorMessage, systemImage: "xmark.octagon.fill")
-                    .font(.caption)
+                    .font(.secondaryText)
                     .foregroundStyle(Theme.down)
             }
 
@@ -90,16 +90,16 @@ struct SourceImportView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text(result.projectName).font(.headline)
-                Text("\(result.javaFileCount) Java dosyası").font(.caption).foregroundStyle(.secondary)
+                Text("\(result.javaFileCount) Java dosyası").font(.secondaryText).foregroundStyle(.secondary)
                 Spacer()
                 Text(counts.isEmpty ? "giden istek bulunamadı" : counts.joined(separator: " · "))
-                    .font(.caption)
+                    .font(.secondaryText)
                     .foregroundStyle(.secondary)
             }
             if incomplete > 0 {
                 Label("\(incomplete) isteğin adresi tam çözülemedi; \"(eksik)\" işaretli gelir, yerleri inceleme ekranında listelenir.",
                       systemImage: "exclamationmark.triangle")
-                    .font(.caption)
+                    .font(.secondaryText)
                     .foregroundStyle(Theme.warning)
             }
 
@@ -110,7 +110,7 @@ struct SourceImportView: View {
                 }
                 .frame(maxWidth: 240)
                 Text("Adresler bu profilin ayarlarından doldurulur.")
-                    .font(.caption)
+                    .font(.secondaryText)
                     .foregroundStyle(.secondary)
             }
 
@@ -129,10 +129,10 @@ struct SourceImportView: View {
             if let environment = appState.activeEnvironment {
                 Toggle("Değeri bulunan adresleri \"\(environment.name)\" environment'ına ekle (var olanlar değişmez)", isOn: $addVariables)
                     .toggleStyle(.checkbox)
-                    .font(.caption)
+                    .font(.secondaryText)
             } else {
                 Label("Aktif environment yok; adres değişkenlerini bir environment'a elle ekle.", systemImage: "exclamationmark.triangle")
-                    .font(.caption)
+                    .font(.secondaryText)
                     .foregroundStyle(Theme.warning)
             }
 
@@ -148,16 +148,16 @@ struct SourceImportView: View {
                                 Text(OutboundCollectionBuilder.requestName(for: call))
                                     .lineLimit(1)
                                 if !call.isComplete {
-                                    Text("eksik").font(.caption2.bold()).foregroundStyle(Theme.warning)
+                                    Text("eksik").font(.tinyText.bold()).foregroundStyle(Theme.warning)
                                 }
                                 Spacer()
                                 Text(call.location)
-                                    .font(.caption2)
+                                    .font(.tinyText)
                                     .foregroundStyle(.tertiary)
                                     .lineLimit(1)
                                     .truncationMode(.head)
                             }
-                            .font(.caption)
+                            .font(.secondaryText)
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -169,20 +169,20 @@ struct SourceImportView: View {
     private func variableRow(_ variable: OutboundCollectionBuilder.Variable) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text("{{\(variable.name)}}")
-                .font(.system(.caption, design: .monospaced))
+                .font(.secondaryMono)
                 .frame(width: 220, alignment: .leading)
             switch variable.status {
             case .value(let value):
-                Text(value).font(.system(.caption, design: .monospaced)).textSelection(.enabled)
+                Text(value).font(.secondaryMono).textSelection(.enabled)
             case .sensitive:
                 Label("kimlik bilgisi içeriyor, kopyalanmadı", systemImage: "lock.fill")
-                    .font(.caption)
+                    .font(.secondaryText)
                     .foregroundStyle(Theme.warning)
             case .missing(let reason):
-                Text("boş — \(reason)").font(.caption).foregroundStyle(.secondary)
+                Text("boş — \(reason)").font(.secondaryText).foregroundStyle(.secondary)
             }
             Spacer()
-            Text(variable.origin).font(.caption2).foregroundStyle(.tertiary)
+            Text(variable.origin).font(.tinyText).foregroundStyle(.tertiary)
         }
     }
 

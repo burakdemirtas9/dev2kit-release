@@ -135,7 +135,7 @@ struct SidebarView: View {
                                 appState.addRequest(to: collection.id)
                             } label: {
                                 Label("Yeni İstek", systemImage: "plus")
-                                    .font(.caption)
+                                    .font(.secondaryText)
                                     .rowHitTarget(minHeight: 20)
                             }
                             .buttonStyle(.plain)
@@ -241,7 +241,7 @@ struct SidebarView: View {
         return VStack(spacing: 0) {
             HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass")
-                    .font(.caption)
+                    .font(.secondaryText)
                     .foregroundStyle(.secondary)
                 TextField("İstek ara", text: $state.searchQuery)
                     .textFieldStyle(.plain)
@@ -258,7 +258,7 @@ struct SidebarView: View {
                     }
                 if !appState.searchQuery.isEmpty {
                     Text("\(hitCount)")
-                        .font(.caption2.monospacedDigit())
+                        .font(.tinyText.monospacedDigit())
                         .foregroundStyle(.secondary)
                         .help("\(hitCount) eşleşen istek")
                     Button {

@@ -240,9 +240,9 @@ struct WorkbenchToolView: View {
 
     private func paneHeader<Trailing: View>(_ title: String, stats: TextStats, @ViewBuilder trailing: () -> Trailing) -> some View {
         HStack(spacing: 6) {
-            Text(title).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            Text(title).font(.secondaryText.weight(.semibold)).foregroundStyle(.secondary)
             Text(stats.summary)
-                .font(.caption2.monospacedDigit())
+                .font(.tinyText.monospacedDigit())
                 .foregroundStyle(.tertiary)
                 .lineLimit(1)
             Spacer(minLength: 0)
@@ -260,14 +260,14 @@ struct WorkbenchToolView: View {
             Spacer(minLength: 0)
             if workbench.saveNotice {
                 Label("Kept in memory only — cleared when dev2kit quits. Nothing is written to disk.", systemImage: "memorychip")
-                    .font(.caption)
+                    .font(.secondaryText)
                     .foregroundStyle(.secondary)
             }
             if workbench.isRunning {
                 ProgressView().controlSize(.small)
             }
             if workbench.isLargeInput {
-                Text("Large input: not run automatically").font(.caption).foregroundStyle(.secondary)
+                Text("Large input: not run automatically").font(.secondaryText).foregroundStyle(.secondary)
                 Button("Run") { workbench.runNow() }
                     .controlSize(.small)
                     .disabled(!workbench.isStale)
@@ -282,18 +282,18 @@ struct WorkbenchToolView: View {
     private var validationLabel: some View {
         switch workbench.validation {
         case .empty:
-            Text(" ").font(.caption)
+            Text(" ").font(.secondaryText)
         case .valid:
             Label("Valid \(workbench.tool.title)", systemImage: "checkmark.circle.fill")
-                .font(.caption)
+                .font(.secondaryText)
                 .foregroundStyle(Theme.up)
         case .structurallyValid:
             Label("Structure OK (full syntax not checked)", systemImage: "checkmark.circle")
-                .font(.caption)
+                .font(.secondaryText)
                 .foregroundStyle(.secondary)
         case .invalid(let issue):
             Label(issue.localizedDescription, systemImage: "exclamationmark.octagon.fill")
-                .font(.caption)
+                .font(.secondaryText)
                 .foregroundStyle(Theme.down)
                 .lineLimit(2)
                 .textSelection(.enabled)
@@ -464,7 +464,7 @@ struct JSONTreeView: View {
                                     toggle(row.node.id)
                                 } label: {
                                     Image(systemName: expanded.contains(row.node.id) ? "chevron.down" : "chevron.right")
-                                        .font(.caption2.weight(.semibold))
+                                        .font(.tinyText.weight(.semibold))
                                         .frame(width: 14)
                                         .iconHitTarget(18)
                                 }
@@ -512,14 +512,14 @@ struct JSONTreeView: View {
                         }
                     }
                 }
-                .font(.system(.caption, design: .monospaced))
+                .font(.secondaryMono)
             }
             if let selected, !selected.path.isEmpty {
                 CopyButton(text: selected.path, help: "Copy path: \(selected.path)")
             }
             if limitNotice {
                 Text("Expanded first \(JSONTreeNode.expandAllLimit) branches")
-                    .font(.caption2)
+                    .font(.tinyText)
                     .foregroundStyle(.secondary)
             }
             Button {

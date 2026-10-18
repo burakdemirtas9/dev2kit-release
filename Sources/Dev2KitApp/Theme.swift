@@ -90,3 +90,21 @@ extension Theme {
         }
     }
 }
+
+/// Yazı ölçeği (docs/TASARIM.md §3).
+///
+/// macOS'un `.caption`/`.caption2`'si 10 pt; Retina olmayan ekranlarda (ör.
+/// 2560×1440 ölçeklemesiz, ~109 ppi) ikincil metinler okunmuyordu. İkincil
+/// metin 11 pt'ye çıktı (Apple'ın ikincil metin önerisi), en küçükler
+/// (rozet, sayaç, satır numarası) 10 pt'de kaldı. Doğrudan `.caption`
+/// kullanılmaz; ölçek tek yerden değişsin diye bunlar kullanılır.
+extension Font {
+    /// İpucu, bilgi satırı, bölme başlığı, durum satırı.
+    static let secondaryText = Font.system(size: 11)
+    /// Rozet, sayaç, çok küçük etiket.
+    static let tinyText = Font.system(size: 10)
+    /// İkincil makine metni: URL parçası, yol, değişken adı.
+    static let secondaryMono = Font.system(size: 11, design: .monospaced)
+    static let tinyMono = Font.system(size: 10, design: .monospaced)
+}
+

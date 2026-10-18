@@ -34,19 +34,19 @@ struct SidebarCollectionHeader: View {
         } label: {
             HStack(spacing: 4) {
                 Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
-                    .font(.caption2.weight(.semibold))
+                    .font(.tinyText.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .frame(width: 14)
                 if collection.isUngrouped {
                     // Sürüklenemez, yeniden adlandırılamaz: tutamaç yerine kendi simgesi.
                     Image(systemName: "tray")
-                        .font(.caption2)
+                        .font(.tinyText)
                         .foregroundStyle(.secondary)
                     Text(collection.name)
                         .foregroundStyle(.secondary)
                 } else {
                     Image(systemName: "line.3.horizontal")
-                        .font(.caption2)
+                        .font(.tinyText)
                         .foregroundStyle(.quaternary)
                     Text(collection.name)
                 }
@@ -54,7 +54,7 @@ struct SidebarCollectionHeader: View {
                 Text(appState.isSearching && match.requests.count != collection.requests.count
                      ? "\(match.requests.count)/\(collection.requests.count)"
                      : "\(collection.requests.count)")
-                    .font(.caption2)
+                    .font(.tinyText)
                     .foregroundStyle(.tertiary)
                 if isCollapsed, containsDirtyRequest {
                     Image(systemName: "circle.fill")

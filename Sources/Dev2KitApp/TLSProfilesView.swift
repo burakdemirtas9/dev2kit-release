@@ -67,7 +67,7 @@ struct TLSProfilesView: View {
                     : "Sertifika doğrulaması açık. CA yalnızca EK güven çıpası olarak eklenir.",
                 systemImage: disabled ? "exclamationmark.shield.fill" : "lock.shield"
             )
-            .font(.caption)
+            .font(.secondaryText)
             .foregroundStyle(disabled ? Theme.down : .secondary)
         }
         .confirmationDialog(
@@ -86,7 +86,7 @@ struct TLSProfilesView: View {
     private var profilesSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Belirli host'lar için ek CA veya istemci sertifikası (mTLS). Ayarlar yalnızca eşleşen host'lara uygulanır.")
-                .font(.caption)
+                .font(.secondaryText)
                 .foregroundStyle(.secondary)
 
             HStack(alignment: .top, spacing: 0) {
@@ -98,27 +98,27 @@ struct TLSProfilesView: View {
                                 HStack(spacing: 4) {
                                     if profile.hasCA {
                                         Label("CA", systemImage: "checkmark.seal")
-                                            .font(.caption2).foregroundStyle(Theme.purple)
+                                            .font(.tinyText).foregroundStyle(Theme.purple)
                                     }
                                     if profile.hasClientCertificate {
                                         Label("mTLS", systemImage: "person.badge.key")
-                                            .font(.caption2).foregroundStyle(Theme.up)
+                                            .font(.tinyText).foregroundStyle(Theme.up)
                                     }
                                     if !profile.invalidPatterns.isEmpty {
                                         Image(systemName: "exclamationmark.triangle.fill")
-                                            .font(.caption2).foregroundStyle(Theme.down)
+                                            .font(.tinyText).foregroundStyle(Theme.down)
                                             .help("Geçersiz host kalıbı var")
                                     }
                                     // Eski dosyalarda CA'sız sabitleme kalmış
                                     // olabilir; listede de görünsün.
                                     if profile.appliesToNothing {
                                         Image(systemName: "exclamationmark.triangle.fill")
-                                            .font(.caption2).foregroundStyle(Theme.warning)
+                                            .font(.tinyText).foregroundStyle(Theme.warning)
                                             .help("Host kalıbı yok; profil hiçbir isteğe uygulanmıyor")
                                     }
                                     if profile.pinsWithoutCA {
                                         Image(systemName: "exclamationmark.triangle.fill")
-                                            .font(.caption2).foregroundStyle(Theme.warning)
+                                            .font(.tinyText).foregroundStyle(Theme.warning)
                                             .help("Sabitleme işaretli ama CA seçilmemiş; uygulanmıyor")
                                     }
                                 }
@@ -175,17 +175,17 @@ private struct TLSProfileDetail: View {
 
                 section("Host'lar") {
                     Text("Her satıra bir kalıp. Tam ad (api.firma.com) veya tek seviye joker (*.firma.com). Tek başına * kabul edilmez.")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(.secondaryText).foregroundStyle(.secondary)
                     KeyValueFreeList(items: $profile.hostPatterns, placeholder: "api.firma.com")
                     if !profile.invalidPatterns.isEmpty {
                         Label("Geçersiz kalıp: \(profile.invalidPatterns.joined(separator: ", "))",
                               systemImage: "xmark.octagon.fill")
-                            .font(.caption).foregroundStyle(Theme.down)
+                            .font(.secondaryText).foregroundStyle(Theme.down)
                     }
                     if profile.appliesToNothing {
                         Label("Bu profil hiçbir host'a uygulanmıyor: geçerli kalıp yok.",
                               systemImage: "exclamationmark.triangle.fill")
-                            .font(.caption).foregroundStyle(Theme.warning)
+                            .font(.secondaryText).foregroundStyle(Theme.warning)
                     }
                 }
 
@@ -204,14 +204,14 @@ private struct TLSProfileDetail: View {
                     if profile.pinsWithoutCA {
                         Label("Sabitleme uygulanmıyor: sabitlenecek bir CA seçilmemiş.",
                               systemImage: "exclamationmark.triangle.fill")
-                            .font(.caption).foregroundStyle(Theme.warning)
+                            .font(.secondaryText).foregroundStyle(Theme.warning)
                     }
                     Text(!profile.hasCA
                          ? "Sabitleme için önce bir CA sertifikası seç."
                          : (profile.pinToCA
                             ? "Bu host için sistem kök sertifikaları geçersiz sayılır — kurum güven deposu da dahil. Daha sıkı ama CA değişirse istekler durur."
                             : "Sistem kökleri geçerli kalır; kurum CA'sı bunlara EK olarak kabul edilir."))
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(.secondaryText).foregroundStyle(.secondary)
 
                     Divider().padding(.vertical, 2)
 
@@ -220,7 +220,7 @@ private struct TLSProfileDetail: View {
                     Text(profile.allowLongValidity
                          ? "Yalnızca ömür üst sınırı gevşer. Zincir, imza, sertifika tarihleri ve host adı kontrolleri AYNEN zorunlu; bunlardan biri düşerse bağlantı yine reddedilir."
                          : "Apple sunucu sertifikalarına ömür sınırı koyuyor: kurum CA'larında 825, public CA'larda 398 gün. Kurum CA'sı güven deposundaysa bu muafiyeti host yazmadan Güven Deposu sekmesinden açmak daha kolay.")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(.secondaryText).foregroundStyle(.secondary)
                 }
 
                 section("İstemci Sertifikası (mTLS)") {
@@ -230,12 +230,12 @@ private struct TLSProfileDetail: View {
                         types: ["p12", "pfx"]
                     )
                     HStack {
-                        Text("Parola").font(.caption).foregroundStyle(.secondary)
+                        Text("Parola").font(.secondaryText).foregroundStyle(.secondary)
                             .frame(width: 60, alignment: .leading)
                         TemplateTextField(placeholder: "{{secret:isim}} önerilir", text: $profile.clientCertificatePassword)
                     }
                     Text("Sertifika dosyası kopyalanmaz, yalnızca yolu tutulur; özel anahtar istek anında belleğe alınır. Parolayı Secrets'a ekleyip referans vermen önerilir.")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(.secondaryText).foregroundStyle(.secondary)
                 }
             }
             .padding(14)
@@ -254,7 +254,7 @@ private struct TLSProfileDetail: View {
         HStack {
             TextField(prompt, text: path)
                 .textFieldStyle(.roundedBorder)
-                .font(.system(.caption, design: .monospaced))
+                .font(.secondaryMono)
             Button("Seç…") {
                 let panel = NSOpenPanel()
                 panel.allowsMultipleSelection = false
@@ -306,7 +306,7 @@ private struct KeyValueFreeList: View {
             Button {
                 items.append("")
             } label: {
-                Label("Host Ekle", systemImage: "plus").font(.caption)
+                Label("Host Ekle", systemImage: "plus").font(.secondaryText)
                     .rowHitTarget(minHeight: 20)
             }
             .buttonStyle(.plain)
@@ -325,7 +325,7 @@ struct TrustStoreSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Buradaki CA'lar tüm host'lara ek güven çıpası olarak uygulanır — Java'daki cacerts gibi. Güvenlik ekibi dosyaları doğrudan dizine bırakabilir.")
-                .font(.caption)
+                .font(.secondaryText)
                 .foregroundStyle(.secondary)
 
             @Bindable var state = appState
@@ -334,7 +334,7 @@ struct TrustStoreSection: View {
             Text(appState.trustStoreAllowsLongValidity
                  ? "Yalnızca zinciri buradaki bir CA'ya çıkan sertifikalarda ömür sınırı aranmaz. Host adı, imza ve tarih kontrolleri AYNEN zorunlu; public sitelerde kural değişmez."
                  : "Apple, kurum CA'larıyla imzalı sunucu sertifikalarında 825 günden uzun ömrü reddeder. Kurum PKI'n 3-5 yıllık sertifika basıyorsa bunu aç; kalıcı çözüm PKI ekibinden daha kısa ömürlü sertifika istemek.")
-                .font(.caption)
+                .font(.secondaryText)
                 .foregroundStyle(.secondary)
 
             pathRow("Makine geneli", TrustStore.machineDirectory.path,
@@ -365,21 +365,21 @@ struct TrustStoreSection: View {
                                 .lineLimit(1)
                             HStack(spacing: 8) {
                                 Text(entry.source.rawValue)
-                                    .font(.caption2)
+                                    .font(.tinyText)
                                     .padding(.horizontal, 5).padding(.vertical, 1)
                                     .background(Theme.purple.opacity(0.18))
                                     .clipShape(Capsule())
-                                Text(entry.fileName).font(.caption2).foregroundStyle(.secondary)
+                                Text(entry.fileName).font(.tinyText).foregroundStyle(.secondary)
                                 if let expiry = entry.expiresAt {
                                     Text(entry.isExpired
                                          ? "SÜRESİ DOLDU \(expiry.formatted(date: .abbreviated, time: .omitted))"
                                          : "→ \(expiry.formatted(date: .abbreviated, time: .omitted))")
-                                        .font(.caption2)
+                                        .font(.tinyText)
                                         .foregroundStyle(entry.isExpired ? AnyShapeStyle(Theme.down) : AnyShapeStyle(.tertiary))
                                 }
                                 if entry.isCertificateAuthority == false {
                                     Label("CA değil", systemImage: "exclamationmark.triangle.fill")
-                                        .font(.caption2).foregroundStyle(Theme.warning)
+                                        .font(.tinyText).foregroundStyle(Theme.warning)
                                         .help("Bu sertifika CA olmadığı için güven çıpası olarak kullanılamaz.")
                                 }
                             }
@@ -404,10 +404,10 @@ struct TrustStoreSection: View {
 
             ForEach(appState.trustStore.problems, id: \.self) { problem in
                 Label(problem, systemImage: "exclamationmark.triangle.fill")
-                    .font(.caption).foregroundStyle(Theme.down)
+                    .font(.secondaryText).foregroundStyle(Theme.down)
             }
             if let notice {
-                Text(notice).font(.caption).foregroundStyle(.secondary)
+                Text(notice).font(.secondaryText).foregroundStyle(.secondary)
             }
 
             HStack {
@@ -443,13 +443,13 @@ struct TrustStoreSection: View {
     private func pathRow(_ title: String, _ path: String, hint: String) -> some View {
         HStack(alignment: .top, spacing: 6) {
             Text(title)
-                .font(.caption).bold()
+                .font(.secondaryText).bold()
                 .frame(width: 110, alignment: .leading)
             VStack(alignment: .leading, spacing: 1) {
                 Text(path)
-                    .font(.system(.caption, design: .monospaced))
+                    .font(.secondaryMono)
                     .textSelection(.enabled)
-                Text(hint).font(.caption2).foregroundStyle(.tertiary)
+                Text(hint).font(.tinyText).foregroundStyle(.tertiary)
             }
         }
     }

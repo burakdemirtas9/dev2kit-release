@@ -17,7 +17,7 @@ struct CookiesView: View {
             Text("Çerezler")
                 .font(.title2).bold()
             Text("Aktif environment: \(appState.activeEnvironment?.name ?? "Environment Yok"). Çerezler environment başına ayrı tutulur ve yalnızca bellekte durur — uygulama kapanınca silinir, diske yazılmaz.")
-                .font(.caption)
+                .font(.secondaryText)
                 .foregroundStyle(.secondary)
 
             if cookies.isEmpty {
@@ -42,24 +42,24 @@ struct CookiesView: View {
                             Spacer()
                             if cookie.isSecure {
                                 Label("Secure", systemImage: "lock.fill")
-                                    .font(.caption2).foregroundStyle(Theme.up)
+                                    .font(.tinyText).foregroundStyle(Theme.up)
                             }
                             if cookie.isHTTPOnly {
                                 Label("HttpOnly", systemImage: "eye.slash")
-                                    .font(.caption2).foregroundStyle(.secondary)
+                                    .font(.tinyText).foregroundStyle(.secondary)
                             }
                         }
                         HStack(spacing: 8) {
                             Text("\(cookie.domain)\(cookie.path)")
-                                .font(.caption)
+                                .font(.secondaryText)
                                 .foregroundStyle(.secondary)
                             if let expires = cookie.expiresDate {
                                 Text(expires.formatted(date: .abbreviated, time: .shortened))
-                                    .font(.caption)
+                                    .font(.secondaryText)
                                     .foregroundStyle(.tertiary)
                             } else {
                                 Text("oturum")
-                                    .font(.caption)
+                                    .font(.secondaryText)
                                     .foregroundStyle(.tertiary)
                             }
                         }
