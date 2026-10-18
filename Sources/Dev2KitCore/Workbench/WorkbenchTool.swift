@@ -11,6 +11,7 @@ public struct WorkbenchTool: Identifiable, Sendable {
         case format
         case encode
         case convert
+        case compare
         case preview
 
         /// Workbench arayüzü İngilizce (kullanıcı kararı, 2026-10-18).
@@ -19,6 +20,7 @@ public struct WorkbenchTool: Identifiable, Sendable {
             case .format: return "Format"
             case .encode: return "Encode / Decode"
             case .convert: return "Convert"
+            case .compare: return "Compare"
             case .preview: return "Preview"
             }
         }
@@ -229,6 +231,16 @@ public enum WorkbenchCatalog {
         WorkbenchTools.markdown,
     ]
 
+    /// Diff Checker bir `WorkbenchTool` değil (iki girdi, kendi ekranı); kenar
+    /// çubuğunda "Compare" altında kendi kimliğiyle durur.
+    public static let diffCheckerID = "diff-checker"
+    static let diffCheckerKeywords = ["Diff Checker", "diff", "compare", "karşılaştır", "fark"]
+
+    public static func diffCheckerMatches(_ query: String) -> Bool {
+        let needle = normalized(query)
+        return needle.isEmpty || diffCheckerKeywords.contains { normalized($0).contains(needle) }
+    }
+
     public static func tool(id: String?) -> WorkbenchTool? {
         all.first { $0.id == id }
     }
@@ -243,9 +255,13 @@ public enum WorkbenchCatalog {
         }
     }
 
+    /// Büyük/küçük harf ve aksan farkı yok sayılır. `ı` aksanlı bir harf değil,
+    /// ayrı bir harf sayıldığı için katlamada `i`'ye dönmüyor ("karsilastir"
+    /// "karşılaştır"ı bulmuyordu); açıkça eşlenir.
     private static func normalized(_ text: String) -> String {
         text.trimmingCharacters(in: .whitespaces)
             .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "tr_TR"))
+            .replacingOccurrences(of: "ı", with: "i")
     }
 }
 

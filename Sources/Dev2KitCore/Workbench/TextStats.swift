@@ -26,7 +26,7 @@ public struct TextStats: Equatable, Sendable {
 
     /// Boyut, Finder gibi 1000 tabanlı. `ByteCountFormatter` sistem diline
     /// göre yazıyordu ("bayt"); Workbench arayüzü İngilizce.
-    static func size(_ bytes: Int) -> String {
+    public static func size(_ bytes: Int) -> String {
         if bytes < 1_000 { return "\(bytes) \(bytes == 1 ? "byte" : "bytes")" }
         let units = ["KB", "MB", "GB"]
         var value = Double(bytes) / 1_000

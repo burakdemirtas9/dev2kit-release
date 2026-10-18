@@ -3,12 +3,18 @@ import Dev2KitCore
 
 /// Workbench modu: solda araç listesi, sağda açık araç.
 struct WorkbenchView: View {
+    @Environment(WorkbenchState.self) private var workbench
+
     var body: some View {
         HStack(spacing: 0) {
             WorkbenchSidebar()
                 .frame(width: 220)
             Divider()
-            WorkbenchToolView()
+            if workbench.showsDiffChecker {
+                DiffCheckerView()
+            } else {
+                WorkbenchToolView()
+            }
         }
     }
 }
@@ -36,14 +42,19 @@ struct WorkbenchSidebar: View {
                 get: { workbench.selectedToolID },
                 set: { if let id = $0 { workbench.select(toolID: id) } }
             )) {
-                if tools.isEmpty {
+                if tools.isEmpty, !WorkbenchCatalog.diffCheckerMatches(workbench.searchQuery) {
                     Text("No tools match \"\(workbench.searchQuery)\"")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
                 ForEach(WorkbenchTool.Category.allCases, id: \.self) { category in
                     let inCategory = tools.filter { $0.category == category }
-                    if !inCategory.isEmpty {
+                    if category == .compare, WorkbenchCatalog.diffCheckerMatches(workbench.searchQuery) {
+                        Section(category.title) {
+                            Label("Diff Checker", systemImage: "arrow.left.arrow.right.square")
+                                .tag(WorkbenchCatalog.diffCheckerID)
+                        }
+                    } else if !inCategory.isEmpty {
                         Section(category.title) {
                             ForEach(inCategory) { tool in
                                 Label(tool.title, systemImage: tool.symbol)
@@ -72,6 +83,7 @@ extension WorkbenchTool {
             case .format: return "text.alignleft"
             case .encode: return "lock.rotation"
             case .convert: return "arrow.left.arrow.right"
+            case .compare: return "arrow.left.arrow.right.square"
             case .preview: return "eye"
             }
         }

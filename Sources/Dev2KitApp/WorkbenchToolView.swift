@@ -14,7 +14,13 @@ struct WorkbenchToolView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            WorkbenchTabBar()
+            DocumentTabBar(
+                items: workbench.documents.map { .init(id: $0.id, title: workbench.title(of: $0), hasContent: !$0.input.isEmpty) },
+                selectedID: workbench.document.id,
+                onSelect: { workbench.select(documentID: $0) },
+                onClose: { workbench.closeDocument($0) },
+                onNew: { workbench.newDocument() }
+            )
             Divider()
             header
             Divider()
@@ -295,32 +301,39 @@ struct WorkbenchToolView: View {
     }
 }
 
-/// Açık belgelerin sekmeleri. API Client sekme çubuğunun görsel dili
-/// (seçili sekmede editör zemini + üstte vurgu çizgisi), daha sade.
-struct WorkbenchTabBar: View {
-    @Environment(WorkbenchState.self) private var workbench
-    @State private var pendingClose: WorkbenchDocument?
+/// Açık belgelerin sekmeleri (araç ekranı ve Diff Checker ortak). API Client
+/// sekme çubuğunun görsel dili (seçili sekmede editör zemini + üstte vurgu
+/// çizgisi), daha sade. İçi dolu sekme kapatılırken onay ister: içerik
+/// yalnızca bellekte, kapanınca gider.
+struct DocumentTabBar: View {
+    struct Item: Identifiable {
+        let id: UUID
+        let title: String
+        let hasContent: Bool
+    }
+
+    let items: [Item]
+    let selectedID: UUID
+    let onSelect: (UUID) -> Void
+    let onClose: (UUID) -> Void
+    let onNew: () -> Void
+    @State private var pendingClose: Item?
 
     var body: some View {
         HStack(spacing: 0) {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 0) {
-                    ForEach(workbench.documents) { doc in
+                    ForEach(items) { item in
                         WorkbenchTab(
-                            title: workbench.title(of: doc),
-                            isSelected: doc.id == workbench.document.id,
-                            onSelect: { workbench.select(documentID: doc.id) },
-                            onClose: {
-                                // İçi dolu sekme kapanınca girdi kaybolur (diske yazılmıyor).
-                                if doc.input.isEmpty { workbench.closeDocument(doc.id) } else { pendingClose = doc }
-                            }
+                            title: item.title,
+                            isSelected: item.id == selectedID,
+                            onSelect: { onSelect(item.id) },
+                            onClose: { if item.hasContent { pendingClose = item } else { onClose(item.id) } }
                         )
                     }
                 }
             }
-            Button {
-                workbench.newDocument()
-            } label: {
+            Button(action: onNew) {
                 Image(systemName: "plus").iconHitTarget()
             }
             .buttonStyle(.plain)
@@ -332,12 +345,12 @@ struct WorkbenchTabBar: View {
         .frame(height: 30)
         .background(.bar)
         .confirmationDialog(
-            "Close \"\(pendingClose.map { workbench.title(of: $0) } ?? "")\"?",
+            "Close \"\(pendingClose?.title ?? "")\"?",
             isPresented: Binding(get: { pendingClose != nil }, set: { if !$0 { pendingClose = nil } }),
             titleVisibility: .visible
         ) {
             Button("Close Tab", role: .destructive) {
-                if let doc = pendingClose { workbench.closeDocument(doc.id) }
+                if let item = pendingClose { onClose(item.id) }
                 pendingClose = nil
             }
             Button("Cancel", role: .cancel) { pendingClose = nil }

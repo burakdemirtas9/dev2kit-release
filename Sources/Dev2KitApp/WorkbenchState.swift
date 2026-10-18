@@ -50,6 +50,11 @@ final class WorkbenchState {
 
     var searchQuery = ""
 
+    /// Diff Checker'ın durumu: ayrı sınıf (iki girdi, kendi kuralları).
+    @ObservationIgnored let diff = DiffCheckerState()
+
+    var showsDiffChecker: Bool { selectedToolID == WorkbenchCatalog.diffCheckerID }
+
     /// Açık araç. Hangi aracın açık olduğu hassas değil; hatırlanır.
     private(set) var selectedToolID: String = UserDefaults.standard.string(forKey: "workbenchTool")
         ?? WorkbenchCatalog.all[0].id
@@ -130,9 +135,11 @@ final class WorkbenchState {
     // MARK: - Araç ve sekme
 
     func select(toolID: String) {
-        guard toolID != selectedToolID, WorkbenchCatalog.tool(id: toolID) != nil else { return }
+        guard toolID != selectedToolID,
+              WorkbenchCatalog.tool(id: toolID) != nil || toolID == WorkbenchCatalog.diffCheckerID else { return }
         selectedToolID = toolID
         UserDefaults.standard.set(toolID, forKey: "workbenchTool")
+        guard !showsDiffChecker else { return }
         ensureDocument()
         documentChanged()
     }
