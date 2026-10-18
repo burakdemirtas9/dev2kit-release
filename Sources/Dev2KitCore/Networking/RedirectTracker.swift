@@ -6,7 +6,7 @@ import Foundation
 /// başlıklarını yeni hedefe taşır. Kaynak değiştiğinde `Authorization` ve
 /// `Cookie` başlıkları burada kaldırılır; hangi başlığın neden düştüğü
 /// `steps` içinde kullanıcıya gösterilmek üzere tutulur.
-final class RedirectTracker: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+final class RedirectTracker: NSObject, URLSessionTaskDelegate, URLSessionDataDelegate, @unchecked Sendable {
     private let policy: RedirectPolicy
     /// Bu isteğe özgü kimlik taşıyan başlıklar (API key başlığı, secret referanslı başlıklar).
     private let credentialHeaders: [String]
@@ -25,6 +25,11 @@ final class RedirectTracker: NSObject, URLSessionTaskDelegate, @unchecked Sendab
     /// TLS reddi. `-999` ile düşen isteğin gerçek sebebini motora taşır.
     private var tlsRejection: TLSChallengeHandler.Rejection?
     private var transferSize = TransferSize()
+    /// Gövde toplama (`RequestEngine.fetch`): tavan aşılınca görev iptal edilir.
+    private var body = Data()
+    private var bodyLimit = Int.max
+    private var limitExceeded = false
+    private var continuation: CheckedContinuation<(Data, URLResponse), Error>?
 
     init(
         policy: RedirectPolicy,
@@ -205,6 +210,53 @@ final class RedirectTracker: NSObject, URLSessionTaskDelegate, @unchecked Sendab
                 )
             )
             completionHandler(sanitized)
+        }
+    }
+
+    // MARK: - Gövde toplama (tavanlı indirme)
+
+    var bodyLimitExceeded: Bool {
+        lock.lock(); defer { lock.unlock() }
+        return limitExceeded
+    }
+
+    func collectBody(limit: Int, continuation: CheckedContinuation<(Data, URLResponse), Error>) {
+        lock.lock(); defer { lock.unlock() }
+        bodyLimit = limit
+        self.continuation = continuation
+    }
+
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+        lock.lock()
+        let room = bodyLimit - body.count
+        guard data.count > room else {
+            body.append(data)
+            lock.unlock()
+            return
+        }
+        body.append(data.prefix(max(room, 0)))
+        limitExceeded = true
+        lock.unlock()
+        // Tavan: indirme durur, ilk kısım yanıt olarak döner (hata değil).
+        dataTask.cancel()
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        lock.lock()
+        let pending = continuation
+        continuation = nil
+        let collected = body
+        let exceeded = limitExceeded
+        lock.unlock()
+        guard let pending else { return }
+        if exceeded, let response = task.response {
+            pending.resume(returning: (collected, response))
+        } else if let error {
+            pending.resume(throwing: error)
+        } else if let response = task.response {
+            pending.resume(returning: (collected, response))
+        } else {
+            pending.resume(throwing: URLError(.badServerResponse))
         }
     }
 }

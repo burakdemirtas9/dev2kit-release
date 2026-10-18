@@ -26,6 +26,9 @@ public struct ResponseData: Sendable {
     /// Yanıtla birlikte taşınıyor: sonradan bakan biri o yanıtın doğrulanmış
     /// bir kaynaktan gelip gelmediğini başka türlü bilemez.
     public let certificateValidationSkipped: Bool
+    /// Yanıt `RequestEngine.maxResponseBytes`'ı aştı: indirme durduruldu,
+    /// `body` yalnızca ilk kısım. Arayüz uyarır.
+    public let bodyLimitExceeded: Bool
 
     public init(
         statusCode: Int,
@@ -38,8 +41,10 @@ public struct ResponseData: Sendable {
         network: NetworkInfo? = nil,
         timing: ResponseTiming? = nil,
         size: TransferSize? = nil,
-        certificateValidationSkipped: Bool = false
+        certificateValidationSkipped: Bool = false,
+        bodyLimitExceeded: Bool = false
     ) {
+        self.bodyLimitExceeded = bodyLimitExceeded
         self.statusCode = statusCode
         self.headers = headers
         self.body = body
@@ -325,11 +330,14 @@ public final class RequestEngine: @unchecked Sendable {
             tlsProfile: tlsProfile
         )
         let start = ContinuousClock.now
-        let data: Data
+        var data: Data
         let response: URLResponse
         do {
-            (data, response) = try await session(for: scope, skipsValidation: skipsValidation)
-                .data(for: urlRequest, delegate: tracker)
+            (data, response) = try await fetch(
+                urlRequest,
+                session: session(for: scope, skipsValidation: skipsValidation),
+                tracker: tracker
+            )
         } catch let error as URLError where error.code == .cancelled {
             // URLSession, bizim `cancelAuthenticationChallenge`'ımızı kullanıcı
             // iptaliyle AYNI kodla (-999) raporluyor. Ayırt etmezsek güvenlik
@@ -357,6 +365,7 @@ public final class RequestEngine: @unchecked Sendable {
             )
         }
         let elapsed = start.duration(to: .now)
+        if tracker.bodyLimitExceeded { data = Self.trimmedToCharacterBoundary(data) }
 
         guard let http = response as? HTTPURLResponse else {
             throw RequestEngineError.notHTTPResponse
@@ -381,8 +390,42 @@ public final class RequestEngine: @unchecked Sendable {
             size: tracker.size,
             // Düz HTTP'de doğrulanacak sertifika yok; uyarı orada yanıltır.
             certificateValidationSkipped: skipsValidation
-                && [urlRequest.url, http.url].contains { $0?.scheme?.lowercased() == "https" }
+                && [urlRequest.url, http.url].contains { $0?.scheme?.lowercased() == "https" },
+            bodyLimitExceeded: tracker.bodyLimitExceeded
         )
+    }
+
+    /// Yanıt gövdesinin üst sınırı (kullanıcı kararı, 2026-10-19: 50 MB;
+    /// sık aşılırsa güncellenir). Aşan yanıtın indirmesi durdurulur, ilk
+    /// kısmı gösterilir: 2 GB dönen bir uç nokta belleği doldurmasın.
+    public static let maxResponseBytes = 50_000_000
+
+    /// Tek parça indirme (`data(for:)`) tavan koyamıyor; Swift'in parça parça
+    /// okuması (`AsyncBytes`) bayt bayt ilerlediği için 50 MB'ı 4,5 dakikada
+    /// okudu (ölçüldü, 2026-10-19). Klasik veri görevi + görev temsilcisi:
+    /// veri parça parça gelir, tavanda görev iptal edilir. Swift görevi iptal
+    /// edilirse (⌘.) URLSession görevi de iptal edilir.
+    func fetch(_ request: URLRequest, session: URLSession, tracker: RedirectTracker) async throws -> (Data, URLResponse) {
+        let task = session.dataTask(with: request)
+        task.delegate = tracker
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                tracker.collectBody(limit: Self.maxResponseBytes, continuation: continuation)
+                task.resume()
+            }
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    /// Kesik gövde çok baytlı bir UTF-8 karakterin ortasında bitebilir; metne
+    /// çevrilemez ve "ikili veri" sanılırdı. En çok 3 bayt geri çekilir.
+    static func trimmedToCharacterBoundary(_ data: Data) -> Data {
+        var trimmed = data
+        for _ in 0..<3 where String(data: trimmed, encoding: .utf8) == nil && !trimmed.isEmpty {
+            trimmed.removeLast()
+        }
+        return String(data: trimmed, encoding: .utf8) == nil ? data : trimmed
     }
 
     // İç kurgu ayrı fonksiyonda: URL/header/auth üretimi network'süz test edilebilsin.

@@ -381,6 +381,13 @@ struct ResponseView: View {
                     NetworkPopover(info: network)
                 }
             }
+            if response.bodyLimitExceeded {
+                // Tavan (RequestEngine.maxResponseBytes): indirme durduruldu.
+                Label("Yanıt \(TextStats.size(RequestEngine.maxResponseBytes))'ı aştı, kesildi", systemImage: "scissors")
+                    .font(.secondaryText)
+                    .foregroundStyle(Theme.warning)
+                    .help("Yanıt \(TextStats.size(RequestEngine.maxResponseBytes))'tan büyük; bellek dolmasın diye indirme durduruldu. Yalnızca ilk \(TextStats.size(RequestEngine.maxResponseBytes)) gösteriliyor, kopyalanan ve kaydedilen de bu kadar.")
+            }
             if response.certificateValidationSkipped {
                 Label("Sertifika doğrulanmadı", systemImage: "exclamationmark.shield.fill")
                     .font(.secondaryText)
