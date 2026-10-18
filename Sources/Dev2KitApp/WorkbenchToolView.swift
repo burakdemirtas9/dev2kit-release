@@ -14,14 +14,17 @@ struct WorkbenchToolView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            DocumentTabBar(
-                items: workbench.documents.map { .init(id: $0.id, title: workbench.title(of: $0), hasContent: !$0.input.isEmpty) },
-                selectedID: workbench.document.id,
-                onSelect: { workbench.select(documentID: $0) },
-                onClose: { workbench.closeDocument($0) },
-                onNew: { workbench.newDocument() }
-            )
-            Divider()
+            // Sekmeler yalnızca JSON'da (kullanıcı kararı, 2026-10-19).
+            if workbench.tool.supportsTabs {
+                DocumentTabBar(
+                    items: workbench.documents.map { .init(id: $0.id, title: workbench.title(of: $0), hasContent: !$0.input.isEmpty) },
+                    selectedID: workbench.document.id,
+                    onSelect: { workbench.select(documentID: $0) },
+                    onClose: { workbench.closeDocument($0) },
+                    onNew: { workbench.newDocument() }
+                )
+                Divider()
+            }
             header
             Divider()
             HStack(spacing: 0) {

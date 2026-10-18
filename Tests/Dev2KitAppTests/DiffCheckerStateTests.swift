@@ -46,15 +46,6 @@ final class DiffCheckerStateTests: XCTestCase {
 
         state.swapSides()
         XCTAssertEqual(state.left, "a\nB\nc\nD")
-
-        let first = state.document.id
-        state.newDocument()
-        XCTAssertEqual(state.title(of: state.document), "Diff 2")
-        XCTAssertEqual(state.left, "")
-        state.select(documentID: first)
-        XCTAssertEqual(state.right, "a\nb\nc\nd")
-        for doc in state.documents { state.closeDocument(doc.id) }
-        XCTAssertEqual(state.documents.map(\.number), [1])
     }
 
     func testLargeInputWaitsForRun() {

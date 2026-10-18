@@ -39,6 +39,9 @@ final class WorkbenchFocusTests: XCTestCase {
         settle()
         XCTAssertTrue(focusedEditor() === inputEditor(), "araç değişince girdi odakta")
 
+        // Sekmeler yalnızca JSON'da: yeni sekme JSON aracında açılır.
+        state.select(toolID: "json")
+        settle()
         window.makeFirstResponder(nil)
         state.newDocument()
         settle()

@@ -40,6 +40,9 @@ public struct WorkbenchTool: Identifiable, Sendable {
     public let validate: (@Sendable (String) -> WorkbenchValidation)?
     /// Yeni sekmenin seçenekleri (XML → JSON'da "Detect types" kapalı).
     public let defaultOptions: WorkbenchOptions
+    /// Birden çok belge (sekme) açılabilir mi. Yalnızca JSON (kullanıcı
+    /// kararı, 2026-10-19: diğer araçlarda gereksiz).
+    public let supportsTabs: Bool
     /// Boş girdide soluk gösterilen örnek (API Client gövdesindeki gibi):
     /// ne yapıştırılacağı ilk bakışta anlaşılsın.
     public let sampleInput: String
@@ -54,9 +57,11 @@ public struct WorkbenchTool: Identifiable, Sendable {
         actions: [WorkbenchAction],
         validate: (@Sendable (String) -> WorkbenchValidation)? = nil,
         defaultOptions: WorkbenchOptions = WorkbenchOptions(),
-        sampleInput: String = ""
+        sampleInput: String = "",
+        supportsTabs: Bool = false
     ) {
         self.sampleInput = sampleInput
+        self.supportsTabs = supportsTabs
         self.id = id
         self.title = title
         self.inputName = inputName ?? title

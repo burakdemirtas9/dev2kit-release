@@ -53,6 +53,16 @@ final class WorkbenchStateTests: XCTestCase {
         XCTAssertEqual(state.action.id, "format", "eylem sekmeye ait")
     }
 
+    /// Sekmeler yalnızca JSON'da (kullanıcı kararı, 2026-10-19).
+    func testOnlyJSONHasTabs() {
+        defer { UserDefaults.standard.removeObject(forKey: "workbenchTool") }
+        XCTAssertEqual(WorkbenchCatalog.all.filter(\.supportsTabs).map(\.id), ["json"])
+        let state = WorkbenchState()
+        state.select(toolID: "xml")
+        state.newDocument()
+        XCTAssertEqual(state.documents.count, 1, "sekmesiz araçta yeni sekme açılmaz")
+    }
+
     func testTabNumbersUseTheSmallestFreeNumber() {
         let state = WorkbenchState()
         state.newDocument()

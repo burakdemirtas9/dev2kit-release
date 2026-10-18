@@ -29,7 +29,8 @@ extension WorkbenchTools {
             },
         ],
         validate: { JSONTool.validate($0) },
-        sampleInput: #"{ "id": 42, "name": "dev2kit", "tags": ["api", "tools"], "active": true }"#
+        sampleInput: #"{ "id": 42, "name": "dev2kit", "tags": ["api", "tools"], "active": true }"#,
+        supportsTabs: true
     )
 }
 

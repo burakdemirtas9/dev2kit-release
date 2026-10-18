@@ -12,14 +12,6 @@ struct DiffCheckerView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            DocumentTabBar(
-                items: diff.documents.map { .init(id: $0.id, title: diff.title(of: $0), hasContent: $0.hasContent) },
-                selectedID: diff.selectedID,
-                onSelect: { diff.select(documentID: $0) },
-                onClose: { diff.closeDocument($0) },
-                onNew: { diff.newDocument() }
-            )
-            Divider()
             header
             Divider()
             if !diff.inputsHidden {

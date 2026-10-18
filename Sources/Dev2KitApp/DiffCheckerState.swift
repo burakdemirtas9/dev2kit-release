@@ -2,10 +2,10 @@ import Foundation
 import Observation
 import Dev2KitCore
 
-/// Diff Checker'da bir sekme: iki girdi, dil ve seçenekler.
+/// Diff Checker'ın belgesi: iki girdi, dil ve seçenekler. Sekme yok
+/// (kullanıcı kararı, 2026-10-19: Workbench'te sekmeler yalnızca JSON'da).
 struct DiffDocument: Identifiable, Equatable {
     let id = UUID()
-    let number: Int
     var left = ""
     var right = ""
     var language: DiffChecker.Language = .json
@@ -21,8 +21,7 @@ struct DiffDocument: Identifiable, Equatable {
 
 /// Diff Checker'ın durumu (docs/V2.md "Diff"). Araç ekranının
 /// (`WorkbenchState`) kuralları burada da geçerli:
-/// - Girdiler yalnızca bellekte, sekme başına; diske/geçmişe yazılmaz.
-/// - Sonuç yalnızca açık sekme için tutulur; sekme değişince bırakılır.
+/// - Girdiler yalnızca bellekte; diske/geçmişe yazılmaz.
 /// - Karşılaştırma ana thread dışında; eski çalıştırmanın sonucu yenisini
 ///   ezmez (nesil sayacı).
 ///
@@ -40,8 +39,7 @@ final class DiffCheckerState {
         var title: String { self == .changes ? "Changes" : "Lines" }
     }
 
-    private(set) var documents: [DiffDocument]
-    private(set) var selectedID: UUID
+    private(set) var document = DiffDocument()
 
     private(set) var result: DiffChecker.Result?
     private(set) var isRunning = false
@@ -53,16 +51,6 @@ final class DiffCheckerState {
 
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var runTask: Task<Void, Never>?
-
-    init() {
-        let first = DiffDocument(number: 1)
-        documents = [first]
-        selectedID = first.id
-    }
-
-    var document: DiffDocument {
-        documents.first { $0.id == selectedID } ?? documents[0]
-    }
 
     var isLarge: Bool {
         document.left.utf8.count > Self.autoRunLimit || document.right.utf8.count > Self.autoRunLimit
@@ -152,45 +140,15 @@ final class DiffCheckerState {
         return starts[next]
     }
 
-    /// Araç ya da sekme değişince sol girdi odak alır (`WorkbenchState.inputFocusRequest`).
+    /// Araç seçilince sol girdi odak alır (`WorkbenchState.inputFocusRequest`).
     private(set) var focusRequest = 0
 
     func requestFocus() { focusRequest += 1 }
 
-    // MARK: - Sekmeler
-
-    func title(of doc: DiffDocument) -> String { "Diff \(doc.number)" }
-
-    func newDocument() {
-        let used = Set(documents.map(\.number))
-        let doc = DiffDocument(number: (1...).first { !used.contains($0) } ?? 1)
-        documents.append(doc)
-        selectedID = doc.id
-        documentChanged()
-    }
-
-    func select(documentID: UUID) {
-        guard documentID != selectedID, documents.contains(where: { $0.id == documentID }) else { return }
-        selectedID = documentID
-        documentChanged()
-    }
-
-    func closeDocument(_ id: UUID) {
-        guard let index = documents.firstIndex(where: { $0.id == id }) else { return }
-        let wasSelected = id == selectedID
-        documents.remove(at: index)
-        if documents.isEmpty { documents = [DiffDocument(number: 1)] }
-        if wasSelected || !documents.contains(where: { $0.id == selectedID }) {
-            selectedID = documents[min(index, documents.count - 1)].id
-            documentChanged()
-        }
-    }
-
     // MARK: - İç işler
 
     private func mutate(_ change: (inout DiffDocument) -> Void) {
-        guard let index = documents.firstIndex(where: { $0.id == selectedID }) else { return }
-        change(&documents[index])
+        change(&document)
     }
 
     private func inputChanged() {
@@ -200,13 +158,6 @@ final class DiffCheckerState {
         } else {
             schedule(debounced: true)
         }
-    }
-
-    private func documentChanged() {
-        focusRequest += 1
-        result = nil
-        currentChange = nil
-        schedule(debounced: false, force: true)
     }
 
     private func schedule(debounced: Bool, force: Bool = false) {

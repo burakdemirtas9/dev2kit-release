@@ -166,6 +166,8 @@ final class WorkbenchState {
     }
 
     func newDocument() {
+        // Sekmeler yalnızca JSON'da (kullanıcı kararı, 2026-10-19).
+        guard tool.supportsTabs else { return }
         let doc = WorkbenchDocument(number: takeNumber(), options: tool.defaultOptions)
         documentsByTool[tool.id, default: []].append(doc)
         selectedDocumentByTool[tool.id] = doc.id
