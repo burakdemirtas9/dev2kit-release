@@ -12,9 +12,20 @@ struct SidebarBottomBar: View {
     @State private var pendingImportSource: AppState.ImportSource = .dev2kit
     @State private var showingPostmanImport = false
     @State private var showingCurlImport = false
-    @State private var showingKibanaImport = false
-    @State private var showingOpenAPIImport = false
     @State private var showingSourceImport = false
+    @State private var showingAutoImport = false
+    /// Kibana ve OpenAPI ekranları `sheet(item:)` ile: otomatik içe
+    /// aktarmanın verdiği JSON sayfayı açan değerin İÇİNDE. Önce ayrı bir
+    /// durum değişkeni yazıp `isPresented` ile açınca SwiftUI sayfayı eski
+    /// (boş) değerle kuruyordu; kullanıcı JSON'u yeniden yapıştırmak zorunda
+    /// kaldı (2026-10-19).
+    @State private var kibanaSheet: ImportPrefill?
+    @State private var openAPISheet: ImportPrefill?
+
+    struct ImportPrefill: Identifiable {
+        let id = UUID()
+        let json: String?
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -27,6 +38,10 @@ struct SidebarBottomBar: View {
                         .frame(maxWidth: .infinity)
                 }
                 Menu {
+                    Button("Otomatik İçe Aktar…") {
+                        showingAutoImport = true
+                    }
+                    Divider()
                     Button("dev2kit Koleksiyonu…") {
                         pendingImportSource = .dev2kit
                         showingImporter = true
@@ -44,11 +59,11 @@ struct SidebarBottomBar: View {
                         showingCurlImport = true
                     }
                     Button("Kibana Logundan İstek…") {
-                        showingKibanaImport = true
+                        kibanaSheet = ImportPrefill(json: nil)
                     }
                     Divider()
                     Button("Swagger / OpenAPI Adresinden…") {
-                        showingOpenAPIImport = true
+                        openAPISheet = ImportPrefill(json: nil)
                     }
                     Button("Kaynak Koddan Giden İstekler…") {
                         showingSourceImport = true
@@ -58,7 +73,7 @@ struct SidebarBottomBar: View {
                 }
                 .menuStyle(.borderlessButton)
                 .fixedSize()
-                .help("Koleksiyon ya da istek içe aktar (dev2kit, Postman, cURL, Kibana, OpenAPI)")
+                .help("Koleksiyon ya da istek içe aktar: otomatik (metin, PDF, Word, Excel), dev2kit, Postman, cURL, Kibana, OpenAPI")
             }
             .padding(8)
         }
@@ -77,11 +92,20 @@ struct SidebarBottomBar: View {
         .sheet(isPresented: $showingCurlImport) {
             CurlImportView()
         }
-        .sheet(isPresented: $showingKibanaImport) {
-            KibanaImportView()
+        .sheet(item: $kibanaSheet) { prefill in
+            KibanaImportView(initialJSON: prefill.json)
         }
-        .sheet(isPresented: $showingOpenAPIImport) {
-            OpenAPIImportView()
+        .sheet(item: $openAPISheet) { prefill in
+            OpenAPIImportView(initialJSON: prefill.json)
+        }
+        .sheet(isPresented: $showingAutoImport) {
+            // Sonraki ekran (inceleme, OpenAPI, Kibana) bu sayfa kapandıktan
+            // SONRA açılır: aynı anda iki sayfa açmaya çalışmak birini yutuyor.
+            AutoImportView(
+                onPrepared: { prepared in afterSheetCloses { appState.importPrepared(prepared) } },
+                onOpenOpenAPI: { json in afterSheetCloses { openAPISheet = ImportPrefill(json: json) } },
+                onOpenKibana: { json in afterSheetCloses { kibanaSheet = ImportPrefill(json: json) } }
+            )
         }
         .sheet(isPresented: $showingSourceImport) {
             SourceImportView()
@@ -99,5 +123,11 @@ struct SidebarBottomBar: View {
                 onCancel: { appState.pendingImport = nil }
             )
         }
+    }
+
+    /// Sayfa kapanma animasyonu bitince: SwiftUI aynı anda kapanan ve açılan
+    /// iki sayfadan ikincisini gösteremiyor.
+    private func afterSheetCloses(_ action: @escaping () -> Void) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: action)
     }
 }

@@ -7,6 +7,14 @@ import Dev2KitCore
 /// Neyin alınacağı (adres, gövde, hangi başlıklar) içe aktarmadan önce seçilir;
 /// hassas başlıklar varsayılan olarak alınmaz.
 struct KibanaImportView: View {
+    /// Otomatik içe aktarmadan gelen kayıt: hazır açılır.
+    private let initialJSON: String?
+
+    init(initialJSON: String? = nil) {
+        self.initialJSON = initialJSON
+        if let initialJSON { _json = State(initialValue: initialJSON) }
+    }
+
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
 
@@ -62,6 +70,7 @@ struct KibanaImportView: View {
         }
         .padding(20)
         .frame(width: 680, height: 680)
+        .onAppear { if initialJSON != nil { reparse() } }
         .fileImporter(isPresented: $showingFilePicker, allowedContentTypes: [.json]) { picked in
             guard case .success(let url) = picked else { return }
             let accessing = url.startAccessingSecurityScopedResource()

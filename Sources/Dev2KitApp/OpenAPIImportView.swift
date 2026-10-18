@@ -15,6 +15,17 @@ struct OpenAPIImportView: View {
         case json
     }
 
+    /// Otomatik içe aktarmadan gelen doküman: JSON sekmesinde hazır açılır.
+    private let initialJSON: String?
+
+    init(initialJSON: String? = nil) {
+        self.initialJSON = initialJSON
+        if let initialJSON {
+            _source = State(initialValue: .json)
+            _json = State(initialValue: initialJSON)
+        }
+    }
+
     @State private var source: Source = .address
     @State private var address = ""
     @State private var json = ""
@@ -87,6 +98,7 @@ struct OpenAPIImportView: View {
         }
         .padding(20)
         .frame(width: 620, height: 560)
+        .onAppear { if initialJSON != nil, document == nil { parseJSON() } }
         .fileImporter(isPresented: $showingFilePicker, allowedContentTypes: [.json]) { picked in
             guard case .success(let url) = picked else { return }
             readFile(url)

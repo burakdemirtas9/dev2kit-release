@@ -129,14 +129,35 @@ extension AppState {
             return
         }
         switch prepareImport(data, source: source) {
-        case .success(let prepared) where prepared.review.isClean:
-            // Bulgu yoksa ek bir onay adımı gereksiz sürtünme olurdu.
-            portingMessage = commitImport([prepared])
-        case .success(let prepared):
-            pendingImport = PendingImport(items: [prepared])
-        case .failure(let failure):
-            portingMessage = failure.message
+        case .success(let prepared): importPrepared(prepared)
+        case .failure(let failure): portingMessage = failure.message
         }
+    }
+
+    /// Hazırlanmış koleksiyonları ekler ya da birlikte incelemeye gönderir.
+    func importPrepared(_ prepared: PreparedImport) {
+        importPrepared([prepared])
+    }
+
+    func importPrepared(_ items: [PreparedImport]) {
+        guard !items.isEmpty else { return }
+        if items.allSatisfy(\.review.isClean) {
+            // Bulgu yoksa ek bir onay adımı gereksiz sürtünme olurdu.
+            portingMessage = commitImport(items)
+        } else {
+            pendingImport = PendingImport(items: items)
+        }
+    }
+
+    /// Otomatik içe aktarmada bulunan cURL istekleri: tek koleksiyon olarak,
+    /// koleksiyon içe aktarmasıyla AYNI güvenlik incelemesinden geçer
+    /// (token/parola içeren başlıklar, bilinmeyen sunucular).
+    func prepareCollectionImport(name: String, requests: [RequestModel], notes: [String]) -> PreparedImport {
+        let existing = workspace.collections.map(\.name)
+        let unique = CollectionPorting.uniqueName(name, suffix: "2", existingNames: existing)
+        let collection = CollectionModel(name: unique, requests: requests)
+        let review = ImportReviewer.review(collection: collection, notes: notes, context: importContext)
+        return PreparedImport(review: review, wasRenamed: unique != name)
     }
 
     /// Veriyi çözümler ve inceler; çalışma alanına HENÜZ eklemez.
