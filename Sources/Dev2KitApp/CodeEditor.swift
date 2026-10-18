@@ -165,14 +165,25 @@ enum SyntaxHighlighter {
         storage.endEditing()
     }
 
+    /// Satıra oturtma bu kadar fazla karakter eklerse yapılmaz.
+    static let maxLineSnap = 16_384
+
     /// Görünen aralığı iki yana `margin` kadar açar ve satır sınırlarına oturtur:
     /// kaydırırken kenarda yarım boyanmış satır görünmesin.
-    private static func expand(_ range: NSRange, in text: String) -> NSRange {
+    ///
+    /// Satır çok uzunsa (sıkıştırılmış JSON tek satırdır) oturtulmaz: "tam
+    /// satır" tüm belge demekti, her tuşta ve kaydırmada BÜTÜN metin yeniden
+    /// boyanıyordu ve süre öznitelik sayısıyla kareyle büyüyordu (2026-10-18,
+    /// ölçüldü: 512 KB tek satırda ~3 sn donma). Kenardaki yarım sözcük yanlış
+    /// renkte kalabilir; orası `margin` kadar ekranın dışında.
+    static func expand(_ range: NSRange, in text: String) -> NSRange {
         let length = (text as NSString).length
         let start = max(0, range.location - margin)
         let end = min(length, range.location + range.length + margin)
         guard start < end else { return NSRange(location: 0, length: 0) }
-        return (text as NSString).lineRange(for: NSRange(location: start, length: end - start))
+        let window = NSRange(location: start, length: end - start)
+        let lines = (text as NSString).lineRange(for: window)
+        return lines.length - window.length <= maxLineSnap ? lines : window
     }
 }
 
@@ -504,12 +515,22 @@ struct CodeEditor: NSViewRepresentable {
             applyFolding(textView)
         }
 
+        /// Gizli aralıklar DEĞİŞMEDİYSE hiçbir şey geçersizleştirilmez: metin
+        /// düzenlemesini yerleşim yöneticisi zaten kendisi işler.
+        ///
+        /// 2026-10-18 (ölçüldü): burası her metin değişikliğinde, hiç kat
+        /// yokken bile tüm belgenin yerleşimini geçersizleştirip TÜM görünümü
+        /// çizime işaretliyordu; bu, görünmeyen metnin de hemen yerleşmesini
+        /// zorluyordu. Tek satırlık (sıkıştırılmış) metinde süre kareyle
+        /// büyüyordu: 512 KB'ta 3 sn, 5 MB'ta 10 dakikadan uzun donma.
         private func applyFolding(_ textView: NSTextView) {
-            foldingDelegate.hiddenRanges = regions
+            let hidden = regions
                 .filter { foldedLines.contains($0.openLine) }
                 .map(\.hiddenRange)
             gutter?.foldedLines = foldedLines
             controller?.hasFolded = !foldedLines.isEmpty
+            guard hidden != foldingDelegate.hiddenRanges else { return }
+            foldingDelegate.hiddenRanges = hidden
 
             guard let layoutManager = textView.layoutManager else { return }
             let full = NSRange(location: 0, length: (textView.string as NSString).length)
@@ -517,7 +538,8 @@ struct CodeEditor: NSViewRepresentable {
             layoutManager.invalidateLayout(forCharacterRange: full, actualCharacterRange: nil)
             // Yerleşim doğru olsa da görünüm eski alanı koruyup yeniden
             // çizmiyordu: katlanmış satırda kapanış parantezi ekrana gelmiyordu.
-            textView.needsDisplay = true
+            // Yalnızca GÖRÜNEN alan: tüm görünüm, tüm metni yerleştirmeye zorlar.
+            textView.setNeedsDisplay(textView.visibleRect)
             gutter?.needsDisplay = true
             // Yerleşim geçersizleştiği için geçici öznitelikler (arama
             // vurguları) silindi; yeniden konuyor.
