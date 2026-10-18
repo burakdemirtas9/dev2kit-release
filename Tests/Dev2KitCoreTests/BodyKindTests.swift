@@ -81,3 +81,15 @@ final class BodyKindTests: XCTestCase {
         XCTAssertEqual(Beautifier.kind(contentType: "bilinmeyen"), .plain)
     }
 }
+
+final class RequestBodyContentTests: XCTestCase {
+    func testHasContent() {
+        XCTAssertFalse(RequestBody.none.hasContent)
+        XCTAssertFalse(RequestBody.raw(content: "  \n ", contentType: "application/json").hasContent)
+        XCTAssertTrue(RequestBody.raw(content: "{}", contentType: "application/json").hasContent)
+        XCTAssertFalse(RequestBody.formURLEncoded(fields: []).hasContent)
+        XCTAssertFalse(RequestBody.formURLEncoded(fields: [KeyValueEntry()]).hasContent, "boş satır içerik değil")
+        XCTAssertFalse(RequestBody.multipartForm(fields: [KeyValueEntry(key: "a", value: "1", enabled: false)]).hasContent, "kapalı alan gönderilmez")
+        XCTAssertTrue(RequestBody.multipartForm(fields: [KeyValueEntry(key: "a", value: "")]).hasContent)
+    }
+}

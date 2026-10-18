@@ -20,6 +20,18 @@ public extension RequestBody {
         }
     }
 
+    /// İçerik var mı (editör sekmesindeki "Body" noktası). Yalnızca boşluktan
+    /// oluşan raw gövde ya da hiç dolu ve etkin alanı olmayan form gövdesi
+    /// içerik sayılmaz: gönderilen istekte fiilen bir şey taşımıyorlar.
+    var hasContent: Bool {
+        switch self {
+        case .none: return false
+        case .raw(let content, _): return !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case .formURLEncoded(let fields), .multipartForm(let fields):
+            return fields.contains { $0.enabled && !($0.key.isEmpty && $0.value.isEmpty) }
+        }
+    }
+
     /// Tipin boş hali. Raw'ın varsayılanı JSON: en sık yazılan gövde o.
     static func empty(_ kind: BodyKind) -> RequestBody {
         switch kind {

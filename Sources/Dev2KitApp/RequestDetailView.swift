@@ -261,12 +261,14 @@ struct RequestDetailView: View {
         @Bindable var state = appState
         // Açık sekme AppState'te: ⌘1…⌘4 menü komutları view @State'ine erişemez.
         return VStack(spacing: 0) {
-            Picker("", selection: $state.editorTab) {
-                ForEach(EditorTab.available(isTokenFactory: isTokenFactory)) { tab in
-                    Text(tab.rawValue).tag(tab)
-                }
-            }
-            .pickerStyle(.segmented)
+            // Sarı nokta: içeriği olan sekme (şimdilik gövde; kural Core'da,
+            // `RequestBody.hasContent`). Sistem segmentli kontrolü renkli noktayı
+            // çizmediği için kendi seçicimiz (bkz. EditorTabPicker).
+            EditorTabPicker(
+                selection: $state.editorTab,
+                tabs: EditorTab.available(isTokenFactory: isTokenFactory),
+                marked: request.body.hasContent ? [.body] : []
+            )
             .padding(10)
 
             // Token sekmesi açıkken normal bir isteğe geçilirse Headers'a düşülür.
