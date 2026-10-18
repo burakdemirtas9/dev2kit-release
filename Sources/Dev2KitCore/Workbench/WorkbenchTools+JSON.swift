@@ -28,7 +28,8 @@ extension WorkbenchTools {
                 try JSONTool.unescape(input, options: options)
             },
         ],
-        validate: { JSONTool.validate($0) }
+        validate: { JSONTool.validate($0) },
+        sampleInput: #"{ "id": 42, "name": "dev2kit", "tags": ["api", "tools"], "active": true }"#
     )
 }
 

@@ -92,6 +92,22 @@ public enum DiffChecker {
             }
         }
 
+        /// Boş taraflarda soluk gösterilen örnek: iki taraf arasında küçük
+        /// bir fark, neyin karşılaştırıldığı ilk bakışta anlaşılsın.
+        public var samples: (left: String, right: String) {
+            switch self {
+            case .json: return (#"{ "name": "dev2kit", "version": 1, "tags": ["api"] }"#,
+                                #"{ "name": "dev2kit", "version": 2, "tags": ["api", "tools"] }"#)
+            case .xml: return (#"<order id="42"><item>api</item></order>"#,
+                               #"<order id="43"><item>api</item><item>tools</item></order>"#)
+            case .html: return (#"<div class="card"><p>Hello</p></div>"#, #"<div class="card"><p>Hello, world</p></div>"#)
+            case .css: return (".card{color:#333}", ".card{color:#111;padding:8px}")
+            case .sql: return ("select id, name from users", "select id, name, email from users where active = true")
+            case .markdown: return ("# Title\n\nFirst draft", "# Title\n\nSecond draft")
+            case .text: return ("first version", "second version")
+            }
+        }
+
         /// Karşılaştırmadan önceki biçimlendirme. JSON'da anahtarlar da
         /// sıralanır: anahtar sırası anlam taşımaz, satır farkında gürültü olmasın.
         func normalize(_ text: String) throws -> String {

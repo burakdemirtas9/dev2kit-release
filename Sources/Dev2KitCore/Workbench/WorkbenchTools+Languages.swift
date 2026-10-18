@@ -18,7 +18,8 @@ extension WorkbenchTools {
         keywords: ["soap", "wsdl", "pom", "biçimlendir", "sıkıştır", "doğrula"],
         format: { try MarkupFormatter.beautify($0, flavor: .xml, indent: $1.indentation.unit) },
         minify: { try MarkupTools.minify($0, html: false) },
-        validate: MarkupTools.validateXML
+        validate: MarkupTools.validateXML,
+        sample: #"<order id="42"><item>api</item><item>tools</item></order>"#
     )
 
     public static let html = textTool(
@@ -26,7 +27,8 @@ extension WorkbenchTools {
         keywords: ["web", "biçimlendir", "sıkıştır", "etiket"],
         format: { try MarkupFormatter.beautify($0, flavor: .html, indent: $1.indentation.unit) },
         minify: { try MarkupTools.minify($0, html: true) },
-        validate: MarkupTools.checkHTML
+        validate: MarkupTools.checkHTML,
+        sample: #"<div class="card"><h2>dev2kit</h2><p>Hello</p></div>"#
     )
 
     public static let css = textTool(
@@ -34,7 +36,8 @@ extension WorkbenchTools {
         keywords: ["style", "stil", "biçimlendir", "sıkıştır"],
         format: { try CSSFormatter.beautify($0, indent: $1.indentation.unit) },
         minify: { try CSSFormatter.minify($0) },
-        validate: { StructureCheck.validate($0, rules: .css) }
+        validate: { StructureCheck.validate($0, rules: .css) },
+        sample: ".card{color:#333;padding:8px 12px}.card h2{margin:0}"
     )
 
     /// SQL: anahtar kelimeye göre satır kırma, büyük harf seçeneği; yapısal
@@ -45,7 +48,8 @@ extension WorkbenchTools {
         format: { try SQLFormatter.beautify($0, indent: $1.indentation.unit, uppercaseKeywords: $1.uppercaseKeywords) },
         formatUsesKeywordCase: true,
         minify: { try SQLFormatter.minify($0) },
-        validate: { StructureCheck.validate($0, rules: .sql) }
+        validate: { StructureCheck.validate($0, rules: .sql) },
+        sample: "select id, name from users where active = true order by name"
     )
 
     /// Markdown: normalizasyon (tablo hizalama, başlık/liste); sıkıştırma ve
@@ -56,7 +60,8 @@ extension WorkbenchTools {
         format: { input, _ in try MarkdownFormatter.beautify(input) },
         formatUsesIndentation: false,
         minify: nil,
-        validate: MarkdownFormatter.check
+        validate: MarkdownFormatter.check,
+        sample: "# Title\n\n| key | value |\n|-|-|\n| id | 42 |"
     )
 
     static func textTool(
@@ -68,7 +73,8 @@ extension WorkbenchTools {
         formatUsesIndentation: Bool = true,
         formatUsesKeywordCase: Bool = false,
         minify: (@Sendable (String) throws -> String)?,
-        validate: @escaping @Sendable (String) -> WorkbenchValidation
+        validate: @escaping @Sendable (String) -> WorkbenchValidation,
+        sample: String
     ) -> WorkbenchTool {
         var actions = [
             WorkbenchAction(id: "format", title: "Format", usesIndentation: formatUsesIndentation,
@@ -90,7 +96,8 @@ extension WorkbenchTools {
             keywords: ["beautify", "pretty", "minify", "validate"] + keywords,
             syntax: syntax,
             actions: actions,
-            validate: validate
+            validate: validate,
+            sampleInput: sample
         )
     }
 }

@@ -40,6 +40,9 @@ public struct WorkbenchTool: Identifiable, Sendable {
     public let validate: (@Sendable (String) -> WorkbenchValidation)?
     /// Yeni sekmenin seçenekleri (XML → JSON'da "Detect types" kapalı).
     public let defaultOptions: WorkbenchOptions
+    /// Boş girdide soluk gösterilen örnek (API Client gövdesindeki gibi):
+    /// ne yapıştırılacağı ilk bakışta anlaşılsın.
+    public let sampleInput: String
 
     public init(
         id: String,
@@ -50,8 +53,10 @@ public struct WorkbenchTool: Identifiable, Sendable {
         syntax: Beautifier.Kind,
         actions: [WorkbenchAction],
         validate: (@Sendable (String) -> WorkbenchValidation)? = nil,
-        defaultOptions: WorkbenchOptions = WorkbenchOptions()
+        defaultOptions: WorkbenchOptions = WorkbenchOptions(),
+        sampleInput: String = ""
     ) {
+        self.sampleInput = sampleInput
         self.id = id
         self.title = title
         self.inputName = inputName ?? title

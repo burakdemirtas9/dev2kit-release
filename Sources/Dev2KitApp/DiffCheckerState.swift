@@ -152,6 +152,11 @@ final class DiffCheckerState {
         return starts[next]
     }
 
+    /// Araç ya da sekme değişince sol girdi odak alır (`WorkbenchState.inputFocusRequest`).
+    private(set) var focusRequest = 0
+
+    func requestFocus() { focusRequest += 1 }
+
     // MARK: - Sekmeler
 
     func title(of doc: DiffDocument) -> String { "Diff \(doc.number)" }
@@ -198,6 +203,7 @@ final class DiffCheckerState {
     }
 
     private func documentChanged() {
+        focusRequest += 1
         result = nil
         currentChange = nil
         schedule(debounced: false, force: true)

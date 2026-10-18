@@ -12,7 +12,8 @@ extension WorkbenchTools {
         id: "json-to-csv", title: "JSON → CSV", input: "JSON", syntax: .json, output: .plain,
         keywords: ["excel", "spreadsheet", "tablo", "table"],
         usesDelimiter: true,
-        validate: JSONTool.validate
+        validate: JSONTool.validate,
+        sample: #"[{ "id": 1, "name": "Ada", "city": "London" }, { "id": 2, "name": "Linus", "city": "Helsinki" }]"#
     ) { input, options in
         try CSVConverter.fromJSON(input, delimiter: options.csvDelimiter)
     }
@@ -21,7 +22,8 @@ extension WorkbenchTools {
         id: "csv-to-json", title: "CSV → JSON", input: "CSV", syntax: .plain, output: .json,
         keywords: ["excel", "spreadsheet", "tablo", "table"],
         usesIndentation: true, usesDetectTypes: true,
-        validate: CSVConverter.validate
+        validate: CSVConverter.validate,
+        sample: "id,name,city\n1,Ada,London\n2,Linus,Helsinki"
     ) { input, options in
         try CSVConverter.toJSON(input, detectTypes: options.detectTypes, indent: options.indentation.unit)
     }
@@ -30,7 +32,8 @@ extension WorkbenchTools {
         id: "json-to-xml", title: "JSON → XML", input: "JSON", syntax: .json, output: .xml,
         keywords: ["soap"],
         usesIndentation: true, usesRootName: true,
-        validate: JSONTool.validate
+        validate: JSONTool.validate,
+        sample: #"{ "order": { "@id": "42", "item": ["api", "tools"] } }"#
     ) { input, options in
         try XMLConverter.fromJSON(input, rootName: options.xmlRootName, indent: options.indentation.unit)
     }
@@ -40,7 +43,8 @@ extension WorkbenchTools {
         keywords: ["soap"],
         usesIndentation: true, usesDetectTypes: true,
         validate: MarkupTools.validateXML,
-        defaultOptions: WorkbenchOptions(detectTypes: false)
+        defaultOptions: WorkbenchOptions(detectTypes: false),
+        sample: #"<order id="42"><item>api</item><item>tools</item></order>"#
     ) { input, options in
         try XMLConverter.toJSON(input, detectTypes: options.detectTypes, indent: options.indentation.unit)
     }
@@ -48,7 +52,8 @@ extension WorkbenchTools {
     public static let jsonToYAML = converter(
         id: "json-to-yaml", title: "JSON → YAML", input: "JSON", syntax: .json, output: .plain,
         keywords: ["yml", "kubernetes", "k8s", "spring", "application.yml"],
-        validate: JSONTool.validate
+        validate: JSONTool.validate,
+        sample: #"{ "server": { "port": 8080 }, "country": "no", "profiles": ["dev", "prod"] }"#
     ) { input, _ in
         try YAMLWriter.fromJSON(input)
     }
@@ -66,6 +71,7 @@ extension WorkbenchTools {
         usesRootName: Bool = false,
         validate: @escaping @Sendable (String) -> WorkbenchValidation,
         defaultOptions: WorkbenchOptions = WorkbenchOptions(),
+        sample: String,
         run: @escaping @Sendable (String, WorkbenchOptions) throws -> String
     ) -> WorkbenchTool {
         WorkbenchTool(
@@ -81,7 +87,8 @@ extension WorkbenchTools {
                                 usesRootName: usesRootName, outputSyntax: output, run: run),
             ],
             validate: validate,
-            defaultOptions: defaultOptions
+            defaultOptions: defaultOptions,
+            sampleInput: sample
         )
     }
 }

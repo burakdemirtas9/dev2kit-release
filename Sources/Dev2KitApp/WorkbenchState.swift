@@ -141,12 +141,20 @@ final class WorkbenchState {
 
     // MARK: - Araç ve sekme
 
+    /// Araç, sekme ya da mod değişince girdi editörü odak alır: kullanıcı
+    /// hemen yapıştırıp yazabilsin (kullanıcı isteği, 2026-10-18).
+    private(set) var inputFocusRequest = 0
+
+    func requestInputFocus() {
+        if showsDiffChecker { diff.requestFocus() } else { inputFocusRequest += 1 }
+    }
+
     func select(toolID: String) {
         guard toolID != selectedToolID,
               WorkbenchCatalog.tool(id: toolID) != nil || toolID == WorkbenchCatalog.diffCheckerID else { return }
         selectedToolID = toolID
         UserDefaults.standard.set(toolID, forKey: "workbenchTool")
-        guard !showsDiffChecker else { return }
+        guard !showsDiffChecker else { diff.requestFocus(); return }
         ensureDocument()
         documentChanged()
     }
@@ -380,6 +388,7 @@ final class WorkbenchState {
 
     /// Açık sekme değişti: önceki sonucun hepsi bırakılır (bellek), yenisi hesaplanır.
     private func documentChanged() {
+        inputFocusRequest += 1
         output = ""
         outputHiddenFromEditor = false
         editedOutput = nil

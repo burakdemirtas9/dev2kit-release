@@ -248,6 +248,9 @@ struct CodeEditor: NSViewRepresentable {
     var onFocus: (() -> Void)?
     /// Verilirse kullanıcının değişiklikleri bu sınırlarla denetlenir.
     var limits: EditorLimits?
+    /// Değiştikçe editör odak alır (imleç yanıp söner). Workbench araç,
+    /// sekme ya da mod değişince artırır; ilk kurulumda da uygulanır.
+    var focusRequest: Int?
 
     /// Yazı boyutu (⌘+ / ⌘− / ⌘0, bkz. `EditorZoom`): tüm editörler ortak.
     @AppStorage(EditorZoom.key) private var fontSize = EditorZoom.standard
@@ -358,6 +361,14 @@ struct CodeEditor: NSViewRepresentable {
             context.coordinator.textChanged(textView)
         }
         context.coordinator.markError(at: errorOffset, in: textView)
+        if let focusRequest, focusRequest != context.coordinator.appliedFocusRequest {
+            context.coordinator.appliedFocusRequest = focusRequest
+            // Bir sonraki turda: ilk kurulumda görünüm henüz pencerede değil.
+            DispatchQueue.main.async { [weak textView] in
+                guard let textView, let window = textView.window, window.firstResponder !== textView else { return }
+                window.makeFirstResponder(textView)
+            }
+        }
         if context.coordinator.fontSize != fontSize {
             context.coordinator.applyFontSize(fontSize, to: textView)
         }
@@ -385,6 +396,8 @@ struct CodeEditor: NSViewRepresentable {
         /// Editörün şu an kullandığı yazı boyutu.
         var fontSize = EditorZoom.standard
         var lastLanguage: CodeLanguage?
+        /// Uygulanmış son odak isteği (`CodeEditor.focusRequest`).
+        var appliedFocusRequest: Int?
         private var scrollObserver: NSObjectProtocol?
         /// Gutter ve katlama durumu yalnızca `folding` verildiğinde kurulur.
         var gutter: EditorGutter?

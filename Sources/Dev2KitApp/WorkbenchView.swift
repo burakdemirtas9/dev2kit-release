@@ -16,6 +16,8 @@ struct WorkbenchView: View {
                 WorkbenchToolView()
             }
         }
+        // API Client'tan Workbench'e geçince imleç girdide olsun.
+        .onAppear { workbench.requestInputFocus() }
     }
 }
 

@@ -178,17 +178,17 @@ struct WorkbenchToolView: View {
                     limits: EditorLimits(
                         onRejected: { workbench.reportLimit($0.english) },
                         onLongLine: { workbench.acceptInputHiddenFromEditor($0) }
-                    )
+                    ),
+                    focusRequest: workbench.inputFocusRequest
                 )
                 .id(workbench.document.id)
-                .overlay {
+                .overlay(alignment: .topLeading) {
                     if workbench.input.isEmpty {
-                        Text("Paste content here. Input stays in memory only; it is never written to disk or history.")
-                            .font(.callout)
-                            .foregroundStyle(.tertiary)
-                            .multilineTextAlignment(.center)
-                            .padding(40)
-                            .allowsHitTesting(false)
+                        SampleInputHint(
+                            sample: workbench.tool.sampleInput,
+                            note: "Paste or type here. Kept in memory only — never written to disk or history.",
+                            leading: CodeLanguage(workbench.tool.syntax).supportsFolding ? inputFolding.gutterWidth : 0
+                        )
                     }
                 }
             }
@@ -753,5 +753,32 @@ struct OversizedTextNotice<Actions: View>: View {
         .padding(24)
         .frame(maxWidth: 460)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+/// Boş girdide soluk örnek (API Client gövdesindeki gibi): editörün yazı
+/// boyutu ve satır numaralarıyla hizalı, tıklamayı editöre bırakır.
+struct SampleInputHint: View {
+    let sample: String
+    let note: String
+    /// Satır numarası şeridinin genişliği (yoksa 0).
+    let leading: CGFloat
+    @AppStorage(EditorZoom.key) private var fontSize = EditorZoom.standard
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if !sample.isEmpty {
+                Text(sample)
+                    .font(.system(size: fontSize, design: .monospaced))
+                    .lineLimit(6)
+            }
+            Text(note)
+                .font(.secondaryText)
+        }
+        .foregroundStyle(.tertiary)
+        .padding(.top, 8)
+        .padding(.leading, leading + 5)
+        .padding(.trailing, 16)
+        .allowsHitTesting(false)
     }
 }

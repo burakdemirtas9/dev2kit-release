@@ -95,14 +95,17 @@ struct DiffCheckerView: View {
         let language = CodeLanguage(diff.document.language.syntax)
         return HStack(spacing: 0) {
             inputPane("Left", text: Binding(get: { diff.left }, set: { diff.left = $0 }), language: language,
-                      issue: diff.result?.leftIssue, hidden: diff.document.leftTooLargeForEditor)
+                      issue: diff.result?.leftIssue, hidden: diff.document.leftTooLargeForEditor,
+                      sample: diff.document.language.samples.left, focusRequest: diff.focusRequest)
             Divider()
             inputPane("Right", text: Binding(get: { diff.right }, set: { diff.right = $0 }), language: language,
-                      issue: diff.result?.rightIssue, hidden: diff.document.rightTooLargeForEditor)
+                      issue: diff.result?.rightIssue, hidden: diff.document.rightTooLargeForEditor,
+                      sample: diff.document.language.samples.right, focusRequest: nil)
         }
     }
 
-    private func inputPane(_ title: String, text: Binding<String>, language: CodeLanguage, issue: String?, hidden: Bool) -> some View {
+    private func inputPane(_ title: String, text: Binding<String>, language: CodeLanguage, issue: String?, hidden: Bool,
+                           sample: String, focusRequest: Int?) -> some View {
         VStack(spacing: 0) {
             HStack(spacing: 6) {
                 Text(title).font(.secondaryText.weight(.semibold)).foregroundStyle(.secondary)
@@ -132,14 +135,11 @@ struct DiffCheckerView: View {
                 CodeEditor(text: text, language: language, limits: EditorLimits(
                     onRejected: { diff.reportLimit($0.english) },
                     onLongLine: { text.wrappedValue = $0 }
-                ))
+                ), focusRequest: focusRequest)
                 .id("\(diff.document.id)-\(title)")
-                .overlay {
+                .overlay(alignment: .topLeading) {
                     if text.wrappedValue.isEmpty {
-                        Text("Paste the \(title.lowercased()) side here")
-                            .font(.callout)
-                            .foregroundStyle(.tertiary)
-                            .allowsHitTesting(false)
+                        SampleInputHint(sample: sample, note: "Paste the \(title.lowercased()) side here.", leading: 0)
                     }
                 }
             }
