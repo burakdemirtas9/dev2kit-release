@@ -4,8 +4,39 @@ import XCTest
 final class WorkbenchLimitsTests: XCTestCase {
     func testDecidedLimits() {
         // Kullanıcı kararı (2026-10-18).
-        XCTAssertEqual(TextStats.size(WorkbenchLimits.maxInputBytes), "20 MB")
-        XCTAssertEqual(TextStats.size(WorkbenchLimits.maxEditorLineBytes), "2.0 MB")
+        XCTAssertEqual(TextStats.size(WorkbenchLimits.maxInputBytes), "4.0 MB")
+        XCTAssertEqual(TextStats.size(WorkbenchLimits.maxEditorLineBytes), "1.0 MB")
+    }
+
+    func testLineCountTreatsCRLFOnceAndLoneCRAsABreak() {
+        XCTAssertEqual(TextStats.lineCount(""), 0)
+        XCTAssertEqual(TextStats.lineCount("a"), 1)
+        XCTAssertEqual(TextStats.lineCount("a\nb"), 2)
+        XCTAssertEqual(TextStats.lineCount("a\r\nb"), 2)
+        XCTAssertEqual(TextStats.lineCount("a\rb\rc"), 3)
+        XCTAssertEqual(TextStats.lineCount("a\n"), 2)
+        XCTAssertEqual(TextStats("a\r\nb\rc").lines, 3, "sayaç da aynı kural")
+        XCTAssertEqual(WorkbenchLimits.maxInputLines, 16_000)
+    }
+
+    /// Editör kapısı büyüyen her değişiklikte sayıyor. Ölçüm (M4, release,
+    /// 2026-10-18): 4 MB (izin verilen en büyük girdi) 3–4 ms/tuş — bir ekran
+    /// karesinin altında. Süre debug'da dalgalandığı için burada sınanmıyor.
+    func testNSStringLineCountMatchesTheStringRule() {
+        for sample in ["", "a", "a\nb", "a\r\nb", "a\rb\rc", "a\n", "ğ\r\n\r\nx"] {
+            XCTAssertEqual(TextStats.lineCount(sample as NSString), TextStats.lineCount(sample), sample.debugDescription)
+        }
+        // Parça (64 K) sınırına denk gelen \r\n bir kez sayılmalı.
+        let boundary = String(repeating: "a", count: 65_535) + "\r\n" + "b"
+        XCTAssertEqual(TextStats.lineCount(boundary as NSString), 2)
+        let text = String(repeating: #"  "ad": "Müşteri","# + "\n", count: 190_000) as NSString // ~4 MB
+        XCTAssertEqual(TextStats.lineCount(text), 190_001)
+    }
+
+    func testOutputEditIssueCoversBytesAndLines() {
+        XCTAssertNil(WorkbenchLimits.outputEditIssue("a\nb"))
+        XCTAssertNotNil(WorkbenchLimits.outputEditIssue(String(repeating: "\n", count: 16_000)))
+        XCTAssertNil(WorkbenchLimits.outputEditIssue(String(repeating: "\n", count: 15_999)))
     }
 
     func testResultingBytesCountsUTF8() {

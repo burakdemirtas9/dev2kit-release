@@ -161,7 +161,7 @@ struct WorkbenchToolView: View {
             if workbench.inputHiddenFromEditor {
                 OversizedTextNotice(
                     title: "Input not shown: \(TextStats.size(workbench.inputStats.bytes))",
-                    detail: oversizedDetail + " The input is kept and the tools work on it: run an action (e.g. Format) and use its output."
+                    detail: oversizedDetail(limit: WorkbenchLimits.maxInputBytes) + " The input is kept and the tools work on it: run an action (e.g. Format) and use its output."
                 ) {
                     CopyButton(text: workbench.input, help: "Copy input")
                     Button("Clear") { workbench.clearInput() }.controlSize(.small)
@@ -175,7 +175,7 @@ struct WorkbenchToolView: View {
                     errorOffset: issueOffset,
                     onFocus: { workbench.focus(.input) },
                     limits: EditorLimits(
-                        onTooLarge: { workbench.reportLimit(WorkbenchLimits.tooLargeMessage(bytes: $0)) },
+                        onRejected: { workbench.reportLimit($0) },
                         onLongLine: { workbench.acceptInputHiddenFromEditor($0) }
                     )
                 )
@@ -195,8 +195,8 @@ struct WorkbenchToolView: View {
         .frame(maxWidth: .infinity)
     }
 
-    private var oversizedDetail: String {
-        "Text over \(TextStats.size(WorkbenchLimits.maxInputBytes)) or with a line longer than \(TextStats.size(WorkbenchLimits.maxEditorLineBytes)) (minified JSON is one line) would freeze dev2kit in the editor."
+    private func oversizedDetail(limit: Int) -> String {
+        "Text over \(TextStats.size(limit)) or with a line longer than \(TextStats.size(WorkbenchLimits.maxEditorLineBytes)) (minified JSON is one line) would freeze dev2kit in the editor."
     }
 
     // MARK: Çıktı
@@ -266,7 +266,7 @@ struct WorkbenchToolView: View {
                 } else if workbench.outputHiddenFromEditor {
                     OversizedTextNotice(
                         title: "Output not shown: \(TextStats.size(workbench.outputStats.bytes))",
-                        detail: oversizedDetail + " Copy it, or pick an action with multi-line output (e.g. Format)."
+                        detail: oversizedDetail(limit: WorkbenchLimits.maxOutputBytes) + " Copy it, or pick an action with multi-line output (e.g. Format)."
                     ) {
                         CopyButton(text: workbench.output, help: "Copy output")
                     }
@@ -279,7 +279,8 @@ struct WorkbenchToolView: View {
                         search: outputSearch,
                         onFocus: { workbench.focus(.output) },
                         limits: EditorLimits(
-                            onTooLarge: { workbench.reportLimit(WorkbenchLimits.tooLargeMessage(bytes: $0)) },
+                            maxDisplayBytes: WorkbenchLimits.maxOutputBytes,
+                            onRejected: { workbench.reportLimit($0) },
                             onLongLine: { _ in workbench.reportLimit(WorkbenchLimits.longLineEditMessage) }
                         )
                     )

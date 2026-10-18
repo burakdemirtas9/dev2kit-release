@@ -215,9 +215,14 @@ final class CodeFoldingController: ObservableObject {
 /// onu veren taraf (durum nesnesi) kendisi karar verir.
 struct EditorLimits {
     var maxBytes: Int = WorkbenchLimits.maxInputBytes
+    var maxLines: Int = WorkbenchLimits.maxInputLines
     var maxLineBytes: Int = WorkbenchLimits.maxEditorLineBytes
-    /// Sonuç `maxBytes`'ı aşıyor: değişiklik yapılmadı (sonucun boyutu).
-    var onTooLarge: (Int) -> Void
+    /// Programla verilen metnin editöre yazılacağı en büyük boyut (çıktı
+    /// editörü girdi sınırından büyük metni de GÖSTERİR, bkz. `maxOutputBytes`).
+    var maxDisplayBytes: Int = WorkbenchLimits.maxInputBytes
+    /// Sonuç `maxBytes`'ı ya da `maxLines`'ı aşıyor: değişiklik yapılmadı
+    /// (kullanıcıya gösterilecek açıklama).
+    var onRejected: (String) -> Void
     /// Sonuçta `maxLineBytes`'tan uzun satır var: değişiklik editöre girmedi,
     /// tam sonuç metni verilir (ör. editörde göstermeden saklamak için).
     var onLongLine: (String) -> Void
@@ -337,7 +342,7 @@ struct CodeEditor: NSViewRepresentable {
         guard let textView = scrollView.documentView as? NSTextView else { return }
         context.coordinator.parent = self
         textView.isEditable = isEditable
-        if textView.string != text, limits != nil, WorkbenchLimits.isTooLargeForEditor(text) {
+        if textView.string != text, let limits, WorkbenchLimits.isTooLargeForEditor(text, maxBytes: limits.maxDisplayBytes) {
             // Sınırlı editöre sığmayan metin programla da yazılmaz: kapı
             // yapıştırmayı engelleyip metni duruma verdiğinde SwiftUI, editörü
             // açıklamayla değiştirmeden önce bir güncelleme daha yapıyor ve
@@ -441,12 +446,34 @@ struct CodeEditor: NSViewRepresentable {
             if WorkbenchLimits.mayExceed(utf16Length: resultLength, limit: limits.maxBytes) {
                 let bytes = WorkbenchLimits.resultingBytes(of: current, replacing: range, with: text)
                 if bytes > limits.maxBytes {
-                    limits.onTooLarge(bytes)
+                    limits.onRejected(WorkbenchLimits.tooLargeMessage(bytes: bytes))
                     return false
                 }
             }
+            // Satır sınırı. Metin `maxLines` karakterden kısaysa sınıra
+            // ulaşamaz, sayılmaz. Uzunsa yalnızca satır sonu ekleyen ya da metni
+            // BÜYÜTEN değişiklikte sayılır (silme serbest): sınırdaki metne hiçbir
+            // ekleme yapılmaz.
+            if resultLength + 1 > limits.maxLines {
+                let addsBreak = text.contains(where: \.isNewline)
+                let grows = (text as NSString).length > range.length
+                if addsBreak || grows {
+                    let currentLines = TextStats.lineCount(current)
+                    let resultLines = addsBreak
+                        ? TextStats.lineCount(current.replacingCharacters(in: range, with: text) as NSString)
+                        : currentLines
+                    if resultLines > limits.maxLines {
+                        limits.onRejected(WorkbenchLimits.tooManyLinesMessage(lines: resultLines))
+                        return false
+                    }
+                    if grows, currentLines >= limits.maxLines {
+                        limits.onRejected(WorkbenchLimits.atLineLimitMessage)
+                        return false
+                    }
+                }
+            }
             // Uzun satır yalnızca büyük eklemede (yapıştırma, sürükleme) aranır:
-            // yazarak 2 MB'lık satır oluşmaz, her tuşta tüm metni taramaya değmez.
+            // yazarak 1 MB'lık satır oluşmaz, her tuşta tüm metni taramaya değmez.
             if (text as NSString).length >= 4096,
                WorkbenchLimits.mayExceed(utf16Length: resultLength, limit: limits.maxLineBytes) {
                 let result = current.replacingCharacters(in: range, with: text)

@@ -12,7 +12,7 @@ struct WorkbenchDocument: Identifiable, Equatable {
     var actionID: String?
     var options = WorkbenchOptions()
     var outputMode: WorkbenchState.OutputMode = .text
-    /// Girdi editörde gösterilemeyecek kadar büyük ya da 2 MB'tan uzun
+    /// Girdi editörde gösterilemeyecek kadar büyük ya da 1 MB'tan uzun
     /// satırlı (`WorkbenchLimits`): saklanır ve araçlar çalışır, editör yerine
     /// açıklama gösterilir. Girdi her değiştiğinde hesaplanır.
     var inputTooLargeForEditor = false
@@ -70,7 +70,7 @@ final class WorkbenchState {
 
     private(set) var output = ""
     /// Çıktı editörde gösterilemeyecek kadar büyük ya da uzun satırlı
-    /// (ör. 2 MB'ı aşan Minify çıktısı): yalnızca kopyalanabilir.
+    /// (ör. 1 MB'ı aşan Minify çıktısı): yalnızca kopyalanabilir.
     private(set) var outputHiddenFromEditor = false
     private(set) var actionIssue: WorkbenchIssue?
     private(set) var validation: WorkbenchValidation = .empty
@@ -213,6 +213,11 @@ final class WorkbenchState {
     /// hesaplanır ve düzenleme bırakılır.
     func toggleOutputEditing() {
         guard !outputHiddenFromEditor else { return }
+        // Düzenleme girdiye yansır: girdi sınırlarını aşan çıktı düzenlenmez.
+        if !isEditingOutput, let issue = WorkbenchLimits.outputEditIssue(displayedOutput) {
+            reportLimit(issue)
+            return
+        }
         isEditingOutput.toggle()
     }
 
@@ -237,9 +242,8 @@ final class WorkbenchState {
     func useOutputAsInput() {
         let text = displayedOutput
         guard !text.isEmpty else { return }
-        let bytes = text.utf8.count
-        guard bytes <= WorkbenchLimits.maxInputBytes else {
-            reportLimit(WorkbenchLimits.tooLargeMessage(bytes: bytes))
+        if let issue = WorkbenchLimits.outputEditIssue(text) {
+            reportLimit(issue)
             return
         }
         input = text
@@ -264,7 +268,7 @@ final class WorkbenchState {
         }
     }
 
-    /// Editöre yapıştırılan metinde 2 MB'tan uzun satır var: editöre girmedi,
+    /// Editöre yapıştırılan metinde 1 MB'tan uzun satır var: editöre girmedi,
     /// burada saklanır; girdi bölmesi editör yerine açıklama gösterir.
     func acceptInputHiddenFromEditor(_ text: String) {
         input = text
@@ -457,7 +461,7 @@ final class WorkbenchState {
         }
         return Result(output: output, issue: issue, validation: validation, tree: tree,
                       inputStats: inputStats, outputStats: TextStats(output),
-                      outputTooLargeForEditor: WorkbenchLimits.isTooLargeForEditor(output))
+                      outputTooLargeForEditor: WorkbenchLimits.isTooLargeForEditor(output, maxBytes: WorkbenchLimits.maxOutputBytes))
     }
 
     private func apply(_ result: Result, generation: Int, refreshOutput: Bool = true) {
