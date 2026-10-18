@@ -151,7 +151,7 @@ final class WorkbenchState {
     }
 
     func newDocument() {
-        let doc = WorkbenchDocument(number: takeNumber())
+        let doc = WorkbenchDocument(number: takeNumber(), options: tool.defaultOptions)
         documentsByTool[tool.id, default: []].append(doc)
         selectedDocumentByTool[tool.id] = doc.id
         documentChanged()
@@ -309,7 +309,7 @@ final class WorkbenchState {
 
     private func ensureDocument() {
         if documents.isEmpty {
-            let doc = WorkbenchDocument(number: takeNumber())
+            let doc = WorkbenchDocument(number: takeNumber(), options: tool.defaultOptions)
             documentsByTool[tool.id] = [doc]
             selectedDocumentByTool[tool.id] = doc.id
         } else if !documents.contains(where: { $0.id == selectedDocumentByTool[tool.id] }) {

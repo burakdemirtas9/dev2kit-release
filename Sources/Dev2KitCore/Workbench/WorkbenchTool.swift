@@ -28,6 +28,8 @@ public struct WorkbenchTool: Identifiable, Sendable {
 
     public let id: String
     public let title: String
+    /// Girdinin dili ("Valid JSON"); dönüştürücüde başlıktan farklı.
+    public let inputName: String
     public let category: Category
     /// Aramada başlığa ek olarak eşleşen kelimeler.
     public let keywords: [String]
@@ -36,18 +38,24 @@ public struct WorkbenchTool: Identifiable, Sendable {
     public let actions: [WorkbenchAction]
     /// Girdinin doğrulaması; hata konumuyla. `nil`: doğrulama yok.
     public let validate: (@Sendable (String) -> WorkbenchValidation)?
+    /// Yeni sekmenin seçenekleri (XML → JSON'da "Detect types" kapalı).
+    public let defaultOptions: WorkbenchOptions
 
     public init(
         id: String,
         title: String,
+        inputName: String? = nil,
         category: Category,
         keywords: [String] = [],
         syntax: Beautifier.Kind,
         actions: [WorkbenchAction],
-        validate: (@Sendable (String) -> WorkbenchValidation)? = nil
+        validate: (@Sendable (String) -> WorkbenchValidation)? = nil,
+        defaultOptions: WorkbenchOptions = WorkbenchOptions()
     ) {
         self.id = id
         self.title = title
+        self.inputName = inputName ?? title
+        self.defaultOptions = defaultOptions
         self.category = category
         self.keywords = keywords
         self.syntax = syntax
@@ -68,6 +76,10 @@ public struct WorkbenchAction: Identifiable, Sendable {
     public let usesIndentation: Bool
     public let usesSortKeys: Bool
     public let usesKeywordCase: Bool
+    /// Dönüştürücü seçenekleri: CSV ayracı, tip algılama, XML kök adı.
+    public let usesDelimiter: Bool
+    public let usesDetectTypes: Bool
+    public let usesRootName: Bool
     /// Çıktının sözdizimi rengi aracınkinden farklıysa (Escape → düz metin).
     public let outputSyntax: Beautifier.Kind?
     /// Çıktı ağaç olarak da gösterilebilir mi. Yalnızca biçimlendirmede
@@ -86,6 +98,9 @@ public struct WorkbenchAction: Identifiable, Sendable {
         usesIndentation: Bool = false,
         usesSortKeys: Bool = false,
         usesKeywordCase: Bool = false,
+        usesDelimiter: Bool = false,
+        usesDetectTypes: Bool = false,
+        usesRootName: Bool = false,
         outputSyntax: Beautifier.Kind? = nil,
         supportsTree: Bool = false,
         reverse: (@Sendable (String, String, WorkbenchOptions) throws -> String)? = nil,
@@ -96,6 +111,9 @@ public struct WorkbenchAction: Identifiable, Sendable {
         self.usesIndentation = usesIndentation
         self.usesSortKeys = usesSortKeys
         self.usesKeywordCase = usesKeywordCase
+        self.usesDelimiter = usesDelimiter
+        self.usesDetectTypes = usesDetectTypes
+        self.usesRootName = usesRootName
         self.outputSyntax = outputSyntax
         self.supportsTree = supportsTree
         self.reverse = reverse
@@ -108,11 +126,27 @@ public struct WorkbenchOptions: Hashable, Sendable {
     public var sortKeys: Bool
     /// SQL anahtar kelimeleri büyük harf. Varsayılan açık: en yaygın stil.
     public var uppercaseKeywords: Bool
+    /// JSON → CSV ayracı.
+    public var csvDelimiter: CSVDelimiter
+    /// CSV/XML → JSON: `12`, `true`, boş hücre metin yerine sayı/boolean/null.
+    public var detectTypes: Bool
+    /// JSON → XML kök eleman adı.
+    public var xmlRootName: String
 
-    public init(indentation: Indentation = .default, sortKeys: Bool = false, uppercaseKeywords: Bool = true) {
+    public init(
+        indentation: Indentation = .default,
+        sortKeys: Bool = false,
+        uppercaseKeywords: Bool = true,
+        csvDelimiter: CSVDelimiter = .comma,
+        detectTypes: Bool = true,
+        xmlRootName: String = XMLConverter.defaultRootName
+    ) {
         self.indentation = indentation
         self.sortKeys = sortKeys
         self.uppercaseKeywords = uppercaseKeywords
+        self.csvDelimiter = csvDelimiter
+        self.detectTypes = detectTypes
+        self.xmlRootName = xmlRootName
     }
 }
 
@@ -229,6 +263,11 @@ public enum WorkbenchCatalog {
         WorkbenchTools.css,
         WorkbenchTools.sql,
         WorkbenchTools.markdown,
+        WorkbenchTools.jsonToCSV,
+        WorkbenchTools.csvToJSON,
+        WorkbenchTools.jsonToXML,
+        WorkbenchTools.xmlToJSON,
+        WorkbenchTools.jsonToYAML,
     ]
 
     /// Diff Checker bir `WorkbenchTool` değil (iki girdi, kendi ekranı); kenar

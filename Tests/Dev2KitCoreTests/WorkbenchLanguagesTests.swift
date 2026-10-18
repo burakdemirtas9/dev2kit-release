@@ -84,10 +84,10 @@ final class WorkbenchLanguageToolsTests: XCTestCase {
     }
 
     func testCatalogHasStep1bTools() {
-        XCTAssertEqual(WorkbenchCatalog.all.map(\.id), ["json", "xml", "html", "css", "sql", "markdown"])
+        XCTAssertEqual(WorkbenchCatalog.all.filter { $0.category == .format }.map(\.id), ["json", "xml", "html", "css", "sql", "markdown"])
         // JavaScript/TypeScript Workbench'ten kaldırıldı (kullanıcı kararı).
         XCTAssertTrue(WorkbenchCatalog.matching("typescript").isEmpty)
-        XCTAssertEqual(WorkbenchCatalog.matching("soap").map(\.id), ["xml"])
+        XCTAssertEqual(WorkbenchCatalog.matching("soap").map(\.id), ["xml", "json-to-xml", "xml-to-json"])
     }
 
     func testEveryToolsActionsReverse() throws {
@@ -98,7 +98,8 @@ final class WorkbenchLanguageToolsTests: XCTestCase {
             "sql": "select a from t where b = 'x'",
             "markdown": "# Başlık\n\n| a | b |\n| - | - |\n| 1 | 2 |",
         ]
-        for tool in WorkbenchCatalog.all where tool.id != "json" {
+        // Dönüştürücülerin tersi yok (WorkbenchConvertCatalogTests).
+        for tool in WorkbenchCatalog.all where tool.id != "json" && tool.category == .format {
             let sample = try XCTUnwrap(samples[tool.id], tool.id)
             for action in tool.actions {
                 let output = try action.run(sample, .init())

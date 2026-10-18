@@ -87,6 +87,35 @@ struct WorkbenchToolView: View {
                 ))
                 .help("Sort object keys alphabetically at every level. Comments are dropped when sorting.")
             }
+            if action.usesDelimiter {
+                Picker("Delimiter", selection: Binding(
+                    get: { workbench.options.csvDelimiter },
+                    set: { var options = workbench.options; options.csvDelimiter = $0; workbench.update(options: options) }
+                )) {
+                    ForEach(CSVDelimiter.allCases, id: \.self) { Text($0.title).tag($0) }
+                }
+                .fixedSize()
+                .help("Semicolon is what Excel expects in Turkish and most European locales")
+            }
+            if action.usesRootName {
+                HStack(spacing: 6) {
+                    Text("Root").foregroundStyle(.secondary)
+                    TextField(XMLConverter.defaultRootName, text: Binding(
+                        get: { workbench.options.xmlRootName },
+                        set: { var options = workbench.options; options.xmlRootName = $0; workbench.update(options: options) }
+                    ))
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 120)
+                }
+                .help("Name of the root element. Invalid XML names are made safe.")
+            }
+            if action.usesDetectTypes {
+                Toggle("Detect types", isOn: Binding(
+                    get: { workbench.options.detectTypes },
+                    set: { var options = workbench.options; options.detectTypes = $0; workbench.update(options: options) }
+                ))
+                .help("Write 12 as a number, true/false as booleans and empty cells as null. Leading zeros (012) and numbers over 15 digits stay text.")
+            }
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 14)
@@ -284,7 +313,7 @@ struct WorkbenchToolView: View {
         case .empty:
             Text(" ").font(.secondaryText)
         case .valid:
-            Label("Valid \(workbench.tool.title)", systemImage: "checkmark.circle.fill")
+            Label("Valid \(workbench.tool.inputName)", systemImage: "checkmark.circle.fill")
                 .font(.secondaryText)
                 .foregroundStyle(Theme.up)
         case .structurallyValid:

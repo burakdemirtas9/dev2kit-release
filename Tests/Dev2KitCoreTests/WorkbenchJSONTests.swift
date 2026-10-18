@@ -168,8 +168,9 @@ final class JSONTreeNodeTests: XCTestCase {
 
 final class WorkbenchCatalogTests: XCTestCase {
     func testSearchIsCaseAndDiacriticInsensitive() {
-        XCTAssertEqual(WorkbenchCatalog.matching("json").map(\.id), ["json"])
-        XCTAssertEqual(WorkbenchCatalog.matching("JSON").map(\.id), ["json"])
+        let jsonTools = ["json", "json-to-csv", "csv-to-json", "json-to-xml", "xml-to-json", "json-to-yaml"]
+        XCTAssertEqual(WorkbenchCatalog.matching("json").map(\.id), jsonTools)
+        XCTAssertEqual(WorkbenchCatalog.matching("JSON").map(\.id), jsonTools)
         // Sıkıştıran her araç: Türkçe karakter/harf farkı gözetmeden (Markdown sıkıştırmaz).
         XCTAssertEqual(WorkbenchCatalog.matching("SIKIŞTIR").map(\.id),
                        WorkbenchCatalog.all.filter { $0.actions.contains { $0.id == "minify" } }.map(\.id))
