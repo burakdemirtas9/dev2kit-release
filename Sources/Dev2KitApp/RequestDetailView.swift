@@ -153,7 +153,8 @@ struct RequestDetailView: View {
 
             TemplateTextField(
                 placeholder: "https://api.example.com/{{path}}",
-                text: $request.url
+                text: $request.url,
+                limit: .url
             ) {
                 appState.send(request)
             }
@@ -209,6 +210,7 @@ struct RequestDetailView: View {
             // ve kaydırıyordu (900 -> 1288 punto ölçüldü). Sekme değişimi
             // bu yüzden de sıçramalı görünüyordu.
             TextField("İstek adı", text: $request.name)
+                .inputLimit(.name)
                 .textFieldStyle(.plain)
                 .font(.headline)
                 .lineLimit(1)

@@ -170,6 +170,7 @@ private struct TLSProfileDetail: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 TextField("Profil adı", text: $profile.name)
+                    .inputLimit(.name)
                     .textFieldStyle(.roundedBorder)
                     .font(.headline)
 
@@ -232,7 +233,7 @@ private struct TLSProfileDetail: View {
                     HStack {
                         Text("Parola").font(.secondaryText).foregroundStyle(.secondary)
                             .frame(width: 60, alignment: .leading)
-                        TemplateTextField(placeholder: "{{secret:isim}} önerilir", text: $profile.clientCertificatePassword)
+                        TemplateTextField(placeholder: "{{secret:isim}} önerilir", text: $profile.clientCertificatePassword, limit: .credential)
                     }
                     Text("Sertifika dosyası kopyalanmaz, yalnızca yolu tutulur; özel anahtar istek anında belleğe alınır. Parolayı Secrets'a ekleyip referans vermen önerilir.")
                         .font(.secondaryText).foregroundStyle(.secondary)
@@ -253,6 +254,7 @@ private struct TLSProfileDetail: View {
     private func filePicker(path: Binding<String>, prompt: String, types: [String]) -> some View {
         HStack {
             TextField(prompt, text: path)
+                .inputLimit(.path)
                 .textFieldStyle(.roundedBorder)
                 .font(.secondaryMono)
             Button("Seç…") {
@@ -293,6 +295,7 @@ private struct KeyValueFreeList: View {
                     ))
                     .textFieldStyle(.roundedBorder)
                     .font(.system(.body, design: .monospaced))
+                    .inputLimit(.short)
                     Button {
                         if index < items.count { items.remove(at: index) }
                     } label: {

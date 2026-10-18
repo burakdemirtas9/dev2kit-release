@@ -41,8 +41,10 @@ struct SecretsView: View {
 
             HStack {
                 TextField("isim (ör: github_token)", text: $newName)
+                    .inputLimit(.short)
                     .font(.system(.body, design: .monospaced))
                 SecureField("değer", text: $newValue)
+                    .inputLimit(.secretValue)
                 Button("Ekle") { add() }
                     .disabled(newName.trimmingCharacters(in: .whitespaces).isEmpty || newValue.isEmpty)
             }

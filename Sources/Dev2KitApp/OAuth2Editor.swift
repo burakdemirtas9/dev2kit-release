@@ -98,7 +98,7 @@ struct OAuth2Editor: View {
                 .font(.secondaryText)
                 .foregroundStyle(.secondary)
                 .gridColumnAlignment(.trailing)
-            TemplateTextField(placeholder: placeholder, text: text)
+            TemplateTextField(placeholder: placeholder, text: text, limit: .url)
         }
     }
 }

@@ -10,6 +10,8 @@ struct KeyValueEditor: View {
     @Binding var entries: [KeyValueEntry]
     let keyPlaceholder: String
     let valuePlaceholder: String
+    /// Değer alanının sınırı: başlık/parametre 8 KB, form ve environment daha büyük.
+    var valueLimit: InputLimits.Field = .headerValue
 
     @State private var isBulk = false
     @State private var bulkText = ""
@@ -78,7 +80,17 @@ struct KeyValueEditor: View {
     }
 
     private var bulkEditor: some View {
-        CodeEditor(text: $bulkText, language: .plain)
+        // Toplu metin de alanlarla aynı sınırlarda: en çok `maxRows` satır,
+        // satır başına anahtar + değer kadar. Aşan yapıştırma girmez.
+        CodeEditor(text: $bulkText, language: .plain, limits: EditorLimits(
+            maxBytes: InputLimits.maxBulkBytes,
+            maxLines: InputLimits.maxBulkLines,
+            maxLineBytes: InputLimits.Field.key.maxCharacters + valueLimit.maxCharacters + 2,
+            onRejected: { message = Message(text: $0.turkish, isError: true) },
+            onLongLine: { _ in
+                message = Message(text: "Eklenmedi: satır başına en çok \(InputLimits.Field.key.maxCharacters + valueLimit.maxCharacters) karakter.", isError: true)
+            }
+        ))
             .background(Theme.editorBackground)
             .overlay(alignment: .topLeading) {
                 if bulkText.isEmpty {
@@ -108,7 +120,8 @@ struct KeyValueEditor: View {
                     Toggle("", isOn: $entry.enabled).labelsHidden()
                     TextField(keyPlaceholder, text: $entry.key)
                         .font(.system(.body, design: .monospaced))
-                    TemplateTextField(placeholder: valuePlaceholder, text: $entry.value)
+                        .inputLimit(.key)
+                    TemplateTextField(placeholder: valuePlaceholder, text: $entry.value, limit: valueLimit)
                     Button {
                         entries.removeAll { $0.id == entry.id }
                     } label: {
@@ -122,12 +135,13 @@ struct KeyValueEditor: View {
             Button {
                 entries.append(KeyValueEntry())
             } label: {
-                Label("Satır Ekle", systemImage: "plus")
+                Label(entries.count >= InputLimits.maxRows ? InputLimits.tooManyRowsMessage : "Satır Ekle", systemImage: "plus")
                     .font(.secondaryText)
                     .rowHitTarget(minHeight: 20)
             }
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
+            .disabled(entries.count >= InputLimits.maxRows)
         }
         .listStyle(.inset)
     }

@@ -7,6 +7,9 @@ import Dev2KitCore
 struct TemplateTextField: View {
     let placeholder: String
     @Binding var text: String
+    /// Alanın uzunluk sınırı (`InputLimits`); varsayılan başlık değeri.
+    /// `onSubmit`'ten ÖNCE: adres alanı Enter'ı sondaki kapanışla veriyor.
+    var limit: InputLimits.Field = .headerValue
     var onSubmit: (() -> Void)?
 
     @Environment(AppState.self) private var appState
@@ -35,6 +38,7 @@ struct TemplateTextField: View {
                 .autocorrectionDisabled()
                 .focused($isFocused)
                 .onSubmit { onSubmit?() }
+                .inputLimit(limit)
 
             if !suggestions.isEmpty {
                 VStack(alignment: .leading, spacing: 0) {

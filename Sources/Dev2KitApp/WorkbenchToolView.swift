@@ -107,6 +107,7 @@ struct WorkbenchToolView: View {
                         set: { var options = workbench.options; options.xmlRootName = $0; workbench.update(options: options) }
                     ))
                     .textFieldStyle(.roundedBorder)
+                    .inputLimit(.short, english: true)
                     .frame(width: 120)
                 }
                 .help("Name of the root element. Invalid XML names are made safe.")
@@ -652,6 +653,7 @@ private struct JSONTreeRow: View {
             }
             if isEditing {
                 TextField("Value", text: $draft)
+                    .inputLimit(.treeValue, english: true)
                     .textFieldStyle(.roundedBorder)
                     .font(.system(.callout, design: .monospaced))
                     .focused($focused)

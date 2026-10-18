@@ -209,7 +209,8 @@ struct BodyEditor: View {
             KeyValueEditor(
                 entries: formFields,
                 keyPlaceholder: "alan",
-                valuePlaceholder: "değer veya {{degisken}}"
+                valuePlaceholder: "değer veya {{degisken}}",
+                valueLimit: .formValue
             )
         }
     }

@@ -188,6 +188,7 @@ struct SidebarView: View {
             )
         ) {
             TextField("Koleksiyon adı", text: $renameText)
+                .inputLimit(.name)
             Button("Kaydet") {
                 if let id = renameTargetID {
                     appState.renameCollection(id, to: renameText)
@@ -244,6 +245,7 @@ struct SidebarView: View {
                     .font(.secondaryText)
                     .foregroundStyle(.secondary)
                 TextField("İstek ara", text: $state.searchQuery)
+                    .inputLimit(.search)
                     .textFieldStyle(.plain)
                     .focused($searchFocused)
                     .onSubmit { selectFirstHit() }

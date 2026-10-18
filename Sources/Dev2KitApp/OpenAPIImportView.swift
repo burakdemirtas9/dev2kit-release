@@ -107,6 +107,7 @@ struct OpenAPIImportView: View {
                 .foregroundStyle(.secondary)
             HStack {
                 TextField("http://localhost:8080/v3/api-docs", text: $address)
+                    .inputLimit(.url)
                     .textFieldStyle(.roundedBorder)
                     .onSubmit(fetch)
                 Button(action: fetch) {
@@ -122,15 +123,20 @@ struct OpenAPIImportView: View {
             Text("/v3/api-docs yanıtını yapıştır ya da kayıtlı JSON dosyasını seç. OpenAPI 3 ve Swagger 2.")
                 .font(.secondaryText)
                 .foregroundStyle(.secondary)
-            CodeEditor(text: $json, language: .json)
+            ImportTextEditor(text: $json, language: .json)
                 .frame(height: 100)
                 .background(Theme.editorBackground)
                 .clipShape(RoundedRectangle(cornerRadius: 6))
                 .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(.quaternary))
             HStack {
                 Button {
-                    json = NSPasteboard.general.string(forType: .string) ?? ""
-                    parseJSON()
+                    let pasted = NSPasteboard.general.string(forType: .string) ?? ""
+                    if let rejection = InputLimits.rejection(of: pasted, maxBytes: InputLimits.maxImportBytes, maxLines: InputLimits.maxImportLines) {
+                        errorMessage = rejection
+                    } else {
+                        json = pasted
+                        parseJSON()
+                    }
                 } label: {
                     Label("Panodan Yapıştır", systemImage: "doc.on.clipboard")
                 }
@@ -165,6 +171,7 @@ struct OpenAPIImportView: View {
             LabeledContent("Sunucu") {
                 VStack(alignment: .leading, spacing: 2) {
                     TextField("https://gateway.ornek.com/servis", text: $serverAddress)
+                        .inputLimit(.url)
                         .textFieldStyle(.roundedBorder)
                         .font(.system(.callout, design: .monospaced))
                     if document.serverURL == nil {
@@ -178,6 +185,7 @@ struct OpenAPIImportView: View {
                 HStack(spacing: 4) {
                     Text("{{").foregroundStyle(.secondary)
                     TextField("değişken", text: $variableName)
+                        .inputLimit(.short)
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 220)
                     Text("}}/yol").foregroundStyle(.secondary)

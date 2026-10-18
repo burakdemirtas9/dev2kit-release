@@ -23,6 +23,7 @@ struct EditorSearchBar: View {
                 .font(.system(.body, design: .monospaced))
                 .focused($focused)
                 .onSubmit { search.submit() }
+                .inputLimit(.search, english: strings.isEnglish)
 
             status
 
@@ -157,6 +158,7 @@ struct SearchToggleButton: View {
 /// Arama çubuğunun metinleri.
 struct SearchStrings {
     let prompt, caseSensitive, regex, close, invalidPattern, noResults, pressReturn, previous, next, toggle: String
+    var isEnglish = false
 
     static let turkish = SearchStrings(
         prompt: "Ara", caseSensitive: "Büyük/küçük harfe duyarlı", regex: "Düzenli ifade — ⏎ ile çalışır",
@@ -167,6 +169,6 @@ struct SearchStrings {
     static let english = SearchStrings(
         prompt: "Find", caseSensitive: "Match case", regex: "Regular expression — runs on ⏎",
         close: "Close find", invalidPattern: "invalid pattern", noResults: "no results", pressReturn: "⏎ to search",
-        previous: "Previous match", next: "Next match", toggle: "Find in text (⌘F)"
+        previous: "Previous match", next: "Next match", toggle: "Find in text (⌘F)", isEnglish: true
     )
 }

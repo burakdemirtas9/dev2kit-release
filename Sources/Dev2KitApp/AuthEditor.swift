@@ -48,25 +48,25 @@ struct AuthEditor: View {
                     Text("Bu istek kimlik doğrulama kullanmıyor.")
                         .foregroundStyle(.secondary)
                 case .basic(let username, let password):
-                    authField("Kullanıcı Adı", placeholder: "kullanıcı adı", text: Binding(
+                    authField("Kullanıcı Adı", placeholder: "kullanıcı adı", limit: .credential, text: Binding(
                         get: { username },
                         set: { auth = .basic(username: $0, password: password) }
                     ))
-                    authField("Şifre", placeholder: "{{secret:isim}}", text: Binding(
+                    authField("Şifre", placeholder: "{{secret:isim}}", limit: .credential, text: Binding(
                         get: { password },
                         set: { auth = .basic(username: username, password: $0) }
                     ))
                 case .bearer(let token):
-                    authField("Token", placeholder: "{{secret:isim}}", text: Binding(
+                    authField("Token", placeholder: "{{secret:isim}}", limit: .token, text: Binding(
                         get: { token },
                         set: { auth = .bearer(token: $0) }
                     ))
                 case .apiKey(let key, let value, let location):
-                    authField("Key", placeholder: "X-Api-Key", text: Binding(
+                    authField("Key", placeholder: "X-Api-Key", limit: .key, text: Binding(
                         get: { key },
                         set: { auth = .apiKey(key: $0, value: value, location: location) }
                     ))
-                    authField("Değer", placeholder: "{{secret:isim}}", text: Binding(
+                    authField("Değer", placeholder: "{{secret:isim}}", limit: .token, text: Binding(
                         get: { value },
                         set: { auth = .apiKey(key: key, value: $0, location: location) }
                     ))
@@ -110,11 +110,11 @@ struct AuthEditor: View {
             .foregroundStyle(.secondary)
     }
 
-    private func authField(_ title: String, placeholder: String, text: Binding<String>) -> some View {
+    private func authField(_ title: String, placeholder: String, limit: InputLimits.Field, text: Binding<String>) -> some View {
         HStack(alignment: .top) {
             fieldLabel(title)
                 .padding(.top, 3)
-            TemplateTextField(placeholder: placeholder, text: text)
+            TemplateTextField(placeholder: placeholder, text: text, limit: limit)
         }
     }
 }

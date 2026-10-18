@@ -32,6 +32,7 @@ struct WorkbenchSidebar: View {
                     .font(.secondaryText)
                     .foregroundStyle(.secondary)
                 TextField("Search tools", text: $state.searchQuery)
+                    .inputLimit(.search, english: true)
                     .textFieldStyle(.plain)
             }
             .padding(.horizontal, 8)

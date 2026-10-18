@@ -91,6 +91,7 @@ struct HistoryView: View {
     private var filters: some View {
         HStack {
             TextField("Ara: istek adı veya adres", text: $searchText)
+                .inputLimit(.search)
                 .textFieldStyle(.roundedBorder)
                 .frame(maxWidth: 280)
             Picker("", selection: $statusFilter) {

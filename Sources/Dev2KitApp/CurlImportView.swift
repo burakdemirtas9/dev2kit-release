@@ -24,7 +24,9 @@ struct CurlImportView: View {
                 .font(.secondaryText)
                 .foregroundStyle(.secondary)
 
-            CodeEditor(text: $command, language: .plain)
+            // cURL komutu bir istek: girdi sınırları (4 MB, 16.000 satır).
+            ImportTextEditor(text: $command, language: .plain,
+                             maxBytes: WorkbenchLimits.maxInputBytes, maxLines: WorkbenchLimits.maxInputLines)
                 .frame(height: 150)
                 .background(Theme.editorBackground)
                 .clipShape(RoundedRectangle(cornerRadius: 6))
@@ -42,12 +44,18 @@ struct CurlImportView: View {
 
             HStack {
                 Button {
-                    command = NSPasteboard.general.string(forType: .string) ?? ""
+                    let pasted = NSPasteboard.general.string(forType: .string) ?? ""
+                    if let rejection = InputLimits.rejection(of: pasted, maxBytes: WorkbenchLimits.maxInputBytes, maxLines: WorkbenchLimits.maxInputLines) {
+                        parseError = rejection
+                    } else {
+                        command = pasted
+                    }
                 } label: {
                     Label("Panodan Yapıştır", systemImage: "doc.on.clipboard")
                 }
                 Spacer()
                 TextField("İstek adı", text: $name)
+                    .inputLimit(.name)
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 200)
                     .onChange(of: name) { reparse() }

@@ -94,6 +94,7 @@ private struct EnvironmentDetail: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 TextField("Environment adı", text: $environment.name)
+                    .inputLimit(.name)
                     .textFieldStyle(.roundedBorder)
                     .font(.headline)
                 if isActive {
@@ -115,7 +116,8 @@ private struct EnvironmentDetail: View {
             KeyValueEditor(
                 entries: $environment.variables,
                 keyPlaceholder: "isim (ör: baseUrl)",
-                valuePlaceholder: "değer (ör: https://api.example.com)"
+                valuePlaceholder: "değer (ör: https://api.example.com)",
+                valueLimit: .secretValue
             )
 
             Divider()

@@ -103,6 +103,7 @@ struct PostmanImportView: View {
 
             HStack {
                 SecureField("PMAK-...", text: $apiKeyInput)
+                    .inputLimit(.credential)
                     .textFieldStyle(.roundedBorder)
                 Button("Bağlan") { connect(with: apiKeyInput) }
                     .disabled(apiKeyInput.trimmingCharacters(in: .whitespaces).isEmpty || loading)

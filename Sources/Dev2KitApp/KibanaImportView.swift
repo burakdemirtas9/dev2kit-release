@@ -66,7 +66,11 @@ struct KibanaImportView: View {
             guard case .success(let url) = picked else { return }
             let accessing = url.startAccessingSecurityScopedResource()
             defer { if accessing { url.stopAccessingSecurityScopedResource() } }
-            if let data = try? Data(contentsOf: url) {
+            // Boyut okumadan ÖNCE: OpenAPI içe aktarmasıyla aynı sınır.
+            let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+            if size > InputLimits.maxImportBytes {
+                parseError = "Dosya çok büyük; en fazla \(TextStats.size(InputLimits.maxImportBytes))."
+            } else if let data = try? Data(contentsOf: url) {
                 json = String(decoding: data, as: UTF8.self)
             } else {
                 parseError = "Dosya okunamadı."
@@ -78,7 +82,7 @@ struct KibanaImportView: View {
 
     private var input: some View {
         VStack(alignment: .leading, spacing: 6) {
-            CodeEditor(text: $json, language: .json)
+            ImportTextEditor(text: $json, language: .json)
                 .frame(height: 90)
                 .background(Theme.editorBackground)
                 .clipShape(RoundedRectangle(cornerRadius: 6))
@@ -86,7 +90,12 @@ struct KibanaImportView: View {
                 .onChange(of: json) { reparse() }
             HStack {
                 Button {
-                    json = NSPasteboard.general.string(forType: .string) ?? ""
+                    let pasted = NSPasteboard.general.string(forType: .string) ?? ""
+                    if let rejection = InputLimits.rejection(of: pasted, maxBytes: InputLimits.maxImportBytes, maxLines: InputLimits.maxImportLines) {
+                        parseError = rejection
+                    } else {
+                        json = pasted
+                    }
                 } label: {
                     Label("Panodan Yapıştır", systemImage: "doc.on.clipboard")
                 }
@@ -186,6 +195,7 @@ struct KibanaImportView: View {
             } else if let environment = appState.activeEnvironment {
                 VStack(alignment: .leading, spacing: 4) {
                     TextField("Gateway adresi, ör. https://gateway.ornek.com", text: $gatewayAddress)
+                        .inputLimit(.url)
                         .textFieldStyle(.roundedBorder)
                         .frame(maxWidth: 420)
                     Text("{{\(entry.variableName)}} \"\(environment.name)\" environment'ına eklenir. Boş bırakırsan gönderirken tanımsız değişken uyarısı alırsın.")
@@ -344,6 +354,7 @@ struct KibanaImportView: View {
             if destination == .newCollection {
                 VStack(alignment: .leading, spacing: 2) {
                     TextField("Koleksiyon adı", text: $newCollectionName)
+                        .inputLimit(.name)
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 170)
                     if appState.existingCollection(named: newCollectionName) != nil {
