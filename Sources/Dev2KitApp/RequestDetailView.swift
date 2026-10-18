@@ -8,6 +8,11 @@ struct RequestDetailView: View {
     @State private var showingCurl = false
     @State private var showingOptions = false
     @State private var showingRevertConfirm = false
+    /// Adres ↔ Params eşitlemesi (QueryParamSync): yazma durunca. Yazmaya
+    /// başlamadan önceki hal, eski kayıtların parametreleri kaybolmasın diye.
+    @State private var syncTask: Task<Void, Never>?
+    @State private var urlBeforeEdit: String?
+    @State private var paramsBeforeEdit: [KeyValueEntry]?
 
     private static let responseHeightKey = "responseHeight"
     private static let minTopHeight: CGFloat = 220
@@ -153,7 +158,7 @@ struct RequestDetailView: View {
 
             TemplateTextField(
                 placeholder: "https://api.example.com/{{path}}",
-                text: $request.url,
+                text: urlBinding,
                 limit: .url
             ) {
                 appState.send(request)
@@ -282,10 +287,78 @@ struct RequestDetailView: View {
             case .auth:
                 AuthEditor(auth: $request.auth)
             case .params:
-                KeyValueEditor(entries: $request.queryParams, keyPlaceholder: "param", valuePlaceholder: "değer veya {{degisken}}")
+                KeyValueEditor(entries: paramsBinding, keyPlaceholder: "param", valuePlaceholder: "değer veya {{degisken}}")
             case .token:
                 TokenOutputEditor(request: $request)
             }
         }
+    }
+
+    // MARK: Adres ↔ Params eşitlemesi
+
+    /// Yazma durduktan sonra eşitlenir (kullanıcı isteği: "type bitince").
+    static let querySyncDelay: Duration = .milliseconds(500)
+
+    /// Adres alanı: yalnızca KULLANICININ yazması eşitlemeyi tetikler. İstek
+    /// değiştirmek tetiklemez (eski kayıtta parametreleri silerdi).
+    private var urlBinding: Binding<String> {
+        Binding(
+            get: { request.url },
+            set: { newValue in
+                // Odak değişirken SwiftUI aynı değeri yeniden yazıyor: düzenleme
+                // değil, bekleyen eşitlemeyi bozmasın (testle bulundu).
+                guard newValue != request.url else { return }
+                if urlBeforeEdit == nil { urlBeforeEdit = request.url }
+                paramsBeforeEdit = nil
+                request.url = newValue
+                scheduleQuerySync {
+                    guard let before = urlBeforeEdit else { return }
+                    urlBeforeEdit = nil
+                    apply(QueryParamSync.afterURLEdit(urlBefore: before, url: request.url, params: request.queryParams))
+                }
+            }
+        )
+    }
+
+    /// Params tablosu (satırlar ve toplu düzenleme).
+    private var paramsBinding: Binding<[KeyValueEntry]> {
+        Binding(
+            get: { request.queryParams },
+            set: { newValue in
+                guard newValue != request.queryParams else { return }
+                if paramsBeforeEdit == nil { paramsBeforeEdit = request.queryParams }
+                urlBeforeEdit = nil
+                request.queryParams = newValue
+                scheduleQuerySync {
+                    guard let before = paramsBeforeEdit else { return }
+                    paramsBeforeEdit = nil
+                    apply(QueryParamSync.afterParamsEdit(url: request.url, paramsBefore: before, params: request.queryParams))
+                }
+            }
+        )
+    }
+
+    private func scheduleQuerySync(_ work: @escaping @MainActor () -> Void) {
+        syncTask?.cancel()
+        let requestID = request.id
+        syncTask = Task { @MainActor in
+            try? await Task.sleep(for: Self.querySyncDelay)
+            // İptal = yeni bir tuş geldi: başlangıç hali yeni görevde lazım,
+            // SİLİNMEZ (silinince eşitleme hiç yapılmıyordu; testle bulundu).
+            guard !Task.isCancelled else { return }
+            // Bu arada başka isteğe geçildiyse eşitleme yapılmaz.
+            guard request.id == requestID else {
+                urlBeforeEdit = nil
+                paramsBeforeEdit = nil
+                return
+            }
+            work()
+        }
+    }
+
+    /// Yalnızca değişen taraf yazılır (gereksiz "kaydedilmedi" işareti olmasın).
+    private func apply(_ synced: QueryParamSync.Synced) {
+        if synced.params != request.queryParams { request.queryParams = synced.params }
+        if synced.url != request.url { request.url = synced.url }
     }
 }

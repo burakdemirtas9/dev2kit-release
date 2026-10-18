@@ -394,7 +394,10 @@ public final class RequestEngine: @unchecked Sendable {
         }
 
         var queryItems = components.queryItems ?? []
-        for entry in model.queryParams where entry.enabled && !entry.key.isEmpty {
+        // Params tablosu adresle eşitleniyor (QueryParamSync): adreste zaten
+        // olan parametre İKİ KEZ eklenmez. Parametresi yalnızca tabloda olan
+        // eski kayıtlarda hepsi eklenir (geriye uyum).
+        for entry in QueryParamSync.unrepresented(url: model.url, params: model.queryParams) {
             queryItems.append(URLQueryItem(
                 name: try resolver.resolve(entry.key),
                 value: try resolver.resolve(entry.value)
