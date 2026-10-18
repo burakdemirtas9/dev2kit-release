@@ -451,7 +451,8 @@ final class WorkbenchState {
         wantsTree: Bool
     ) -> Result {
         let inputStats = TextStats(text)
-        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        // Girdisiz çalışan eylemler (UUID üretme, "şu an") boş girdide de koşar.
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || action?.runsOnEmptyInput == true else {
             return Result(output: "", issue: nil, validation: .empty, tree: nil, inputStats: inputStats, outputStats: .empty)
         }
         let validation = tool.validate?(text) ?? .empty

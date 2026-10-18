@@ -54,7 +54,16 @@ struct WorkbenchToolView: View {
         let tool = workbench.tool
         let action = workbench.action
         return HStack(spacing: 12) {
-            if tool.actions.count > 1 {
+            if tool.actions.count > 4 {
+                // Çok eylemli araç (hash: 6 algoritma): segmentler sığmıyor.
+                Picker("Algorithm", selection: Binding(
+                    get: { action.id },
+                    set: { workbench.select(actionID: $0) }
+                )) {
+                    ForEach(tool.actions) { Text($0.title).tag($0.id) }
+                }
+                .fixedSize()
+            } else if tool.actions.count > 1 {
                 Picker("Action", selection: Binding(
                     get: { action.id },
                     set: { workbench.select(actionID: $0) }
@@ -112,6 +121,39 @@ struct WorkbenchToolView: View {
                 }
                 .help("Name of the root element. Invalid XML names are made safe.")
             }
+            if action.usesURLSafe {
+                Toggle("URL-safe", isOn: optionBinding(\.base64URLSafe))
+                    .help("Encode with - and _ instead of + and /, without = padding (as in JWT). Decode accepts both.")
+            }
+            if action.usesFormEncoding {
+                Toggle("Form encoding (+ = space)", isOn: optionBinding(\.formEncoding))
+                    .help("application/x-www-form-urlencoded: spaces become + (HTML forms, many query strings)")
+            }
+            if action.usesCount {
+                Picker("Count", selection: optionBinding(\.generateCount)) {
+                    ForEach([1, 5, 10, 50, 100, 1_000], id: \.self) { Text("\($0)").tag($0) }
+                }
+                .fixedSize()
+                Button("Regenerate") { workbench.runNow() }
+                    .help("Generate new values")
+            }
+            if action.usesHashOutput {
+                Picker("Output", selection: optionBinding(\.hashOutput)) {
+                    ForEach(HashTool.Output.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .fixedSize()
+            }
+            if action.usesHMACKey {
+                HStack(spacing: 6) {
+                    Text("Key").foregroundStyle(.secondary)
+                    SecureField("secret", text: optionBinding(\.hmacKey))
+                        .textFieldStyle(.roundedBorder)
+                        .inputLimit(.credential, english: true)
+                        .frame(width: 160)
+                }
+                .help("HMAC key (UTF-8). Kept in memory only, cleared with the tab.")
+            }
             if action.usesDetectTypes {
                 Toggle("Detect types", isOn: Binding(
                     get: { workbench.options.detectTypes },
@@ -123,6 +165,14 @@ struct WorkbenchToolView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
+    }
+
+    /// Tek seçeneğe bağlama: değişince araç yeniden çalışır.
+    private func optionBinding<Value>(_ keyPath: WritableKeyPath<WorkbenchOptions, Value>) -> Binding<Value> {
+        Binding(
+            get: { workbench.options[keyPath: keyPath] },
+            set: { var options = workbench.options; options[keyPath: keyPath] = $0; workbench.update(options: options) }
+        )
     }
 
     // MARK: Girdi

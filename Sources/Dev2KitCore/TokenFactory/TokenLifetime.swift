@@ -60,8 +60,6 @@ public enum TokenLifetime {
     }
 
     private static func base64URLDecode(_ part: Substring) -> Data? {
-        var base64 = part.replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
-        base64 += String(repeating: "=", count: (4 - base64.count % 4) % 4)
-        return Data(base64Encoded: base64)
+        Base64Codec.decode(String(part))
     }
 }

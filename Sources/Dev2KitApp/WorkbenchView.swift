@@ -97,6 +97,13 @@ extension WorkbenchTool {
         case "css": return "paintbrush"
         case "sql": return "cylinder.split.1x2"
         case "markdown": return "text.document"
+        case "jwt": return "key.horizontal"
+        case "base64": return "b.square"
+        case "url-encode": return "link"
+        case "timestamp": return "clock"
+        case "uuid": return "number"
+        case "hash": return "checkmark.seal"
+        case "hex": return "number.square"
         default:
             switch category {
             case .format: return "text.alignleft"

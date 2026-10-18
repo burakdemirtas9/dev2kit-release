@@ -85,6 +85,15 @@ public struct WorkbenchAction: Identifiable, Sendable {
     public let usesDelimiter: Bool
     public let usesDetectTypes: Bool
     public let usesRootName: Bool
+    /// Kodlayıcı seçenekleri (step 2a): Base64 URL-safe, URL form kodlaması,
+    /// üretim adedi (UUID), hash çıktı biçimi, HMAC anahtarı.
+    public let usesURLSafe: Bool
+    public let usesFormEncoding: Bool
+    public let usesCount: Bool
+    public let usesHashOutput: Bool
+    public let usesHMACKey: Bool
+    /// Boş girdide de çalışır (UUID üretme, "şu an" zaman damgası).
+    public let runsOnEmptyInput: Bool
     /// Çıktının sözdizimi rengi aracınkinden farklıysa (Escape → düz metin).
     public let outputSyntax: Beautifier.Kind?
     /// Çıktı ağaç olarak da gösterilebilir mi. Yalnızca biçimlendirmede
@@ -106,6 +115,12 @@ public struct WorkbenchAction: Identifiable, Sendable {
         usesDelimiter: Bool = false,
         usesDetectTypes: Bool = false,
         usesRootName: Bool = false,
+        usesURLSafe: Bool = false,
+        usesFormEncoding: Bool = false,
+        usesCount: Bool = false,
+        usesHashOutput: Bool = false,
+        usesHMACKey: Bool = false,
+        runsOnEmptyInput: Bool = false,
         outputSyntax: Beautifier.Kind? = nil,
         supportsTree: Bool = false,
         reverse: (@Sendable (String, String, WorkbenchOptions) throws -> String)? = nil,
@@ -119,6 +134,12 @@ public struct WorkbenchAction: Identifiable, Sendable {
         self.usesDelimiter = usesDelimiter
         self.usesDetectTypes = usesDetectTypes
         self.usesRootName = usesRootName
+        self.usesURLSafe = usesURLSafe
+        self.usesFormEncoding = usesFormEncoding
+        self.usesCount = usesCount
+        self.usesHashOutput = usesHashOutput
+        self.usesHMACKey = usesHMACKey
+        self.runsOnEmptyInput = runsOnEmptyInput
         self.outputSyntax = outputSyntax
         self.supportsTree = supportsTree
         self.reverse = reverse
@@ -137,6 +158,14 @@ public struct WorkbenchOptions: Hashable, Sendable {
     public var detectTypes: Bool
     /// JSON → XML kök eleman adı.
     public var xmlRootName: String
+    public var base64URLSafe: Bool
+    /// URL kodlamada boşluk `+` (form verisi).
+    public var formEncoding: Bool
+    /// Üretilecek adet (UUID).
+    public var generateCount: Int
+    public var hashOutput: HashTool.Output
+    /// HMAC anahtarı: yalnızca bellekte, sekmeyle birlikte gider.
+    public var hmacKey: String
 
     public init(
         indentation: Indentation = .default,
@@ -144,8 +173,18 @@ public struct WorkbenchOptions: Hashable, Sendable {
         uppercaseKeywords: Bool = true,
         csvDelimiter: CSVDelimiter = .comma,
         detectTypes: Bool = true,
-        xmlRootName: String = XMLConverter.defaultRootName
+        xmlRootName: String = XMLConverter.defaultRootName,
+        base64URLSafe: Bool = false,
+        formEncoding: Bool = false,
+        generateCount: Int = 1,
+        hashOutput: HashTool.Output = .hex,
+        hmacKey: String = ""
     ) {
+        self.base64URLSafe = base64URLSafe
+        self.formEncoding = formEncoding
+        self.generateCount = generateCount
+        self.hashOutput = hashOutput
+        self.hmacKey = hmacKey
         self.indentation = indentation
         self.sortKeys = sortKeys
         self.uppercaseKeywords = uppercaseKeywords
@@ -273,6 +312,13 @@ public enum WorkbenchCatalog {
         WorkbenchTools.jsonToXML,
         WorkbenchTools.xmlToJSON,
         WorkbenchTools.jsonToYAML,
+        WorkbenchTools.jwt,
+        WorkbenchTools.base64,
+        WorkbenchTools.url,
+        WorkbenchTools.timestamp,
+        WorkbenchTools.uuid,
+        WorkbenchTools.hash,
+        WorkbenchTools.hex,
     ]
 
     /// Diff Checker bir `WorkbenchTool` değil (iki girdi, kendi ekranı); kenar
