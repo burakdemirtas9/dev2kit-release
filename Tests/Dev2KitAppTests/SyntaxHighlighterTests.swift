@@ -23,3 +23,18 @@ final class SyntaxHighlighterTests: XCTestCase {
         }
     }
 }
+
+/// 2026-10-18: renklendirme `setAttributes` ile yazı tipini siliyordu; görünen
+/// bölge Helvetica 12 ile çiziliyordu (monospace değil, yakınlaştırma etkisiz).
+@MainActor
+final class SyntaxHighlighterFontTests: XCTestCase {
+    func testColorizingKeepsTheEditorFont() {
+        let storage = NSTextStorage(string: #"{"a": 1, "b": "x"}"#)
+        let font = NSFont.monospacedSystemFont(ofSize: 18, weight: .regular)
+        SyntaxHighlighter.applyBaseAttributes(storage, font: font)
+        SyntaxHighlighter.colorize(storage, language: .json, range: NSRange(location: 0, length: storage.length))
+        storage.enumerateAttribute(.font, in: NSRange(location: 0, length: storage.length)) { value, range, _ in
+            XCTAssertEqual((value as? NSFont)?.pointSize, 18, "aralık \(range) yazı tipini kaybetti")
+        }
+    }
+}

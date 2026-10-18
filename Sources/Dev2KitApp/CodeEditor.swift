@@ -151,7 +151,11 @@ enum SyntaxHighlighter {
         guard !rules.isEmpty, storage.length > 0 else { return }
         let target = expand(range, in: storage.string)
         storage.beginEditing()
-        storage.setAttributes([.foregroundColor: Theme.editorText], range: target)
+        // `addAttribute`, `setAttributes` DEĞİL: setAttributes yazı tipi dahil
+        // tüm öznitelikleri siliyordu; görünen bölge AppKit varsayılanıyla
+        // (Helvetica 12, monospace değil) çiziliyor, ⌘+ / ⌘− etkisiz kalıyordu
+        // (2026-10-18, ölçülerek bulundu).
+        storage.addAttribute(.foregroundColor, value: Theme.editorText, range: target)
         for rule in rules {
             rule.regex.enumerateMatches(in: storage.string, range: target) { match, _, _ in
                 guard let match, match.range(at: rule.group).location != NSNotFound else { return }
