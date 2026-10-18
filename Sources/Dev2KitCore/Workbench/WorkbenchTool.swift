@@ -225,8 +225,6 @@ public enum WorkbenchCatalog {
         WorkbenchTools.xml,
         WorkbenchTools.html,
         WorkbenchTools.css,
-        WorkbenchTools.javascript,
-        WorkbenchTools.typescript,
         WorkbenchTools.sql,
         WorkbenchTools.markdown,
     ]

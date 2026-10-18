@@ -2,37 +2,37 @@ import XCTest
 @testable import Dev2KitCore
 
 final class StructureCheckTests: XCTestCase {
-    private func issue(_ text: String, _ rules: StructureCheck.Rules = .javascript) -> WorkbenchIssue? {
+    private func issue(_ text: String, _ rules: StructureCheck.Rules = .css) -> WorkbenchIssue? {
         if case .invalid(let issue) = StructureCheck.validate(text, rules: rules) { return issue }
         return nil
     }
 
     func testBalancedCodeIsStructurallyValidNotValid() {
-        XCTAssertEqual(StructureCheck.validate("function f(a) { return [a, (1)] }", rules: .javascript), .structurallyValid)
-        XCTAssertEqual(StructureCheck.validate("   ", rules: .javascript), .empty)
+        XCTAssertEqual(StructureCheck.validate("a { b: url(x) } @media (x) { c { d: e } }", rules: .css), .structurallyValid)
+        XCTAssertEqual(StructureCheck.validate("   ", rules: .css), .empty)
     }
 
     func testReportsPositionOfTheProblem() throws {
-        let unclosed = try XCTUnwrap(issue("function f() {\n  x(\n}"))
-        XCTAssertEqual(unclosed.line, 3)
-        XCTAssertTrue(unclosed.message.contains("( kapatılmadan } geldi"), unclosed.message)
+        let mismatch = try XCTUnwrap(issue("a {\n  b: f(\n}"))
+        XCTAssertEqual(mismatch.line, 3)
+        XCTAssertTrue(mismatch.message.contains("( kapatılmadan } geldi"), mismatch.message)
 
-        let open = try XCTUnwrap(issue("if (a) {\n  b()"))
+        let open = try XCTUnwrap(issue("a {\n  b: c"))
         XCTAssertEqual(open.line, 1)
-        XCTAssertEqual(open.column, 8)
+        XCTAssertEqual(open.column, 3)
 
-        XCTAssertNotNil(issue("const s = 'açık"))
+        XCTAssertNotNil(issue("a { content: 'açık }"))
         XCTAssertNotNil(issue("/* kapanmamış"))
     }
 
-    func testBracketsInsideStringsCommentsAndRegexAreIgnored() {
-        XCTAssertNil(issue("const s = \"{(\"; // )}\nconst r = /[}/g; const t = `${a}\n]`"))
+    func testBracketsInsideStringsAndCommentsAreIgnored() {
+        XCTAssertNil(issue("a { content: \"{(\" } /* ) } */"))
     }
 
     func testCSSHasNoLineComments() {
         // `url(http://…)` içindeki `//` yorum değil.
-        XCTAssertNil(issue("a { background: url(http://x/y.png) }", .css))
-        XCTAssertNotNil(issue("a { color: red", .css))
+        XCTAssertNil(issue("a { background: url(http://x/y.png) }"))
+        XCTAssertNotNil(issue("a { color: red"))
     }
 }
 
@@ -74,16 +74,6 @@ final class MarkupToolsTests: XCTestCase {
     }
 }
 
-final class ScriptToolsTests: XCTestCase {
-    func testMinifyKeepsMeaningfulLineBreaks() throws {
-        XCTAssertEqual(try ScriptTools.minifyJavaScript("let a = 1\nlet b = 2\n// yorum\nfoo( a , b );\n"),
-                       "let a=1\nlet b=2\nfoo(a,b);")
-        XCTAssertEqual(try ScriptTools.minifyJavaScript("function f() {\n  return\n  x\n}"), "function f(){return\nx}")
-        XCTAssertEqual(try ScriptTools.minifyJavaScript("a + +b; c - -d"), "a + +b;c - -d")
-        XCTAssertEqual(try ScriptTools.minifyJavaScript("const s = 'a  b' /* x */ ; const r = /a b/g"), "const s='a  b';const r=/a b/g")
-    }
-}
-
 final class WorkbenchLanguageToolsTests: XCTestCase {
     func testOnlyJSONHasEscapeActions() {
         // Kullanıcı kararı: kaçış kuralı bağlama göre değişiyor; yalnızca JSON'da kaldı.
@@ -94,8 +84,9 @@ final class WorkbenchLanguageToolsTests: XCTestCase {
     }
 
     func testCatalogHasStep1bTools() {
-        XCTAssertEqual(WorkbenchCatalog.all.map(\.id), ["json", "xml", "html", "css", "javascript", "typescript", "sql", "markdown"])
-        XCTAssertEqual(WorkbenchCatalog.matching("ts").first?.id, "typescript")
+        XCTAssertEqual(WorkbenchCatalog.all.map(\.id), ["json", "xml", "html", "css", "sql", "markdown"])
+        // JavaScript/TypeScript Workbench'ten kaldırıldı (kullanıcı kararı).
+        XCTAssertTrue(WorkbenchCatalog.matching("typescript").isEmpty)
         XCTAssertEqual(WorkbenchCatalog.matching("soap").map(\.id), ["xml"])
     }
 
@@ -104,8 +95,6 @@ final class WorkbenchLanguageToolsTests: XCTestCase {
             "xml": "<a><b x=\"1\">t &amp; u</b></a>",
             "html": "<div><p>Ali &amp; Veli</p></div>",
             "css": "a{color:red}",
-            "javascript": "const a = {b: \"x\"}",
-            "typescript": "const m: Map<string, number> = new Map()",
             "sql": "select a from t where b = 'x'",
             "markdown": "# Başlık\n\n| a | b |\n| - | - |\n| 1 | 2 |",
         ]

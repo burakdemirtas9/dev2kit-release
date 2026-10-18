@@ -1,14 +1,16 @@
 import Foundation
 
-/// XML, HTML, CSS, JavaScript, TypeScript (step 1b), SQL, Markdown (step 1c).
+/// XML, HTML, CSS (step 1b), SQL, Markdown (step 1c).
+/// JavaScript ve TypeScript araçları kaldırıldı (kullanıcı kararı, 2026-10-18:
+/// şimdilik gerek yok); API Client'taki JS biçimlendirme (`ScriptFormatter`) duruyor.
 ///
 /// Hepsi Format, Markdown dışındakiler Minify taşıyor; fark yalnızca hangi
 /// biçimlendirici ve doğrulayıcı. Tekrar etmesin diye ortak kurucu. İki eylemin ters dönüşümü
 /// de "olduğu gibi": çıktı düzenlemesi girdiye aynen yansır (veri aynı).
 ///
 /// Escape/Unescape YOK (kullanıcı kararı, 2026-10-18): kaçış kuralı bağlama
-/// göre değişiyor (XML/HTML'de öznitelik, metin, CDATA, script; JS'de tırnak
-/// türü, template literal; CSS'te seçici, değer); tek tip bir dönüşüm güvenli
+/// göre değişiyor (XML/HTML'de öznitelik, metin, CDATA, script; CSS'te seçici,
+/// değer); tek tip bir dönüşüm güvenli
 /// bulunmadı. JSON'daki Escape/Unescape ayrı ve duruyor.
 extension WorkbenchTools {
     public static let xml = textTool(
@@ -33,24 +35,6 @@ extension WorkbenchTools {
         format: { try CSSFormatter.beautify($0, indent: $1.indentation.unit) },
         minify: { try CSSFormatter.minify($0) },
         validate: { StructureCheck.validate($0, rules: .css) }
-    )
-
-    public static let javascript = textTool(
-        id: "javascript", title: "JavaScript", syntax: .javascript,
-        keywords: ["js", "node", "ecmascript", "biçimlendir", "sıkıştır"],
-        format: { try ScriptFormatter.beautify($0, indent: $1.indentation.unit) },
-        minify: { try ScriptTools.minifyJavaScript($0) },
-        validate: { StructureCheck.validate($0, rules: .javascript) }
-    )
-
-    /// JavaScript biçimlendiricisi üzerinden: tip açıklamaları ve generic'ler
-    /// (`Map<string, number>`) `ScriptFormatter`'da ele alınıyor.
-    public static let typescript = textTool(
-        id: "typescript", title: "TypeScript", syntax: .javascript,
-        keywords: ["ts", "tsx", "angular", "biçimlendir", "sıkıştır"],
-        format: { try ScriptFormatter.beautify($0, indent: $1.indentation.unit) },
-        minify: { try ScriptTools.minifyJavaScript($0, language: "TypeScript") },
-        validate: { StructureCheck.validate($0, rules: .typescript) }
     )
 
     /// SQL: anahtar kelimeye göre satır kırma, büyük harf seçeneği; yapısal

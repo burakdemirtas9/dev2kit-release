@@ -1,7 +1,7 @@
 import Foundation
 
-/// Tam sözdizimi okuyucusu olmayan dillerde (JavaScript, TypeScript, CSS)
-/// yapısal kontrol: parantez dengesi, kapanmamış string/yorum/regex. Hata
+/// Tam sözdizimi okuyucusu olmayan dillerde (CSS, SQL) yapısal kontrol:
+/// parantez dengesi, kapanmamış string/yorum. Hata
 /// konumuyla döner. Sonuç `.structurallyValid`: arayüz "geçerli" DEMEZ.
 ///
 /// Tarama `CodeScanner` ile (biçimlendiricilerle aynı string/yorum kuralları).
@@ -9,26 +9,18 @@ public enum StructureCheck {
     public struct Rules: Sendable {
         let language: String
         let quotes: Set<Character>
-        /// Çok satırlı olabilen tırnak (JS template literal).
-        let multilineQuote: Character?
-        /// `//` satır yorumu var mı (CSS'te yok; `url(http://…)` yorum değil).
-        let lineComments: Bool
-        let regexLiterals: Bool
         /// SQL: `--` satır yorumu, tırnak tekrarıyla kaçış (`'it''s'`), ters
-        /// bölü kaçış değil (`'C:\'`).
+        /// bölü kaçış değil (`'C:\'`), metin satır atlayabilir.
         var sqlQuoting = false
 
-        public static let javascript = Rules(language: "JavaScript", quotes: ["\"", "'", "`"], multilineQuote: "`", lineComments: true, regexLiterals: true)
-        public static let typescript = Rules(language: "TypeScript", quotes: ["\"", "'", "`"], multilineQuote: "`", lineComments: true, regexLiterals: true)
-        public static let css = Rules(language: "CSS", quotes: ["\"", "'"], multilineQuote: nil, lineComments: false, regexLiterals: false)
-        public static let sql = Rules(language: "SQL", quotes: ["\"", "'", "`"], multilineQuote: nil, lineComments: false, regexLiterals: false, sqlQuoting: true)
+        public static let css = Rules(language: "CSS", quotes: ["\"", "'"])
+        public static let sql = Rules(language: "SQL", quotes: ["\"", "'", "`"], sqlQuoting: true)
     }
 
     public static func validate(_ text: String, rules: Rules) -> WorkbenchValidation {
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return .empty }
         var scanner = CodeScanner(text)
         var stack: [(char: Character, offset: Int)] = []
-        var lastMeaningful: Character?
         let pairs: [Character: Character] = [")": "(", "]": "[", "}": "{"]
 
         func issue(_ message: String, at offset: Int) -> WorkbenchValidation {
@@ -43,7 +35,8 @@ public enum StructureCheck {
                 while !scanner.isAtEnd, !scanner.current.isNewline { scanner.index += 1 }
                 continue
             }
-            if ch == "/", let next = scanner.peek(), next == "*" || (next == "/" && rules.lineComments) {
+            // `/* */` yorumu; `//` yorum değil (CSS'te `url(http://…)`).
+            if ch == "/", scanner.peek() == "*" {
                 guard (try? scanner.readComment(language: rules.language)) != nil else {
                     return issue("/* yorumu */ ile kapatılmamış", at: start)
                 }
@@ -51,19 +44,12 @@ public enum StructureCheck {
             }
             if rules.quotes.contains(ch) {
                 guard scanner.readQuoted(
-                    multiline: rules.sqlQuoting || ch == rules.multilineQuote,
+                    multiline: rules.sqlQuoting,
                     backslashEscapes: !rules.sqlQuoting,
                     doubledQuotes: rules.sqlQuoting
                 ) != nil else {
                     return issue("\(ch) ile açılan metin kapatılmamış", at: start)
                 }
-                lastMeaningful = ch
-                continue
-            }
-            if rules.regexLiterals, ch == "/", regexAllowed(after: lastMeaningful),
-               scanner.readQuoted(multiline: false) != nil {
-                while !scanner.isAtEnd, scanner.current.isLetter { scanner.index += 1 }
-                lastMeaningful = "/"
                 continue
             }
             switch ch {
@@ -78,17 +64,9 @@ public enum StructureCheck {
             default:
                 break
             }
-            lastMeaningful = ch
             scanner.index += 1
         }
         if let open = stack.last { return issue("\(open.char) kapatılmamış", at: open.offset) }
         return .structurallyValid
-    }
-
-    /// `/` regex mi bölme mi: önceki anlamlı karakter bir değer sonuysa bölme
-    /// (`ScriptFormatter` ile aynı kural).
-    static func regexAllowed(after last: Character?) -> Bool {
-        guard let last else { return true }
-        return !(last.isLetter || last.isNumber || last == ")" || last == "]" || last == "_" || last == "$")
     }
 }
