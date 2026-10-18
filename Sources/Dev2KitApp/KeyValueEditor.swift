@@ -113,37 +113,142 @@ struct KeyValueEditor: View {
             }
     }
 
+    // MARK: Tablo (Postman gibi)
+    //
+    // Kullanıcı geri bildirimi (2026-10-19): ayrı ayrı çerçeveli alanlarda
+    // nereye yazılacağı anlaşılmıyordu. Sütun başlıkları, ızgara çizgileri,
+    // kenarlıksız hücreler ve en altta her zaman boş bir "yeni satır":
+    // yazmaya başlayınca satır kendiliğinden oluşur ("Satır Ekle" yok).
+
+    /// En alttaki boş satır. Yazılınca AYNI kimlikle `entries`'e eklenir:
+    /// görünüm kimliği değişmez, yazarken odak kaybolmaz.
+    @State private var draft = KeyValueEntry()
+
+    private static let checkWidth: CGFloat = 30
+    private static let actionWidth: CGFloat = 30
+    private static let rowHeight: CGFloat = 30
+
+    /// Satırın verisi: dizideki yeri (taslakta `nil`). Gövdede bir kez, O(n).
+    private struct RowRef: Identifiable {
+        let id: UUID
+        let index: Int?
+    }
+
     private var fieldEditor: some View {
-        List {
-            ForEach($entries) { $entry in
-                HStack {
-                    Toggle("", isOn: $entry.enabled).labelsHidden()
-                    TextField(keyPlaceholder, text: $entry.key)
-                        .font(.system(.body, design: .monospaced))
-                        .inputLimit(.key)
-                    TemplateTextField(placeholder: valuePlaceholder, text: $entry.value, limit: valueLimit)
-                    Button {
-                        entries.removeAll { $0.id == entry.id }
-                    } label: {
-                        Image(systemName: "minus.circle")
-                            .iconHitTarget()
+        GeometryReader { geometry in
+            let keyWidth = max(140, (geometry.size.width - Self.checkWidth - Self.actionWidth) * 0.38)
+            let rows = entries.indices.map { RowRef(id: entries[$0].id, index: $0) }
+                + (entries.count < InputLimits.maxRows ? [RowRef(id: draft.id, index: nil)] : [])
+            ScrollView {
+                LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
+                    Section {
+                        ForEach(rows) { row in
+                            tableRow(row, keyWidth: keyWidth)
+                            Divider()
+                        }
+                    } header: {
+                        tableHeader(keyWidth: keyWidth)
                     }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.secondary)
                 }
+                .overlay(alignment: .topLeading) { columnLines(keyWidth: keyWidth, totalWidth: geometry.size.width) }
             }
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Theme.tableLine))
+        }
+        .padding(.horizontal, 10)
+        .padding(.bottom, 10)
+    }
+
+    private func tableHeader(keyWidth: CGFloat) -> some View {
+        HStack(spacing: 0) {
+            Color.clear.frame(width: Self.checkWidth)
+            Text("Anahtar").padding(.horizontal, 8).frame(width: keyWidth, alignment: .leading)
+            Text("Değer").padding(.horizontal, 8).frame(maxWidth: .infinity, alignment: .leading)
+            Color.clear.frame(width: Self.actionWidth)
+        }
+        .font(.secondaryText.weight(.semibold))
+        .foregroundStyle(.secondary)
+        .frame(height: 26)
+        .background(.bar)
+        .overlay(alignment: .bottom) { Divider() }
+    }
+
+    /// Sütun ayırıcıları tablo boyunca tek çizgi (satır başına çizmek yerine).
+    private func columnLines(keyWidth: CGFloat, totalWidth: CGFloat) -> some View {
+        ZStack(alignment: .topLeading) {
+            ForEach([Self.checkWidth, Self.checkWidth + keyWidth, totalWidth - Self.actionWidth], id: \.self) { x in
+                Rectangle().fill(Theme.tableLine).frame(width: 1).offset(x: x)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .allowsHitTesting(false)
+    }
+
+    /// Taslak ve gerçek satır AYNI görünüm yapısında (yalnızca bağlama ve
+    /// görünürlük farklı): taslak satıra dönüşünce odak korunur.
+    private func tableRow(_ row: RowRef, keyWidth: CGFloat) -> some View {
+        let isDraft = row.index == nil
+        let enabled = isDraft || entry(row)?.enabled != false
+        return HStack(spacing: 0) {
+            Toggle("", isOn: binding(row, \.enabled))
+                .labelsHidden()
+                .toggleStyle(.checkbox)
+                .frame(width: Self.checkWidth)
+                .opacity(isDraft ? 0 : 1)
+                .disabled(isDraft)
+                .help("Açık satırlar gönderilir")
+            TextField(isDraft ? keyPlaceholder : "", text: binding(row, \.key))
+                .textFieldStyle(.plain)
+                .font(.system(.body, design: .monospaced))
+                .inputLimit(.key)
+                .padding(.horizontal, 8)
+                .frame(width: keyWidth, alignment: .leading)
+            TemplateTextField(placeholder: isDraft ? valuePlaceholder : "", text: binding(row, \.value),
+                              limit: valueLimit, bordered: false)
+                .padding(.horizontal, 8)
+                .frame(maxWidth: .infinity, alignment: .leading)
             Button {
-                entries.append(KeyValueEntry())
+                entries.removeAll { $0.id == row.id }
             } label: {
-                Label(entries.count >= InputLimits.maxRows ? InputLimits.tooManyRowsMessage : "Satır Ekle", systemImage: "plus")
-                    .font(.secondaryText)
-                    .rowHitTarget(minHeight: 20)
+                Image(systemName: "trash").iconHitTarget()
             }
             .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
-            .disabled(entries.count >= InputLimits.maxRows)
+            .foregroundStyle(.tertiary)
+            .frame(width: Self.actionWidth)
+            .opacity(isDraft ? 0 : 1)
+            .disabled(isDraft)
+            .help("Satırı sil")
+            .accessibilityLabel("Satırı sil")
         }
-        .listStyle(.inset)
+        .frame(minHeight: Self.rowHeight)
+        .opacity(enabled ? 1 : 0.5)
+        .contentShape(Rectangle())
+    }
+
+    private func entry(_ row: RowRef) -> KeyValueEntry? {
+        guard let index = row.index, entries.indices.contains(index), entries[index].id == row.id else { return nil }
+        return entries[index]
+    }
+
+    /// Satırın alanına bağlama. Taslakta bir şey yazılınca taslak (aynı
+    /// kimlikle) diziye eklenir, yeni boş taslak açılır. Dizin bayatlamışsa
+    /// (satır silinmiş) yazma yok sayılır: indeks bağlamasının çökmesi önlenir.
+    private func binding<Value>(_ row: RowRef, _ field: WritableKeyPath<KeyValueEntry, Value>) -> Binding<Value> {
+        Binding(
+            get: { entry(row)?[keyPath: field] ?? draft[keyPath: field] },
+            set: { newValue in
+                if let index = row.index {
+                    guard entries.indices.contains(index), entries[index].id == row.id else { return }
+                    entries[index][keyPath: field] = newValue
+                } else {
+                    draft[keyPath: field] = newValue
+                    if !draft.key.isEmpty || !draft.value.isEmpty, entries.count < InputLimits.maxRows {
+                        entries.append(draft)
+                        draft = KeyValueEntry()
+                    }
+                }
+            }
+        )
     }
 
     private func validate() {

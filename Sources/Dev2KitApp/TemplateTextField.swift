@@ -10,6 +10,8 @@ struct TemplateTextField: View {
     /// Alanın uzunluk sınırı (`InputLimits`); varsayılan başlık değeri.
     /// `onSubmit`'ten ÖNCE: adres alanı Enter'ı sondaki kapanışla veriyor.
     var limit: InputLimits.Field = .headerValue
+    /// Tablo hücresinde kenarlıksız (`KeyValueEditor`); tek başına alanda çerçeveli.
+    var bordered = true
     var onSubmit: (() -> Void)?
 
     @Environment(AppState.self) private var appState
@@ -32,8 +34,7 @@ struct TemplateTextField: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            TextField(placeholder, text: $text)
-                .textFieldStyle(.roundedBorder)
+            styled(TextField(placeholder, text: $text))
                 .font(.system(.body, design: .monospaced))
                 .autocorrectionDisabled()
                 .focused($isFocused)
@@ -68,6 +69,15 @@ struct TemplateTextField: View {
                         .strokeBorder(Theme.purple.opacity(0.4))
                 )
             }
+        }
+    }
+
+    @ViewBuilder
+    private func styled(_ field: TextField<Text>) -> some View {
+        if bordered {
+            field.textFieldStyle(.roundedBorder)
+        } else {
+            field.textFieldStyle(.plain)
         }
     }
 

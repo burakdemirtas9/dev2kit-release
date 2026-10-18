@@ -13,6 +13,8 @@ import Dev2KitCore
 ///   gf-dark-bg #1c1340 · gf-dark-bg-2 #130d2e · gf-dark-surface #2a1f55
 ///   gf-dark-text #f3f0fe · gf-dark-muted #aa9cd5
 enum Theme {
+    /// Tablo ızgarası (başlık/parametre tablosu): ayırıcı rengi, hafif.
+    static let tableLine = Color(nsColor: .separatorColor)
     /// Light/dark moda göre otomatik değişen renk.
     ///
     /// Saydamlık BURADA veriliyor, dışarıda `withAlphaComponent` ile değil:

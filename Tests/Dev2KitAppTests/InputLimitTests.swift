@@ -90,7 +90,8 @@ final class InputLimitTests: XCTestCase {
             RunLoop.main.run(until: Date().addingTimeInterval(0.6))
             let limits = textFields(host).compactMap { ($0.formatter as? LengthLimitFormatter)?.limit }
             window.orderOut(nil)
-            XCTAssertEqual(limits.sorted(), [256, 256, expected, expected].sorted(), "\(valueLimit)")
+            // İki satır ve en alttaki boş "yeni satır": hepsi sınırlı.
+            XCTAssertEqual(limits.sorted(), [256, 256, 256, expected, expected, expected].sorted(), "\(valueLimit)")
         }
     }
 
