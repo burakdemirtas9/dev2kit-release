@@ -70,8 +70,11 @@ public struct HistorySettings: Codable, Hashable, Sendable {
     public var retentionCount: Int
     /// Bu yaştan eski kayıtlar budanır.
     public var retentionDays: Int
-    /// Yanıt gövdesi saklansın mı (varsayılan kapalı: yanıtlar token/kişisel
-    /// veri içerebilir).
+    /// Yanıt gövdesi saklansın mı. Varsayılan AÇIK (kullanıcı kararı,
+    /// 2026-10-19; önce kapalıydı). Gövdenin ilk `responsePreviewLimit`
+    /// karakteri şifreli geçmiş dosyasına yazılır; kimlik alanları
+    /// (token/parola anahtarları) maskelenir, kişisel veri (e-posta, müşteri
+    /// numarası) MASKELENMEZ. Kayıtlı ayarı olan kullanıcının tercihi korunur.
     public var storeResponseBodies: Bool
     /// Saklanırsa önizleme karakter sınırı.
     public var responsePreviewLimit: Int
@@ -87,7 +90,7 @@ public struct HistorySettings: Codable, Hashable, Sendable {
         isEnabled: Bool = true,
         retentionCount: Int = 200,
         retentionDays: Int = 30,
-        storeResponseBodies: Bool = false,
+        storeResponseBodies: Bool = true,
         responsePreviewLimit: Int = 20_000,
         maxSnapshotBodyBytes: Int = 32_768,
         maxTotalBytes: Int = 10 * 1024 * 1024
@@ -107,7 +110,7 @@ public struct HistorySettings: Codable, Hashable, Sendable {
             isEnabled: try container.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? true,
             retentionCount: try container.decodeIfPresent(Int.self, forKey: .retentionCount) ?? 200,
             retentionDays: try container.decodeIfPresent(Int.self, forKey: .retentionDays) ?? 30,
-            storeResponseBodies: try container.decodeIfPresent(Bool.self, forKey: .storeResponseBodies) ?? false,
+            storeResponseBodies: try container.decodeIfPresent(Bool.self, forKey: .storeResponseBodies) ?? true,
             responsePreviewLimit: try container.decodeIfPresent(Int.self, forKey: .responsePreviewLimit) ?? 20_000,
             maxSnapshotBodyBytes: try container.decodeIfPresent(Int.self, forKey: .maxSnapshotBodyBytes) ?? 32_768,
             maxTotalBytes: try container.decodeIfPresent(Int.self, forKey: .maxTotalBytes) ?? 10 * 1024 * 1024

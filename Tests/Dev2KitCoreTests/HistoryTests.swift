@@ -260,7 +260,8 @@ final class HistorySettingsTests: XCTestCase {
         XCTAssertTrue(settings.isEnabled)
         XCTAssertEqual(settings.retentionCount, 200)
         XCTAssertEqual(settings.retentionDays, 30)
-        XCTAssertFalse(settings.storeResponseBodies, "yanıt gövdesi varsayılan olarak saklanmamalı")
+        // Kullanıcı kararı (2026-10-19): varsayılan açık (önce kapalıydı).
+        XCTAssertTrue(settings.storeResponseBodies, "yanıt gövdesi varsayılan olarak saklanır")
     }
 
     func testDecodingPartialSettingsFillsDefaults() throws {
