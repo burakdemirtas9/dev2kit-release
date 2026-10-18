@@ -35,8 +35,8 @@ struct WorkbenchToolView: View {
         // ⌘F: odaktaki bölmede (son tıklanan editör) arama.
         .onChange(of: workbench.searchRequest) {
             if workbench.focusedPane == .output, !workbench.showsTree {
-                outputSearch.open()
-            } else {
+                if !workbench.outputHiddenFromEditor { outputSearch.open() }
+            } else if !workbench.inputHiddenFromEditor {
                 inputSearch.open()
             }
         }
@@ -44,6 +44,8 @@ struct WorkbenchToolView: View {
             inputSearch.close()
             outputSearch.close()
         }
+        .onChange(of: workbench.inputHiddenFromEditor) { if workbench.inputHiddenFromEditor { inputSearch.close() } }
+        .onChange(of: workbench.outputHiddenFromEditor) { if workbench.outputHiddenFromEditor { outputSearch.close() } }
     }
 
     // MARK: Üst çubuk
@@ -137,8 +139,11 @@ struct WorkbenchToolView: View {
                         .controlSize(.small)
                         .help("Restore the cleared input")
                 }
-                FoldButtons(folding: inputFolding, english: true)
-                SearchToggleButton(search: inputSearch, strings: .english)
+                // Editör yokken (gizli girdi) arayacak/katlayacak bir şey yok.
+                if !workbench.inputHiddenFromEditor {
+                    FoldButtons(folding: inputFolding, english: true)
+                    SearchToggleButton(search: inputSearch, strings: .english)
+                }
                 Button {
                     workbench.clearInput()
                 } label: {
@@ -153,27 +158,45 @@ struct WorkbenchToolView: View {
             if inputSearch.isPresented {
                 EditorSearchBar(search: inputSearch, strings: .english)
             }
-            CodeEditor(
-                text: Binding(get: { workbench.input }, set: { workbench.input = $0 }),
-                language: workbench.highlightsSyntax ? CodeLanguage(workbench.tool.syntax) : .plain,
-                folding: CodeLanguage(workbench.tool.syntax).supportsFolding ? inputFolding : nil,
-                search: inputSearch,
-                errorOffset: issueOffset,
-                onFocus: { workbench.focus(.input) }
-            )
-            .id(workbench.document.id)
-            .overlay {
-                if workbench.input.isEmpty {
-                    Text("Paste content here. Input stays in memory only; it is never written to disk or history.")
-                        .font(.callout)
-                        .foregroundStyle(.tertiary)
-                        .multilineTextAlignment(.center)
-                        .padding(40)
-                        .allowsHitTesting(false)
+            if workbench.inputHiddenFromEditor {
+                OversizedTextNotice(
+                    title: "Input not shown: \(TextStats.size(workbench.inputStats.bytes))",
+                    detail: oversizedDetail + " The input is kept and the tools work on it: run an action (e.g. Format) and use its output."
+                ) {
+                    CopyButton(text: workbench.input, help: "Copy input")
+                    Button("Clear") { workbench.clearInput() }.controlSize(.small)
+                }
+            } else {
+                CodeEditor(
+                    text: Binding(get: { workbench.input }, set: { workbench.input = $0 }),
+                    language: workbench.highlightsSyntax ? CodeLanguage(workbench.tool.syntax) : .plain,
+                    folding: CodeLanguage(workbench.tool.syntax).supportsFolding ? inputFolding : nil,
+                    search: inputSearch,
+                    errorOffset: issueOffset,
+                    onFocus: { workbench.focus(.input) },
+                    limits: EditorLimits(
+                        onTooLarge: { workbench.reportLimit(WorkbenchLimits.tooLargeMessage(bytes: $0)) },
+                        onLongLine: { workbench.acceptInputHiddenFromEditor($0) }
+                    )
+                )
+                .id(workbench.document.id)
+                .overlay {
+                    if workbench.input.isEmpty {
+                        Text("Paste content here. Input stays in memory only; it is never written to disk or history.")
+                            .font(.callout)
+                            .foregroundStyle(.tertiary)
+                            .multilineTextAlignment(.center)
+                            .padding(40)
+                            .allowsHitTesting(false)
+                    }
                 }
             }
         }
         .frame(maxWidth: .infinity)
+    }
+
+    private var oversizedDetail: String {
+        "Text over \(TextStats.size(WorkbenchLimits.maxInputBytes)) or with a line longer than \(TextStats.size(WorkbenchLimits.maxEditorLineBytes)) (minified JSON is one line) would freeze dev2kit in the editor."
     }
 
     // MARK: Çıktı
@@ -197,8 +220,10 @@ struct WorkbenchToolView: View {
                     .help("Show the output as text or as a tree of the input")
                 }
                 if !showsTree {
-                    FoldButtons(folding: outputFolding, english: true)
-                    SearchToggleButton(search: outputSearch, strings: .english)
+                    if !workbench.outputHiddenFromEditor {
+                        FoldButtons(folding: outputFolding, english: true)
+                        SearchToggleButton(search: outputSearch, strings: .english)
+                    }
                     Button {
                         workbench.toggleOutputEditing()
                     } label: {
@@ -206,7 +231,7 @@ struct WorkbenchToolView: View {
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(workbench.isEditingOutput ? AnyShapeStyle(Theme.accent) : AnyShapeStyle(.secondary))
-                    .disabled(workbench.displayedOutput.isEmpty)
+                    .disabled(workbench.displayedOutput.isEmpty || workbench.outputHiddenFromEditor)
                     .help(workbench.isEditingOutput
                           ? "Stop editing. Edits are replaced when the input or options change."
                           : "Edit output")
@@ -238,6 +263,13 @@ struct WorkbenchToolView: View {
                     }
                 } else if let issue = workbench.actionIssue, workbench.displayedOutput.isEmpty {
                     placeholder(issue.localizedDescription, isError: true)
+                } else if workbench.outputHiddenFromEditor {
+                    OversizedTextNotice(
+                        title: "Output not shown: \(TextStats.size(workbench.outputStats.bytes))",
+                        detail: oversizedDetail + " Copy it, or pick an action with multi-line output (e.g. Format)."
+                    ) {
+                        CopyButton(text: workbench.output, help: "Copy output")
+                    }
                 } else {
                     CodeEditor(
                         text: Binding(get: { workbench.displayedOutput }, set: { workbench.editOutput($0) }),
@@ -245,7 +277,11 @@ struct WorkbenchToolView: View {
                         isEditable: workbench.isEditingOutput,
                         folding: CodeLanguage(outputSyntax).supportsFolding ? outputFolding : nil,
                         search: outputSearch,
-                        onFocus: { workbench.focus(.output) }
+                        onFocus: { workbench.focus(.output) },
+                        limits: EditorLimits(
+                            onTooLarge: { workbench.reportLimit(WorkbenchLimits.tooLargeMessage(bytes: $0)) },
+                            onLongLine: { _ in workbench.reportLimit(WorkbenchLimits.longLineEditMessage) }
+                        )
                     )
                     // Katlama editör kurulurken bağlanır: çıktının dili eylemle
                     // değişince (Escape → düz metin) editör yeniden kurulmalı.
@@ -287,6 +323,13 @@ struct WorkbenchToolView: View {
         HStack(spacing: 8) {
             validationLabel
             Spacer(minLength: 0)
+            if let notice = workbench.limitNotice {
+                Label(notice, systemImage: "exclamationmark.octagon.fill")
+                    .font(.secondaryText)
+                    .foregroundStyle(Theme.down)
+                    .lineLimit(1)
+                    .help(notice)
+            }
             if workbench.saveNotice {
                 Label("Kept in memory only — cleared when dev2kit quits. Nothing is written to disk.", systemImage: "memorychip")
                     .font(.secondaryText)
@@ -682,5 +725,30 @@ private struct JSONTreeRow: View {
     private func copy(_ text: String) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
+    }
+}
+
+/// Editörde gösterilemeyen metin (`WorkbenchLimits`): editör yerine açıklama
+/// ve eylemler. Workbench girdi/çıktı bölmeleri ve Diff Checker ortak.
+struct OversizedTextNotice<Actions: View>: View {
+    let title: String
+    let detail: String
+    @ViewBuilder let actions: () -> Actions
+
+    var body: some View {
+        VStack(spacing: 10) {
+            Label(title, systemImage: "exclamationmark.triangle.fill")
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(Theme.warning)
+            Text(detail)
+                .font(.secondaryText)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 8) { actions() }
+        }
+        .padding(24)
+        .frame(maxWidth: 460)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

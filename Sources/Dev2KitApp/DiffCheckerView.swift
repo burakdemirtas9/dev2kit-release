@@ -59,6 +59,13 @@ struct DiffCheckerView: View {
                 set: { var new = options; new.line.ignoreCase = $0; diff.update(options: new) }
             ))
             Spacer(minLength: 0)
+            if let notice = diff.limitNotice {
+                Label(notice, systemImage: "exclamationmark.octagon.fill")
+                    .font(.secondaryText)
+                    .foregroundStyle(Theme.down)
+                    .lineLimit(1)
+                    .help(notice)
+            }
             Button {
                 diff.swapSides()
             } label: {
@@ -88,14 +95,14 @@ struct DiffCheckerView: View {
         let language = CodeLanguage(diff.document.language.syntax)
         return HStack(spacing: 0) {
             inputPane("Left", text: Binding(get: { diff.left }, set: { diff.left = $0 }), language: language,
-                      issue: diff.result?.leftIssue)
+                      issue: diff.result?.leftIssue, hidden: diff.document.leftTooLargeForEditor)
             Divider()
             inputPane("Right", text: Binding(get: { diff.right }, set: { diff.right = $0 }), language: language,
-                      issue: diff.result?.rightIssue)
+                      issue: diff.result?.rightIssue, hidden: diff.document.rightTooLargeForEditor)
         }
     }
 
-    private func inputPane(_ title: String, text: Binding<String>, language: CodeLanguage, issue: String?) -> some View {
+    private func inputPane(_ title: String, text: Binding<String>, language: CodeLanguage, issue: String?, hidden: Bool) -> some View {
         VStack(spacing: 0) {
             HStack(spacing: 6) {
                 Text(title).font(.secondaryText.weight(.semibold)).foregroundStyle(.secondary)
@@ -113,7 +120,19 @@ struct DiffCheckerView: View {
             }
             .padding(.horizontal, 10)
             .frame(height: 26)
-            CodeEditor(text: text, language: language)
+            if hidden {
+                OversizedTextNotice(
+                    title: "Not shown: \(TextStats.size(text.wrappedValue.utf8.count))",
+                    detail: "A line longer than \(TextStats.size(WorkbenchLimits.maxEditorLineBytes)) would freeze dev2kit in the editor. It is kept and compared."
+                ) {
+                    CopyButton(text: text.wrappedValue, help: "Copy")
+                    Button("Clear") { text.wrappedValue = "" }.controlSize(.small)
+                }
+            } else {
+                CodeEditor(text: text, language: language, limits: EditorLimits(
+                    onTooLarge: { diff.reportLimit(WorkbenchLimits.tooLargeMessage(bytes: $0)) },
+                    onLongLine: { text.wrappedValue = $0 }
+                ))
                 .id("\(diff.document.id)-\(title)")
                 .overlay {
                     if text.wrappedValue.isEmpty {
@@ -123,6 +142,7 @@ struct DiffCheckerView: View {
                             .allowsHitTesting(false)
                     }
                 }
+            }
         }
         .frame(maxWidth: .infinity)
     }
@@ -260,7 +280,8 @@ private struct DiffLinesView: View {
             Text(line.map { "\($0.number)" } ?? "")
                 .foregroundStyle(.tertiary)
                 .frame(width: 44, alignment: .trailing)
-            Text(line?.text ?? "")
+            // Uzun satır kırpılır: tek satırlık 5 MB bir Text arayüzü dondurur.
+            Text(line.map { WorkbenchLimits.displayed(line: $0.text) } ?? "")
                 .lineLimit(1)
                 .truncationMode(.tail)
                 .textSelection(.enabled)

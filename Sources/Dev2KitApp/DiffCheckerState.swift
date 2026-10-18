@@ -11,6 +11,10 @@ struct DiffDocument: Identifiable, Equatable {
     var language: DiffChecker.Language = .json
     var options = DiffChecker.Options()
     var resultMode: DiffCheckerState.ResultMode = .changes
+    /// Taraf editörde gösterilemeyecek kadar büyük ya da uzun satırlı
+    /// (`WorkbenchLimits`): saklanır ve karşılaştırılır, editör yerine açıklama.
+    var leftTooLargeForEditor = false
+    var rightTooLargeForEditor = false
 
     var hasContent: Bool { !left.isEmpty || !right.isEmpty }
 }
@@ -73,12 +77,35 @@ final class DiffCheckerState {
 
     var left: String {
         get { document.left }
-        set { mutate { $0.left = newValue }; inputChanged() }
+        set {
+            let hidden = WorkbenchLimits.isTooLargeForEditor(newValue)
+            mutate { $0.left = newValue; $0.leftTooLargeForEditor = hidden }
+            inputChanged()
+        }
     }
 
     var right: String {
         get { document.right }
-        set { mutate { $0.right = newValue }; inputChanged() }
+        set {
+            let hidden = WorkbenchLimits.isTooLargeForEditor(newValue)
+            mutate { $0.right = newValue; $0.rightTooLargeForEditor = hidden }
+            inputChanged()
+        }
+    }
+
+    /// Sınır nedeniyle yapılmayan değişikliğin açıklaması (kırmızı); bir süre
+    /// sonra kalkar. `WorkbenchState.limitNotice` ile aynı davranış.
+    private(set) var limitNotice: String?
+    @ObservationIgnored private var limitNoticeTask: Task<Void, Never>?
+
+    func reportLimit(_ message: String) {
+        limitNotice = message
+        limitNoticeTask?.cancel()
+        limitNoticeTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(8))
+            guard !Task.isCancelled else { return }
+            self?.limitNotice = nil
+        }
     }
 
     func select(language: DiffChecker.Language) {
@@ -97,7 +124,12 @@ final class DiffCheckerState {
 
     func swapSides() {
         let doc = document
-        mutate { $0.left = doc.right; $0.right = doc.left }
+        mutate {
+            $0.left = doc.right
+            $0.right = doc.left
+            $0.leftTooLargeForEditor = doc.rightTooLargeForEditor
+            $0.rightTooLargeForEditor = doc.leftTooLargeForEditor
+        }
         schedule(debounced: false, force: true)
     }
 

@@ -12,6 +12,10 @@ struct WorkbenchDocument: Identifiable, Equatable {
     var actionID: String?
     var options = WorkbenchOptions()
     var outputMode: WorkbenchState.OutputMode = .text
+    /// Girdi editörde gösterilemeyecek kadar büyük ya da 2 MB'tan uzun
+    /// satırlı (`WorkbenchLimits`): saklanır ve araçlar çalışır, editör yerine
+    /// açıklama gösterilir. Girdi her değiştiğinde hesaplanır.
+    var inputTooLargeForEditor = false
 }
 
 /// Workbench'in durumu. `AppState`'ten AYRI: API Client'ın durumuyla hiçbir
@@ -65,6 +69,9 @@ final class WorkbenchState {
     // MARK: Açık sekmenin sonucu
 
     private(set) var output = ""
+    /// Çıktı editörde gösterilemeyecek kadar büyük ya da uzun satırlı
+    /// (ör. 2 MB'ı aşan Minify çıktısı): yalnızca kopyalanabilir.
+    private(set) var outputHiddenFromEditor = false
     private(set) var actionIssue: WorkbenchIssue?
     private(set) var validation: WorkbenchValidation = .empty
     private(set) var tree: JSONTreeNode?
@@ -120,7 +127,7 @@ final class WorkbenchState {
     var input: String {
         get { document.input }
         set {
-            mutateDocument { $0.input = newValue }
+            storeInput(newValue)
             if clearedInput != nil, !newValue.isEmpty { dismissUndo() }
             inputStats = TextStats(bytes: newValue.utf8.count, lines: inputStats.lines, characters: inputStats.characters)
             if isLargeInput {
@@ -205,6 +212,7 @@ final class WorkbenchState {
     /// ama metin kalır; girdi ya da seçenek değişince çıktı yeniden
     /// hesaplanır ve düzenleme bırakılır.
     func toggleOutputEditing() {
+        guard !outputHiddenFromEditor else { return }
         isEditingOutput.toggle()
     }
 
@@ -220,7 +228,7 @@ final class WorkbenchState {
         guard let reverse = action.reverse,
               let newInput = try? reverse(text, document.input, options),
               newInput != document.input else { return }
-        mutateDocument { $0.input = newInput }
+        storeInput(newInput)
         if clearedInput != nil { dismissUndo() }
         inputStats = TextStats(bytes: newInput.utf8.count, lines: inputStats.lines, characters: inputStats.characters)
         schedule(debounced: true, refreshOutput: false)
@@ -229,7 +237,45 @@ final class WorkbenchState {
     func useOutputAsInput() {
         let text = displayedOutput
         guard !text.isEmpty else { return }
+        let bytes = text.utf8.count
+        guard bytes <= WorkbenchLimits.maxInputBytes else {
+            reportLimit(WorkbenchLimits.tooLargeMessage(bytes: bytes))
+            return
+        }
         input = text
+    }
+
+    // MARK: - Sınırlar (WorkbenchLimits)
+
+    var inputHiddenFromEditor: Bool { document.inputTooLargeForEditor }
+
+    /// Sınır nedeniyle yapılmayan değişikliğin açıklaması (durum çubuğunda,
+    /// kırmızı). Bir süre sonra kendiliğinden kalkar.
+    private(set) var limitNotice: String?
+    @ObservationIgnored private var limitNoticeTask: Task<Void, Never>?
+
+    func reportLimit(_ message: String) {
+        limitNotice = message
+        limitNoticeTask?.cancel()
+        limitNoticeTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(8))
+            guard !Task.isCancelled else { return }
+            self?.limitNotice = nil
+        }
+    }
+
+    /// Editöre yapıştırılan metinde 2 MB'tan uzun satır var: editöre girmedi,
+    /// burada saklanır; girdi bölmesi editör yerine açıklama gösterir.
+    func acceptInputHiddenFromEditor(_ text: String) {
+        input = text
+    }
+
+    private func storeInput(_ text: String) {
+        let hidden = WorkbenchLimits.isTooLargeForEditor(text)
+        mutateDocument {
+            $0.input = text
+            $0.inputTooLargeForEditor = hidden
+        }
     }
 
     // MARK: - Ağaçta değer düzenleme
@@ -331,6 +377,7 @@ final class WorkbenchState {
     /// Açık sekme değişti: önceki sonucun hepsi bırakılır (bellek), yenisi hesaplanır.
     private func documentChanged() {
         output = ""
+        outputHiddenFromEditor = false
         editedOutput = nil
         isEditingOutput = false
         tree = nil
@@ -380,6 +427,7 @@ final class WorkbenchState {
         let tree: JSONTreeNode?
         let inputStats: TextStats
         let outputStats: TextStats
+        var outputTooLargeForEditor = false
     }
 
     nonisolated private static func compute(
@@ -408,7 +456,8 @@ final class WorkbenchState {
             tree = JSONTreeNode(value: value)
         }
         return Result(output: output, issue: issue, validation: validation, tree: tree,
-                      inputStats: inputStats, outputStats: TextStats(output))
+                      inputStats: inputStats, outputStats: TextStats(output),
+                      outputTooLargeForEditor: WorkbenchLimits.isTooLargeForEditor(output))
     }
 
     private func apply(_ result: Result, generation: Int, refreshOutput: Bool = true) {
@@ -416,6 +465,8 @@ final class WorkbenchState {
         guard generation == self.generation else { return }
         if refreshOutput {
             output = result.output
+            outputHiddenFromEditor = result.outputTooLargeForEditor
+            if result.outputTooLargeForEditor { isEditingOutput = false; editedOutput = nil }
             actionIssue = result.issue
             outputStats = result.outputStats
         }

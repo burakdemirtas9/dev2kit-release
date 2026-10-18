@@ -209,6 +209,20 @@ final class CodeFoldingController: ObservableObject {
     func expandAll() { expand?() }
 }
 
+/// Editöre girişin sınırları (`WorkbenchLimits`). Kullanıcının yaptığı
+/// değişiklik (yazma, yapıştırma, sürükleme) metne girmeden ÖNCE denetlenir:
+/// donduracak metin editöre hiç girmez. Programla verilen metin denetlenmez;
+/// onu veren taraf (durum nesnesi) kendisi karar verir.
+struct EditorLimits {
+    var maxBytes: Int = WorkbenchLimits.maxInputBytes
+    var maxLineBytes: Int = WorkbenchLimits.maxEditorLineBytes
+    /// Sonuç `maxBytes`'ı aşıyor: değişiklik yapılmadı (sonucun boyutu).
+    var onTooLarge: (Int) -> Void
+    /// Sonuçta `maxLineBytes`'tan uzun satır var: değişiklik editöre girmedi,
+    /// tam sonuç metni verilir (ör. editörde göstermeden saklamak için).
+    var onLongLine: (String) -> Void
+}
+
 /// Sözdizimi renklendirmeli, düz metin kod editörü.
 /// SwiftUI TextEditor renklendirme desteklemediği için NSTextView sarılır.
 struct CodeEditor: NSViewRepresentable {
@@ -227,6 +241,8 @@ struct CodeEditor: NSViewRepresentable {
     /// Kullanıcı editöre tıklayınca/seçim değişince çağrılır. Workbench ⌘F'nin
     /// hangi bölmede (girdi/çıktı) arama açacağını buradan bilir.
     var onFocus: (() -> Void)?
+    /// Verilirse kullanıcının değişiklikleri bu sınırlarla denetlenir.
+    var limits: EditorLimits?
 
     /// Yazı boyutu (⌘+ / ⌘− / ⌘0, bkz. `EditorZoom`): tüm editörler ortak.
     @AppStorage(EditorZoom.key) private var fontSize = EditorZoom.standard
@@ -321,7 +337,12 @@ struct CodeEditor: NSViewRepresentable {
         guard let textView = scrollView.documentView as? NSTextView else { return }
         context.coordinator.parent = self
         textView.isEditable = isEditable
-        if textView.string != text {
+        if textView.string != text, limits != nil, WorkbenchLimits.isTooLargeForEditor(text) {
+            // Sınırlı editöre sığmayan metin programla da yazılmaz: kapı
+            // yapıştırmayı engelleyip metni duruma verdiğinde SwiftUI, editörü
+            // açıklamayla değiştirmeden önce bir güncelleme daha yapıyor ve
+            // aynı dev metni buradan editöre yazıyordu (ölçüldü: 5 MB'ta 3 sn).
+        } else if textView.string != text {
             // Programatik değişim (ör. Beautify): metni değiştir, yeniden boya.
             // Geri alma kayıtları eski metnin aralıklarını gösteriyor; bırakılsa
             // ⌘Z var olmayan aralığı geri almaya çalışırdı. Temizlenir.
@@ -411,6 +432,30 @@ struct CodeEditor: NSViewRepresentable {
         func textViewDidChangeSelection(_ notification: Notification) {
             guard let textView = notification.object as? NSTextView, textView.window?.firstResponder === textView else { return }
             parent.onFocus?()
+        }
+
+        func textView(_ textView: NSTextView, shouldChangeTextIn range: NSRange, replacementString text: String?) -> Bool {
+            guard let limits = parent.limits, let text else { return true }
+            let current = textView.string as NSString
+            let resultLength = current.length - range.length + (text as NSString).length
+            if WorkbenchLimits.mayExceed(utf16Length: resultLength, limit: limits.maxBytes) {
+                let bytes = WorkbenchLimits.resultingBytes(of: current, replacing: range, with: text)
+                if bytes > limits.maxBytes {
+                    limits.onTooLarge(bytes)
+                    return false
+                }
+            }
+            // Uzun satır yalnızca büyük eklemede (yapıştırma, sürükleme) aranır:
+            // yazarak 2 MB'lık satır oluşmaz, her tuşta tüm metni taramaya değmez.
+            if (text as NSString).length >= 4096,
+               WorkbenchLimits.mayExceed(utf16Length: resultLength, limit: limits.maxLineBytes) {
+                let result = current.replacingCharacters(in: range, with: text)
+                if WorkbenchLimits.hasLine(longerThan: limits.maxLineBytes, in: result) {
+                    limits.onLongLine(result)
+                    return false
+                }
+            }
+            return true
         }
 
         func textDidChange(_ notification: Notification) {
