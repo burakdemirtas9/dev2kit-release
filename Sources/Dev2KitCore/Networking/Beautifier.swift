@@ -84,3 +84,16 @@ public extension Beautifier.Kind {
         }
     }
 }
+
+public extension Beautifier.Kind {
+    /// İstek gövdesi tip seçicisinden kaldırılanlar (kullanıcı kararı):
+    /// Markdown (2026-10-18), SQL (2026-10-19; önce "kalsın" denmişti). Gövde
+    /// olarak gönderilmiyorlar; yanıt biçimlemede (`Beautifier`) desteği sürüyor.
+    static let removedFromRequestBody: Set<Beautifier.Kind> = [.markdown, .sql]
+
+    /// Seçenekler. Kaldırılan tip daha önce seçilip kaydedilmişse o istekte
+    /// görünmeye devam eder (seçici boş kalmasın).
+    static func requestBodyChoices(current: Beautifier.Kind) -> [Beautifier.Kind] {
+        allCases.filter { !removedFromRequestBody.contains($0) || $0 == current }
+    }
+}

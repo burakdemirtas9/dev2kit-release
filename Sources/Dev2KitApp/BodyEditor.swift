@@ -123,7 +123,7 @@ struct BodyEditor: View {
 
             if body_.kind == .raw {
                 Picker("", selection: rawKind) {
-                    ForEach(Beautifier.Kind.allCases, id: \.self) { Text(Self.label($0)).tag($0) }
+                    ForEach(Beautifier.Kind.requestBodyChoices(current: rawKind.wrappedValue), id: \.self) { Text(Self.label($0)).tag($0) }
                 }
                 .pickerStyle(.menu)
                 .labelsHidden()

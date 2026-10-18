@@ -28,3 +28,18 @@ final class HeaderCountTests: XCTestCase {
         XCTAssertEqual(request.activeQueryParamCount, 1)
     }
 }
+
+/// Gövde tipi seçeneklerinden Markdown (2026-10-18) ve SQL (2026-10-19) kalktı.
+final class RequestBodyChoicesTests: XCTestCase {
+    func testMarkdownAndSQLAreNotOffered() {
+        XCTAssertEqual(Beautifier.Kind.requestBodyChoices(current: .json), [.json, .xml, .html, .javascript, .css, .plain])
+    }
+
+    func testAnAlreadySavedBodyStillShowsItsType() {
+        XCTAssertTrue(Beautifier.Kind.requestBodyChoices(current: .markdown).contains(.markdown))
+        XCTAssertTrue(Beautifier.Kind.requestBodyChoices(current: .sql).contains(.sql))
+        XCTAssertFalse(Beautifier.Kind.requestBodyChoices(current: .sql).contains(.markdown))
+        // Yanıt biçimlemede destek sürüyor.
+        XCTAssertEqual(Beautifier.kind(contentType: "text/markdown"), .markdown)
+    }
+}
