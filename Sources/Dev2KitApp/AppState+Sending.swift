@@ -244,6 +244,11 @@ extension AppState {
         /// Önizlenebiliyorsa türü. Gövdenin ilk byte'larına bakmak her
         /// render'da yapılacak iş değil; tür tespitiyle birlikte bir kez.
         let previewKind: ResponsePreview.Kind?
+        /// Editörde gösterilebilir mi (`WorkbenchLimits`, Workbench çıktısıyla
+        /// aynı kural: 20 MB'a kadar, 1 MB'tan uzun satır yok). Biçimlenemeyen
+        /// tek satırlık büyük yanıt (düz metin, bozuk JSON) editörü
+        /// donduruyordu; o durumda yalnızca kopyalanır. Bir kez, burada.
+        var fitsEditor = true
     }
 
     /// Ana thread dışında çalışır: büyük gövdeleri biçimlendirmek pahalıdır.
@@ -253,11 +258,13 @@ extension AppState {
         let text = response.bodyText ?? "(ikili veri: \(response.body.count) byte)"
         // Tür tahmini ve biçimlendirme tek yerde: Beautifier (Core, testli).
         let kind = Beautifier.kind(contentType: contentType, body: text)
+        let pretty = Beautifier.beautifiedOrOriginal(text, as: kind)
         return ResponseDisplay(
             data: response,
-            prettyText: Beautifier.beautifiedOrOriginal(text, as: kind),
+            prettyText: pretty,
             language: CodeLanguage(kind),
-            previewKind: ResponsePreview.kind(contentType: contentType, body: response.body)
+            previewKind: ResponsePreview.kind(contentType: contentType, body: response.body),
+            fitsEditor: !WorkbenchLimits.isTooLargeForEditor(pretty, maxBytes: WorkbenchLimits.maxOutputBytes)
         )
     }
 

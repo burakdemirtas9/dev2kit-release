@@ -95,7 +95,7 @@ struct BodyEditor: View {
             // şerit olarak okuyup "satır numarası alanı araç çubuğuna taşmış"
             // gibi görüyordu.
             Divider()
-            if search.isPresented, body_.kind == .raw {
+            if search.isPresented, body_.kind == .raw, !bodyHiddenFromEditor {
                 EditorSearchBar(search: search)
             }
             editor
@@ -130,8 +130,11 @@ struct BodyEditor: View {
                 .fixedSize()
 
                 Spacer()
-                SearchToggleButton(search: search)
-                FoldButtons(folding: folding)
+                // Gizli gövdede (editör yok) arayacak/katlayacak bir şey yok.
+                if !bodyHiddenFromEditor {
+                    SearchToggleButton(search: search)
+                    FoldButtons(folding: folding)
+                }
                 beautifyButton
             } else {
                 Spacer()
@@ -164,25 +167,44 @@ struct BodyEditor: View {
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .raw:
-            CodeEditor(
-                text: rawContent,
-                language: CodeLanguage(rawKind.wrappedValue),
-                folding: folding,
-                search: search
-            )
-                .background(Theme.editorBackground)
-                .overlay(alignment: .topLeading) {
-                    if rawContent.wrappedValue.isEmpty {
-                        Text("{ \"ornek\": \"{{degisken}} destekler\" }")
-                            .foregroundStyle(.tertiary)
-                            .font(.system(.body, design: .monospaced))
-                            // Şeridin altında kalmasın: genişliği editör bildiriyor.
-                            .padding(.top, 8)
-                            .padding(.leading, folding.gutterWidth + 5)
-                            .allowsHitTesting(false)
-                    }
+            if bodyHiddenFromEditor {
+                OversizedTextNotice(
+                    title: "Gövde editörde gösterilmiyor: \(TextStats.size(body_.rawContent.utf8.count))",
+                    detail: "\(TextStats.size(WorkbenchLimits.maxInputBytes))'tan büyük ya da \(TextStats.size(WorkbenchLimits.maxEditorLineBytes))'tan uzun satırlı metin (sıkıştırılmış JSON tek satırdır) editörde dev2kit'i dondurur. Gövde saklanır ve olduğu gibi gönderilir; biçimlendirirsen editörde açılır."
+                ) {
+                    Button("Biçimlendir") { beautify() }
+                        .controlSize(.small)
+                        .disabled(rawKind.wrappedValue == .plain)
+                    CopyButton(text: body_.rawContent, help: "Gövdeyi kopyala")
+                    Button("Temizle") { rawContent.wrappedValue = "" }
+                        .controlSize(.small)
                 }
-                .onChange(of: rawContent.wrappedValue) { formatError = nil }
+                .background(Theme.editorBackground)
+            } else {
+                CodeEditor(
+                    text: rawContent,
+                    language: CodeLanguage(rawKind.wrappedValue),
+                    folding: folding,
+                    search: search,
+                    limits: EditorLimits(
+                        onRejected: { formatError = $0.turkish },
+                        onLongLine: { rawContent.wrappedValue = $0 }
+                    )
+                )
+                    .background(Theme.editorBackground)
+                    .overlay(alignment: .topLeading) {
+                        if rawContent.wrappedValue.isEmpty {
+                            Text("{ \"ornek\": \"{{degisken}} destekler\" }")
+                                .foregroundStyle(.tertiary)
+                                .font(.system(.body, design: .monospaced))
+                                // Şeridin altında kalmasın: genişliği editör bildiriyor.
+                                .padding(.top, 8)
+                                .padding(.leading, folding.gutterWidth + 5)
+                                .allowsHitTesting(false)
+                        }
+                    }
+                    .onChange(of: rawContent.wrappedValue) { formatError = nil }
+            }
         case .urlEncoded, .formData:
             KeyValueEditor(
                 entries: formFields,
@@ -190,6 +212,14 @@ struct BodyEditor: View {
                 valuePlaceholder: "değer veya {{degisken}}"
             )
         }
+    }
+
+    /// Gövde editörde gösterilemeyecek kadar büyük ya da uzun satırlı mı
+    /// (`WorkbenchLimits`, Workbench girdisiyle aynı kural). 1 MB'ın altında
+    /// hiç taranmaz: her render'da yapılıyor.
+    private var bodyHiddenFromEditor: Bool {
+        let text = body_.rawContent
+        return text.utf8.count > WorkbenchLimits.maxEditorLineBytes && WorkbenchLimits.isTooLargeForEditor(text)
     }
 
     /// Seçili raw tipine göre biçimlendirir; hata kullanıcıya gösterilir.

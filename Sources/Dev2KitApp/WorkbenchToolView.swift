@@ -175,7 +175,7 @@ struct WorkbenchToolView: View {
                     errorOffset: issueOffset,
                     onFocus: { workbench.focus(.input) },
                     limits: EditorLimits(
-                        onRejected: { workbench.reportLimit($0) },
+                        onRejected: { workbench.reportLimit($0.english) },
                         onLongLine: { workbench.acceptInputHiddenFromEditor($0) }
                     )
                 )
@@ -280,7 +280,7 @@ struct WorkbenchToolView: View {
                         onFocus: { workbench.focus(.output) },
                         limits: EditorLimits(
                             maxDisplayBytes: WorkbenchLimits.maxOutputBytes,
-                            onRejected: { workbench.reportLimit($0) },
+                            onRejected: { workbench.reportLimit($0.english) },
                             onLongLine: { _ in workbench.reportLimit(WorkbenchLimits.longLineEditMessage) }
                         )
                     )

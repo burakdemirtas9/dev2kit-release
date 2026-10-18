@@ -74,6 +74,44 @@ public enum WorkbenchLimits {
         return prefix + " … (\(TextStats.size(line.utf8.count)) line, truncated)"
     }
 
+    /// Editör kapısının reddetme nedeni. Mesajı ekran kendi dilinde yazar:
+    /// Workbench İngilizce, API Client Türkçe.
+    public enum Rejection: Equatable, Sendable {
+        case tooLarge(bytes: Int)
+        case tooManyLines(Int)
+        case atLineLimit
+        case longLineEdit
+
+        public var english: String {
+            switch self {
+            case .tooLarge(let bytes): return WorkbenchLimits.tooLargeMessage(bytes: bytes)
+            case .tooManyLines(let lines): return WorkbenchLimits.tooManyLinesMessage(lines: lines)
+            case .atLineLimit: return WorkbenchLimits.atLineLimitMessage
+            case .longLineEdit: return WorkbenchLimits.longLineEditMessage
+            }
+        }
+
+        public var turkish: String {
+            switch self {
+            case .tooLarge(let bytes):
+                return "Eklenmedi: metin \(TextStats.size(bytes)) olurdu; sınır \(TextStats.size(maxInputBytes))."
+            case .tooManyLines(let lines):
+                return "Eklenmedi: metin \(groupedTR(lines)) satır olurdu; sınır \(groupedTR(maxInputLines)) satır."
+            case .atLineLimit:
+                return "Eklenmedi: metin \(groupedTR(maxInputLines)) satır sınırında. Önce bir şey silin."
+            case .longLineEdit:
+                return "Eklenmedi: \(TextStats.size(maxEditorLineBytes))'tan uzun satır editörde düzenlenemez."
+            }
+        }
+    }
+
+    static func groupedTR(_ value: Int) -> String {
+        let number = NumberFormatter()
+        number.numberStyle = .decimal
+        number.locale = Locale(identifier: "tr_TR")
+        return number.string(from: NSNumber(value: value)) ?? "\(value)"
+    }
+
     // MARK: Mesajlar (Workbench arayüzü İngilizce)
 
     public static func tooLargeMessage(bytes: Int) -> String {

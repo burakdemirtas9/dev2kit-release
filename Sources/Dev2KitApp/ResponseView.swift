@@ -120,19 +120,29 @@ struct ResponseView: View {
 
                 switch selectedTab {
                 case .body:
-                    if search.isPresented {
-                        EditorSearchBar(search: search)
-                            .padding(.horizontal, 8)
-                            .padding(.bottom, 6)
+                    if !display.fitsEditor {
+                        OversizedTextNotice(
+                            title: "Yanıt gövdesi gösterilmiyor: \(TextStats.size(display.prettyText.utf8.count))",
+                            detail: "\(TextStats.size(WorkbenchLimits.maxOutputBytes))'tan büyük ya da \(TextStats.size(WorkbenchLimits.maxEditorLineBytes))'tan uzun satırlı metin (biçimlenemeyen sıkıştırılmış veri tek satırdır) editörde dev2kit'i dondurur. Gövde bellekte; kopyalayabilirsin."
+                        ) {
+                            CopyButton(text: display.prettyText, help: "Yanıt gövdesini kopyala")
+                        }
+                        .background(Theme.editorBackground)
+                    } else {
+                        if search.isPresented {
+                            EditorSearchBar(search: search)
+                                .padding(.horizontal, 8)
+                                .padding(.bottom, 6)
+                        }
+                        CodeEditor(
+                            text: .constant(display.prettyText),
+                            language: display.language,
+                            isEditable: false,
+                            folding: folding,
+                            search: search
+                        )
+                        .background(Theme.editorBackground)
                     }
-                    CodeEditor(
-                        text: .constant(display.prettyText),
-                        language: display.language,
-                        isEditable: false,
-                        folding: folding,
-                        search: search
-                    )
-                    .background(Theme.editorBackground)
                 case .preview:
                     if let previewKind = display.previewKind {
                         ResponsePreviewView(

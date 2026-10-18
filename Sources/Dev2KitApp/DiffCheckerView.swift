@@ -130,7 +130,7 @@ struct DiffCheckerView: View {
                 }
             } else {
                 CodeEditor(text: text, language: language, limits: EditorLimits(
-                    onRejected: { diff.reportLimit($0) },
+                    onRejected: { diff.reportLimit($0.english) },
                     onLongLine: { text.wrappedValue = $0 }
                 ))
                 .id("\(diff.document.id)-\(title)")

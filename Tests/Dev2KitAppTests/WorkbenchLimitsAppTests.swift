@@ -30,7 +30,7 @@ final class WorkbenchLimitsAppTests: XCTestCase {
 
     private func gate(_ recorder: Recorder) -> (CodeEditor.Coordinator, NSTextView) {
         let editor = CodeEditor(text: .constant(""), language: .plain, limits: EditorLimits(
-            onRejected: { recorder.rejected = $0 },
+            onRejected: { recorder.rejected = $0.english },
             onLongLine: { recorder.longLine = $0 }
         ))
         return (editor.makeCoordinator(), NSTextView())

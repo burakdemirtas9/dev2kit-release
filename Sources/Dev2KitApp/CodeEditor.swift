@@ -220,9 +220,9 @@ struct EditorLimits {
     /// Programla verilen metnin editöre yazılacağı en büyük boyut (çıktı
     /// editörü girdi sınırından büyük metni de GÖSTERİR, bkz. `maxOutputBytes`).
     var maxDisplayBytes: Int = WorkbenchLimits.maxInputBytes
-    /// Sonuç `maxBytes`'ı ya da `maxLines`'ı aşıyor: değişiklik yapılmadı
-    /// (kullanıcıya gösterilecek açıklama).
-    var onRejected: (String) -> Void
+    /// Sonuç `maxBytes`'ı ya da `maxLines`'ı aşıyor: değişiklik yapılmadı.
+    /// Mesajı çağıran kendi dilinde yazar (`Rejection.english` / `.turkish`).
+    var onRejected: (WorkbenchLimits.Rejection) -> Void
     /// Sonuçta `maxLineBytes`'tan uzun satır var: değişiklik editöre girmedi,
     /// tam sonuç metni verilir (ör. editörde göstermeden saklamak için).
     var onLongLine: (String) -> Void
@@ -446,7 +446,7 @@ struct CodeEditor: NSViewRepresentable {
             if WorkbenchLimits.mayExceed(utf16Length: resultLength, limit: limits.maxBytes) {
                 let bytes = WorkbenchLimits.resultingBytes(of: current, replacing: range, with: text)
                 if bytes > limits.maxBytes {
-                    limits.onRejected(WorkbenchLimits.tooLargeMessage(bytes: bytes))
+                    limits.onRejected(.tooLarge(bytes: bytes))
                     return false
                 }
             }
@@ -463,11 +463,11 @@ struct CodeEditor: NSViewRepresentable {
                         ? TextStats.lineCount(current.replacingCharacters(in: range, with: text) as NSString)
                         : currentLines
                     if resultLines > limits.maxLines {
-                        limits.onRejected(WorkbenchLimits.tooManyLinesMessage(lines: resultLines))
+                        limits.onRejected(.tooManyLines(resultLines))
                         return false
                     }
                     if grows, currentLines >= limits.maxLines {
-                        limits.onRejected(WorkbenchLimits.atLineLimitMessage)
+                        limits.onRejected(.atLineLimit)
                         return false
                     }
                 }
