@@ -172,3 +172,19 @@ public struct RequestModel: Codable, Identifiable, Hashable, Sendable {
         )
     }
 }
+
+public extension RequestModel {
+    /// Headers sekmesindeki sayı: kullanıcının AÇIK ve adı dolu başlıkları.
+    /// Motorun eklediği başlıklar (gövde tipinden Content-Type, Auth'tan
+    /// Authorization, User-Agent) tabloda olmadığı için sayılmaz; kapalı ve
+    /// adı boş satır gönderilmediği için sayılmaz (kullanıcı kararı, 2026-10-18).
+    var activeHeaderCount: Int { Self.activeCount(headers) }
+
+    /// Query sekmesindeki sayı: açık ve adı dolu parametreler (adresle
+    /// eşitlenen tablo, `QueryParamSync`).
+    var activeQueryParamCount: Int { Self.activeCount(queryParams) }
+
+    private static func activeCount(_ entries: [KeyValueEntry]) -> Int {
+        entries.filter { $0.enabled && !$0.key.trimmingCharacters(in: .whitespaces).isEmpty }.count
+    }
+}

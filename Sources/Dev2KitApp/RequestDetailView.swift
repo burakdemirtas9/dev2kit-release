@@ -274,7 +274,8 @@ struct RequestDetailView: View {
             EditorTabPicker(
                 selection: $state.editorTab,
                 tabs: EditorTab.available(isTokenFactory: isTokenFactory),
-                marked: request.body.hasContent ? [.body] : []
+                marked: request.body.hasContent ? [.body] : [],
+                counts: [.headers: request.activeHeaderCount, .params: request.activeQueryParamCount]
             )
             .padding(10)
 

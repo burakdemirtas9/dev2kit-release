@@ -12,17 +12,28 @@ struct EditorTabPicker: View {
     let tabs: [EditorTab]
     /// İçeriği olan sekmeler: yanında sarı nokta.
     let marked: Set<EditorTab>
+    /// Sekmenin yanındaki sayı (ör. Headers'ta açık başlık sayısı); 0 gösterilmez.
+    var counts: [EditorTab: Int] = [:]
 
     var body: some View {
         HStack(spacing: 2) {
             ForEach(tabs) { tab in
                 let isSelected = tab == selection
                 let isMarked = marked.contains(tab)
+                let count = counts[tab] ?? 0
                 Button {
                     selection = tab
                 } label: {
                     HStack(spacing: 5) {
                         Text(tab.rawValue)
+                        if count > 0 {
+                            Text("\(count)")
+                                .font(.tinyText.weight(.semibold).monospacedDigit())
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 1)
+                                .foregroundStyle(isSelected ? Theme.accent : Color.secondary)
+                                .background(isSelected ? Color.white : Color.primary.opacity(0.12), in: Capsule())
+                        }
                         if isMarked {
                             Circle()
                                 .fill(Theme.warning)
@@ -36,9 +47,9 @@ struct EditorTabPicker: View {
                     .contentShape(RoundedRectangle(cornerRadius: 6))
                 }
                 .buttonStyle(.plain)
-                .help(isMarked ? "\(tab.rawValue) — has content" : tab.rawValue)
+                .help(count > 0 ? "\(tab.rawValue) — \(count) etkin" : isMarked ? "\(tab.rawValue) — has content" : tab.rawValue)
                 .accessibilityLabel(tab.rawValue)
-                .accessibilityValue(isMarked ? "içerik var" : "")
+                .accessibilityValue(count > 0 ? "\(count) etkin" : isMarked ? "içerik var" : "")
                 .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
             }
         }
