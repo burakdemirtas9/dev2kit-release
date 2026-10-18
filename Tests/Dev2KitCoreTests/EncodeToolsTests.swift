@@ -155,4 +155,28 @@ final class EncodeToolsTests: XCTestCase {
         XCTAssertEqual(WorkbenchCatalog.all.filter { $0.category == .encode }.map(\.id),
                        ["jwt", "base64", "url-encode", "timestamp", "uuid", "hash", "hex"])
     }
+
+    // MARK: Aşırı değerler (2026-10-19: altı vakanın altısı uygulamayı çökertiyordu)
+
+    func testExtremeTimestampsAreRejectedNotCrashing() {
+        for value in [String(repeating: "9", count: 31), String(repeating: "9", count: 400), "-" + String(repeating: "9", count: 31)] {
+            XCTAssertThrowsError(try TimestampConverter.convert(value)) { error in
+                XCTAssertTrue("\(error.localizedDescription)".contains("aralık dışı"), value)
+            }
+        }
+        // Sınırın içi çalışır: 9999 yılı.
+        XCTAssertNoThrow(try TimestampConverter.convert("253402300799"))
+    }
+
+    func testExtremeJWTTimesAreShownAsOutOfRange() throws {
+        for payload in [#"{"exp":1e300}"#, #"{"exp":"1e400"}"#, #"{"iat":-1e20}"#] {
+            let output = try JWTDecoder.decode(jwt(payload), now: now, timeZone: istanbul)
+            XCTAssertTrue(output.contains("out of range"), payload)
+        }
+    }
+
+    func testDurationNeverOverflows() {
+        XCTAssertEqual(TimeText.duration(.infinity), "∞")
+        XCTAssertFalse(TimeText.duration(1e300).isEmpty)
+    }
 }

@@ -20,6 +20,10 @@ public enum JWTDecoder {
                      "", "// Payload", try JSONTool.format(payload.text, options: WorkbenchOptions(indentation: indentation(indent)))]
         let times = timeClaims.compactMap { claim -> String? in
             guard let seconds = number(payload.object[claim]) else { return nil }
+            // Aşırı değer (1e300, -1e20) çökertmesin: açıklamayla gösterilir.
+            guard TimeText.isRepresentable(seconds) else {
+                return "// \(claim.padding(toLength: 9, withPad: " ", startingAt: 0)) out of range: \(seconds) — not a valid time"
+            }
             let date = Date(timeIntervalSince1970: seconds)
             var line = "// \(claim.padding(toLength: 9, withPad: " ", startingAt: 0)) \(TimeText.local(date, timeZone)) · \(TimeText.utc(date)) · \(TimeText.relative(date, now: now))"
             if claim == "exp", date <= now { line += " — EXPIRED" }

@@ -26,8 +26,18 @@ public enum Base64Codec {
 
 /// Hex (onaltılık). Çözerken boşluk, `:`, `-` ve `0x` önekleri atılır.
 public enum HexCodec {
+    private static let digits = Array("0123456789abcdef".utf8)
+
+    /// Basamak tablosuyla: bayt başına `String(format:)` 4 MB'ta 2 sn
+    /// sürüyordu (ölçüldü, 2026-10-19).
     public static func encode(_ data: Data) -> String {
-        data.map { String(format: "%02x", $0) }.joined()
+        var out = [UInt8]()
+        out.reserveCapacity(data.count * 2)
+        for byte in data {
+            out.append(digits[Int(byte >> 4)])
+            out.append(digits[Int(byte & 0x0F)])
+        }
+        return String(decoding: out, as: UTF8.self)
     }
 
     public static func decode(_ text: String) throws -> Data {

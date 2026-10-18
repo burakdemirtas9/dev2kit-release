@@ -24,13 +24,18 @@ public enum TimestampConverter {
 
     static func parse(_ value: String, timeZone: TimeZone) throws -> (Date, String) {
         if let number = Double(value), value.allSatisfy({ $0.isNumber || $0 == "." || $0 == "-" }) {
-            let digits = value.split(separator: ".")[0].filter(\.isNumber).count
+            let digits = value.split(separator: ".").first.map { $0.filter(\.isNumber).count } ?? 0
+            let (seconds, unit): (Double, String)
             switch digits {
-            case ...10: return (Date(timeIntervalSince1970: number), "seconds")
-            case ...13: return (Date(timeIntervalSince1970: number / 1_000), "milliseconds")
-            case ...16: return (Date(timeIntervalSince1970: number / 1_000_000), "microseconds")
-            default: return (Date(timeIntervalSince1970: number / 1_000_000_000), "nanoseconds")
+            case ...10: (seconds, unit) = (number, "seconds")
+            case ...13: (seconds, unit) = (number / 1_000, "milliseconds")
+            case ...16: (seconds, unit) = (number / 1_000_000, "microseconds")
+            default: (seconds, unit) = (number / 1_000_000_000, "nanoseconds")
             }
+            guard TimeText.isRepresentable(seconds) else {
+                throw WorkbenchIssue(message: "Zaman aralık dışı: \"\(value.prefix(40))\" (0001–9999 yılları arası gösterilebilir)")
+            }
+            return (Date(timeIntervalSince1970: seconds), unit)
         }
         for options: ISO8601DateFormatter.Options in [[.withInternetDateTime, .withFractionalSeconds], [.withInternetDateTime]] {
             let formatter = ISO8601DateFormatter()
