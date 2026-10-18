@@ -282,7 +282,16 @@ struct RequestDetailView: View {
             // Token sekmesi açıkken normal bir isteğe geçilirse Headers'a düşülür.
             switch appState.editorTab == .token && !isTokenFactory ? .headers : appState.editorTab {
             case .headers:
-                KeyValueEditor(entries: $request.headers, keyPlaceholder: "Header-Adi", valuePlaceholder: "değer veya {{secret:isim}}")
+                KeyValueEditor(
+                    entries: $request.headers,
+                    keyPlaceholder: "Header-Adi",
+                    valuePlaceholder: "değer veya {{secret:isim}}",
+                    keyNote: { key in
+                        Dev2KitIdentity.isUserAgent(key)
+                            ? "Yok sayılır: dev2kit her istekte kendi User-Agent'ını (\(Dev2KitIdentity.userAgent)) gönderir, değiştirilemez. Sunucu loglarında test trafiği ayırt edilsin diye."
+                            : nil
+                    }
+                )
             case .body:
                 BodyEditor(body: $request.body)
             case .auth:

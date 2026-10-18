@@ -419,7 +419,9 @@ public final class RequestEngine: @unchecked Sendable {
         var request = URLRequest(url: url)
         request.httpMethod = model.method.rawValue
 
-        for entry in model.headers where entry.enabled && !entry.key.isEmpty {
+        // Kullanıcının User-Agent'ı yok sayılır: dev2kit kendi kimliğini
+        // gönderir, ezilemez (Dev2KitIdentity).
+        for entry in model.headers where entry.enabled && !entry.key.isEmpty && !Dev2KitIdentity.isUserAgent(entry.key) {
             try setHeader(try resolver.resolve(entry.value), named: try resolver.resolve(entry.key), on: &request)
         }
 
@@ -448,6 +450,8 @@ public final class RequestEngine: @unchecked Sendable {
         }
 
         try attachBody(to: &request, model: model, resolver: resolver)
+        // En sonda: Auth (API key başlığı) dahil hiçbir yol User-Agent'ı ezemez.
+        Dev2KitIdentity.stamp(&request)
         return request
     }
 

@@ -9,7 +9,9 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-VERSION="0.1.0"
+# Sürüm tek yerde: Dev2KitIdentity.version (User-Agent da oradan).
+VERSION="$(sed -n 's/.*static let version = "\(.*\)".*/\1/p' Sources/Dev2KitCore/Networking/Dev2KitIdentity.swift)"
+VERSION="${VERSION:-0.0.0}"
 BUILD_NUMBER="$(git rev-list --count HEAD 2>/dev/null || echo 1)"
 APP="build/dev2kit.app"
 ENTITLEMENTS="Sources/Dev2KitApp/Resources/Dev2Kit.entitlements"

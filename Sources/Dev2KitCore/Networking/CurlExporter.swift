@@ -31,6 +31,10 @@ public enum CurlExporter {
 
         var headers = request.allHTTPHeaderFields ?? [:]
         headers = headers.filter { $0.key.caseInsensitiveCompare("Content-Length") != .orderedSame }
+        // dev2kit'in User-Agent'ı dışa aktarılmaz: komut curl ile/başka yerde
+        // çalışır, o trafiği "dev2kit" diye etiketlemek logda ayırt etme
+        // amacına ters olurdu (Dev2KitIdentity).
+        headers = headers.filter { !Dev2KitIdentity.isUserAgent($0.key) }
 
         // Basic auth curl'de -u ile daha okunur; base64'lü header yerine onu kullan.
         if case .basic(let username, let password) = model.auth {

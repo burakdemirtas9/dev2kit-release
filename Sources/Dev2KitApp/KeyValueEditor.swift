@@ -12,6 +12,9 @@ struct KeyValueEditor: View {
     let valuePlaceholder: String
     /// Değer alanının sınırı: başlık/parametre 8 KB, form ve environment daha büyük.
     var valueLimit: InputLimits.Field = .headerValue
+    /// Anahtara göre satır notu: verilen satır soluklaşır ve yanında uyarı
+    /// çıkar (ör. başlıklarda User-Agent: dev2kit kendi değerini gönderir).
+    var keyNote: ((String) -> String?)? = nil
 
     @State private var isBulk = false
     @State private var bulkText = ""
@@ -188,7 +191,8 @@ struct KeyValueEditor: View {
     /// görünürlük farklı): taslak satıra dönüşünce odak korunur.
     private func tableRow(_ row: RowRef, keyWidth: CGFloat) -> some View {
         let isDraft = row.index == nil
-        let enabled = isDraft || entry(row)?.enabled != false
+        let note = entry(row).flatMap { keyNote?($0.key) }
+        let enabled = isDraft || (entry(row)?.enabled != false && note == nil)
         return HStack(spacing: 0) {
             Toggle("", isOn: binding(row, \.enabled))
                 .labelsHidden()
@@ -202,7 +206,17 @@ struct KeyValueEditor: View {
                 .font(.system(.body, design: .monospaced))
                 .inputLimit(.key)
                 .padding(.horizontal, 8)
+                .padding(.trailing, note == nil ? 0 : 18)
                 .frame(width: keyWidth, alignment: .leading)
+                .overlay(alignment: .trailing) {
+                    if let note {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(Theme.warning)
+                            .padding(.trailing, 6)
+                            .help(note)
+                            .accessibilityLabel(note)
+                    }
+                }
             TemplateTextField(placeholder: isDraft ? valuePlaceholder : "", text: binding(row, \.value),
                               limit: valueLimit, bordered: false)
                 .padding(.horizontal, 8)

@@ -66,6 +66,7 @@ public struct PostmanAPIClient: Sendable {
 
     private func get(path: String, apiKey: String) async throws -> Data {
         var request = URLRequest(url: baseURL.appendingPathComponent(path))
+        Dev2KitIdentity.stamp(&request)
         let policy = hostPolicy()
         if let violation = policy.violation(for: request.url) {
             throw APIError.blockedByPolicy(violation)

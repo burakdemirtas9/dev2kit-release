@@ -178,7 +178,8 @@ public extension RequestModel {
     /// Motorun eklediği başlıklar (gövde tipinden Content-Type, Auth'tan
     /// Authorization, User-Agent) tabloda olmadığı için sayılmaz; kapalı ve
     /// adı boş satır gönderilmediği için sayılmaz (kullanıcı kararı, 2026-10-18).
-    var activeHeaderCount: Int { Self.activeCount(headers) }
+    /// Kullanıcının User-Agent satırı yok sayıldığı için sayılmaz.
+    var activeHeaderCount: Int { Self.activeCount(headers.filter { !Dev2KitIdentity.isUserAgent($0.key) }) }
 
     /// Query sekmesindeki sayı: açık ve adı dolu parametreler (adresle
     /// eşitlenen tablo, `QueryParamSync`).

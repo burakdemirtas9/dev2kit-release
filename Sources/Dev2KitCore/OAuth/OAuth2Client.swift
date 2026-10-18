@@ -145,6 +145,7 @@ public enum OAuth2Client {
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        Dev2KitIdentity.stamp(&request)
         request.httpBody = Data((components.percentEncodedQuery ?? "").utf8)
         return request
     }
