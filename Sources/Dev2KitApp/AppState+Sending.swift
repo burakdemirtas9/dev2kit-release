@@ -90,7 +90,8 @@ extension AppState {
                     usedVariables: usedTokens.map(\.variable),
                     afterRefresh: refreshingTokens
                 )
-                let display = await Task.detached { AppState.makeDisplay(response) }.value
+                // Büyük yığın: sunucudan gelen derin gövde yığını taşırmasın (BackgroundWork).
+                let display = await BackgroundWork.run { AppState.makeDisplay(response) }
                 try Task.checkCancellation()
                 self.setResponse(.success(display), for: id)
                 // Referans noktası: "en son bunu test ettim".

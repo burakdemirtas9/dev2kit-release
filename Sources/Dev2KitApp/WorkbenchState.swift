@@ -364,9 +364,10 @@ final class WorkbenchState {
                 try? await Task.sleep(for: Self.debounce)
                 if Task.isCancelled { return }
             }
-            let result = await Task.detached(priority: .userInitiated) {
+            // Büyük yığın: derin girdide yığın taşmasın (BackgroundWork).
+            let result = await BackgroundWork.run {
                 Self.compute(text: text, tool: tool, action: refreshOutput ? action : nil, options: options, wantsTree: wantsTree)
-            }.value
+            }
             guard !Task.isCancelled else { return }
             self?.apply(result, generation: current, refreshOutput: refreshOutput)
         }

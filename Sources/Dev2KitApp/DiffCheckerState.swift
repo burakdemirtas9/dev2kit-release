@@ -189,9 +189,10 @@ final class DiffCheckerState {
                 try? await Task.sleep(for: Self.debounce)
                 if Task.isCancelled { return }
             }
-            let result = await Task.detached(priority: .userInitiated) {
+            // Büyük yığın: derin girdide yığın taşmasın (BackgroundWork).
+            let result = await BackgroundWork.run {
                 DiffChecker.compare(doc.left, doc.right, language: doc.language, options: doc.options)
-            }.value
+            }
             guard !Task.isCancelled, let self, current == self.generation else { return }
             self.result = result
             self.currentChange = nil

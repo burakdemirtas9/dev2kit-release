@@ -20,6 +20,24 @@ final class WorkbenchStateTests: XCTestCase {
         XCTAssertEqual(state.outputStats.lines, 6)
     }
 
+    /// 2026-10-18: 500 seviyeli girdi "Sort keys" ve XML → JSON'da uygulamayı
+    /// çökertiyordu (iş 512 KB yığınlı thread'deydi). Artık `BackgroundWork`.
+    func testDeeplyNestedInputDoesNotCrash() async {
+        // Açık araç hatırlanıyor: sonraki testler JSON'la başlasın.
+        defer { UserDefaults.standard.removeObject(forKey: "workbenchTool") }
+        let state = WorkbenchState()
+        state.select(toolID: "json")
+        state.update(options: WorkbenchOptions(sortKeys: true))
+        state.input = String(repeating: #"{"a":"#, count: 500) + "1" + String(repeating: "}", count: 500)
+        await settle(state) { !state.output.isEmpty }
+        XCTAssertFalse(state.output.isEmpty)
+
+        state.select(toolID: "xml-to-json")
+        state.input = String(repeating: "<a>", count: 500) + "1" + String(repeating: "</a>", count: 500)
+        await settle(state) { !state.output.isEmpty }
+        XCTAssertTrue(state.output.hasPrefix("{"))
+    }
+
     func testTabsKeepTheirOwnInputAndAction() {
         let state = WorkbenchState()
         state.input = "birinci"
