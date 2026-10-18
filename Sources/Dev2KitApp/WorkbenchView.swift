@@ -51,19 +51,35 @@ struct WorkbenchSidebar: View {
                     let inCategory = tools.filter { $0.category == category }
                     if category == .compare, WorkbenchCatalog.diffCheckerMatches(workbench.searchQuery) {
                         Section(category.title) {
-                            Label("Diff Checker", systemImage: "arrow.left.arrow.right.square")
+                            ToolLabel(title: "Diff Checker", symbol: "arrow.left.arrow.right.square")
                                 .tag(WorkbenchCatalog.diffCheckerID)
                         }
                     } else if !inCategory.isEmpty {
                         Section(category.title) {
                             ForEach(inCategory) { tool in
-                                Label(tool.title, systemImage: tool.symbol)
+                                ToolLabel(title: tool.title, symbol: tool.symbol)
                                     .tag(tool.id)
                             }
                         }
                     }
                 }
             }
+        }
+    }
+}
+
+/// Araç satırı. Simge rengi açıkça veriliyor: kenar çubuğu listesi simgeleri
+/// sistem vurgu rengiyle (mavi) boyuyor, uygulamanın `.tint`'ini dikkate
+/// almıyordu; uygulama genelinde vurgu mor (docs/TASARIM.md §2).
+private struct ToolLabel: View {
+    let title: String
+    let symbol: String
+
+    var body: some View {
+        Label {
+            Text(title)
+        } icon: {
+            Image(systemName: symbol).foregroundStyle(Theme.purple)
         }
     }
 }
