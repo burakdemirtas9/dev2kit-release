@@ -246,6 +246,9 @@ struct CodeEditor: NSViewRepresentable {
     /// Kullanıcı editöre tıklayınca/seçim değişince çağrılır. Workbench ⌘F'nin
     /// hangi bölmede (girdi/çıktı) arama açacağını buradan bilir.
     var onFocus: (() -> Void)?
+    /// Metin görünümünün kimliği: menü komutu klavye odağındaki editörü
+    /// tanısın diye (API Client ⌘F, `AppState.findInAPIClient`).
+    var paneIdentifier: String?
     /// Verilirse kullanıcının değişiklikleri bu sınırlarla denetlenir.
     var limits: EditorLimits?
     /// İmleç değişince (satır, sütun; 1'den başlar). Workbench alt bilgisi.
@@ -267,6 +270,7 @@ struct CodeEditor: NSViewRepresentable {
         // Katlı bölge özetini ("… 30 keys") çizen yerleşim yöneticisi.
         textView.textContainer?.replaceLayoutManager(FoldingLayoutManager())
         textView.delegate = context.coordinator
+        textView.identifier = paneIdentifier.map { NSUserInterfaceItemIdentifier(rawValue: $0) }
         textView.font = EditorZoom.font(fontSize)
         context.coordinator.fontSize = fontSize
         textView.isRichText = false

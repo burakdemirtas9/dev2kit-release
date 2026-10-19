@@ -142,6 +142,7 @@ struct ResponseView: View {
                             isEditable: false,
                             folding: folding,
                             search: search,
+                            paneIdentifier: AppState.CodeEditorPane.response.rawValue,
                             onCursorChange: { cursor = ($0, $1) }
                         )
                         .background(Theme.editorBackground)

@@ -153,6 +153,26 @@ final class AppState {
         responseSearchRequest += 1
     }
 
+    /// API Client'ın kod editörleri; editör kimliği olarak metin görünümüne
+    /// yazılır (`CodeEditor.paneIdentifier`), ⌘F klavye odağından okur.
+    enum CodeEditorPane: String {
+        case body = "dev2kit.editor.body"
+        case response = "dev2kit.editor.response"
+    }
+
+    /// ⌘F API Client'ta: klavye odağı gövde ya da yanıt editöründeyse orada,
+    /// değilse istek listesinde arar (kullanıcı isteği, 2026-10-20: yanıta
+    /// tıklayıp ⌘F). Tahmin yok: odaktaki görünümün kimliğine bakılır; bir
+    /// metin alanı (başlık hücresi, arama kutusu) editör sayılmaz.
+    func findInAPIClient(firstResponder: NSResponder?) {
+        let identifier = (firstResponder as? NSTextView)?.identifier?.rawValue
+        switch identifier.flatMap(CodeEditorPane.init(rawValue:)) {
+        case .body: openBodySearch()
+        case .response: openResponseSearch()
+        case nil: focusSearch()
+        }
+    }
+
     /// İstek düzenleyicide açık sekme (⌘1…⌘4 ile de değişir).
     var editorTab: EditorTab = .headers
 

@@ -100,15 +100,19 @@ struct Dev2KitApp: App {
         // Find, macOS'ta Düzen menüsünde yapıştırma grubundan sonra durur.
         CommandGroup(after: .pasteboard) {
             Divider()
-            // ⌘F her modda arar: API Client'ta istek listesinde, Workbench'te
-            // odaktaki editörde (son tıklanan girdi/çıktı).
-            Button(appState.isAPIClient ? "İstek Ara" : "Find") {
-                if appState.isAPIClient { appState.focusSearch() } else { workbench.requestSearch() }
+            // ⌘F her modda odaktaki yerde arar: API Client'ta gövde ya da yanıt
+            // editörüne tıklandıysa orada, değilse istek listesinde;
+            // Workbench'te son tıklanan girdi/çıktıda.
+            Button(appState.isAPIClient ? "Ara" : "Find") {
+                if appState.isAPIClient {
+                    appState.findInAPIClient(firstResponder: NSApp.keyWindow?.firstResponder)
+                } else {
+                    workbench.requestSearch()
+                }
             }
             .keyboardShortcut("f", modifiers: .command)
-            // ⌘F zaten sidebar aramasında. Editör aramaları iki AYRI komut:
-            // gövde ve yanıt birbirinden bağımsız arandığı için "odaktaki
-            // editörde ara" gibi bir tahmin yapmak yanlış panele yazdırır.
+            // Editöre tıklamadan da açılabilsin diye iki ayrı komut daha:
+            // gövde ve yanıt birbirinden bağımsız aranır.
             Button("Gövdede Ara") {
                 appState.openBodySearch()
             }

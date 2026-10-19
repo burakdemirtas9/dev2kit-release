@@ -189,6 +189,7 @@ struct BodyEditor: View {
                         language: CodeLanguage(rawKind.wrappedValue),
                         folding: folding,
                         search: search,
+                        paneIdentifier: AppState.CodeEditorPane.body.rawValue,
                         limits: EditorLimits(
                             onRejected: { formatError = $0.turkish },
                             onLongLine: { rawContent.wrappedValue = $0 }
