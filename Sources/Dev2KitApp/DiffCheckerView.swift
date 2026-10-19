@@ -123,12 +123,15 @@ struct DiffCheckerView: View {
                     CopyButton(text: text.wrappedValue, help: "Copy")
                     Button("Clear") { text.wrappedValue = "" }.controlSize(.small)
                 }
+                .background(Theme.editorBackground)
             } else {
                 CodeEditor(text: text, language: language, limits: EditorLimits(
                     onRejected: { diff.reportLimit($0.english) },
                     onLongLine: { text.wrappedValue = $0 }
                 ), focusRequest: focusRequest)
                 .id("\(diff.document.id)-\(title)")
+                // Workbench'teki editörlerle aynı zemin (TASARIM: editör zemini).
+                .background(Theme.editorBackground)
                 .overlay(alignment: .topLeading) {
                     if text.wrappedValue.isEmpty {
                         SampleInputHint(sample: sample, note: "Paste the \(title.lowercased()) side here.", leading: 0)
