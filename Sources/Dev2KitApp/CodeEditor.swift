@@ -264,6 +264,8 @@ struct CodeEditor: NSViewRepresentable {
     func makeNSView(context: Context) -> NSScrollView {
         let scrollView = NSTextView.scrollableTextView()
         let textView = scrollView.documentView as! NSTextView
+        // Katlı bölge özetini ("… 30 keys") çizen yerleşim yöneticisi.
+        textView.textContainer?.replaceLayoutManager(FoldingLayoutManager())
         textView.delegate = context.coordinator
         textView.font = EditorZoom.font(fontSize)
         context.coordinator.fontSize = fontSize
@@ -608,8 +610,11 @@ struct CodeEditor: NSViewRepresentable {
         }
 
         func collapseAll(in textView: NSTextView) {
-            // Yalnızca en dıştakiler: içerdekileri kapatmanın görünür etkisi yok.
-            foldedLines = Set(FoldRegion.outermost(regions).map(\.openLine))
+            // TÜM bölgeler (iç içe olanlar dahil): dış blok açılınca içindekiler
+            // katlı kalır, kullanıcı adım adım açar (kullanıcı isteği,
+            // 2026-10-19; eskiden yalnızca en dıştakiler katlanıyordu ve tek
+            // açışta her şey açılıyordu).
+            foldedLines = Set(regions.map(\.openLine))
             applyFolding(textView)
         }
 
@@ -627,12 +632,18 @@ struct CodeEditor: NSViewRepresentable {
         /// zorluyordu. Tek satırlık (sıkıştırılmış) metinde süre kareyle
         /// büyüyordu: 512 KB'ta 3 sn, 5 MB'ta 10 dakikadan uzun donma.
         private func applyFolding(_ textView: NSTextView) {
-            let hidden = regions
-                .filter { foldedLines.contains($0.openLine) }
-                .map(\.hiddenRange)
+            // Yalnızca görünür (başka katlının içinde olmayan) katlı bölgeler
+            // gizlenir ve özet alır: iç içe olanlar dıştakiyle zaten gizli.
+            let visibleFolded = FoldRegion.outermost(regions.filter { foldedLines.contains($0.openLine) })
+            let hidden = visibleFolded.map(\.hiddenRange)
             gutter?.foldedLines = foldedLines
             controller?.hasFolded = !foldedLines.isEmpty
             guard hidden != foldingDelegate.hiddenRanges else { return }
+            let text = textView.string as NSString
+            foldingDelegate.placeholders = Dictionary(uniqueKeysWithValues: visibleFolded.map {
+                ($0.hiddenRange.location, $0.summary(in: text))
+            })
+            foldingDelegate.placeholderFont = NSFont.monospacedSystemFont(ofSize: max(fontSize - 2, 9), weight: .regular)
             foldingDelegate.hiddenRanges = hidden
 
             guard let layoutManager = textView.layoutManager else { return }

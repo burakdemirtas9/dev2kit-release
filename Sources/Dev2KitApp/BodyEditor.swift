@@ -12,6 +12,8 @@ struct BodyEditor: View {
     @Environment(AppState.self) private var appState
     @Binding var body_: RequestBody
     @State private var formatError: String?
+    /// Gövdedeki imleç (satır, sütun): alt bilgide (Workbench ile ortak).
+    @State private var cursor: (line: Int, column: Int)?
     /// Tip başına son içerik. Yalnızca bu istek görünürken yaşar; diske
     /// yazılmaz — kaydedilen gövde her zaman o an seçili olandır.
     @State private var drafts = BodyDrafts()
@@ -181,29 +183,43 @@ struct BodyEditor: View {
                 }
                 .background(Theme.editorBackground)
             } else {
-                CodeEditor(
-                    text: rawContent,
-                    language: CodeLanguage(rawKind.wrappedValue),
-                    folding: folding,
-                    search: search,
-                    limits: EditorLimits(
-                        onRejected: { formatError = $0.turkish },
-                        onLongLine: { rawContent.wrappedValue = $0 }
+                VStack(spacing: 0) {
+                    CodeEditor(
+                        text: rawContent,
+                        language: CodeLanguage(rawKind.wrappedValue),
+                        folding: folding,
+                        search: search,
+                        limits: EditorLimits(
+                            onRejected: { formatError = $0.turkish },
+                            onLongLine: { rawContent.wrappedValue = $0 }
+                        ),
+                        onCursorChange: { cursor = ($0, $1) }
                     )
-                )
-                    .background(Theme.editorBackground)
-                    .overlay(alignment: .topLeading) {
-                        if rawContent.wrappedValue.isEmpty {
-                            Text("{ \"ornek\": \"{{degisken}} destekler\" }")
-                                .foregroundStyle(.tertiary)
-                                .font(.system(.body, design: .monospaced))
-                                // Şeridin altında kalmasın: genişliği editör bildiriyor.
-                                .padding(.top, 8)
-                                .padding(.leading, folding.gutterWidth + 5)
-                                .allowsHitTesting(false)
+                        .background(Theme.editorBackground)
+                        .overlay(alignment: .topLeading) {
+                            if rawContent.wrappedValue.isEmpty {
+                                Text("{ \"ornek\": \"{{degisken}} destekler\" }")
+                                    .foregroundStyle(.tertiary)
+                                    .font(.system(.body, design: .monospaced))
+                                    // Şeridin altında kalmasın: genişliği editör bildiriyor.
+                                    .padding(.top, 8)
+                                    .padding(.leading, folding.gutterWidth + 5)
+                                    .allowsHitTesting(false)
+                            }
+                        }
+                        .onChange(of: rawContent.wrappedValue) { formatError = nil }
+                    EditorFooter {
+                        if let cursor, !body_.rawContent.isEmpty {
+                            Text("Satır \(cursor.line), Sütun \(cursor.column)")
+                        }
+                    } trailing: {
+                        // Yazarken her tuşta: karakter sayımı büyük gövdede pahalı,
+                        // yalnızca boyut ve satır.
+                        if !body_.rawContent.isEmpty {
+                            Text("\(Self.size(body_.rawContent.utf8.count)) · \(TextStats.lineCount(body_.rawContent)) satır")
                         }
                     }
-                    .onChange(of: rawContent.wrappedValue) { formatError = nil }
+                }
             }
         case .urlEncoded, .formData:
             KeyValueEditor(
@@ -213,6 +229,10 @@ struct BodyEditor: View {
                 valueLimit: .formValue
             )
         }
+    }
+
+    static func size(_ bytes: Int) -> String {
+        bytes < 1_000 ? "\(bytes) bayt" : TextStats.size(bytes)
     }
 
     /// Gövde editörde gösterilemeyecek kadar büyük ya da uzun satırlı mı

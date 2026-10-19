@@ -85,6 +85,17 @@ public struct TextStats: Equatable, Sendable {
         return String(format: value < 10 ? "%.1f %@" : "%.0f %@", locale: Locale(identifier: "en_US"), value, units[unit])
     }
 
+    /// API Client (Türkçe arayüz): "1.2 KB · 34 satır · 1.234 karakter".
+    public var summaryTR: String {
+        guard bytes > 0 else { return "" }
+        let number = NumberFormatter()
+        number.numberStyle = .decimal
+        number.locale = Locale(identifier: "tr_TR")
+        func format(_ value: Int) -> String { number.string(from: NSNumber(value: value)) ?? "\(value)" }
+        let size = bytes < 1_000 ? "\(bytes) bayt" : Self.size(bytes)
+        return "\(size) · \(format(lines)) satır · \(format(characters)) karakter"
+    }
+
     /// "1.2 KB · 34 lines · 1,234 chars"
     public var summary: String {
         guard bytes > 0 else { return "" }

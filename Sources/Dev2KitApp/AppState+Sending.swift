@@ -249,6 +249,9 @@ extension AppState {
         /// tek satırlık büyük yanıt (düz metin, bozuk JSON) editörü
         /// donduruyordu; o durumda yalnızca kopyalanır. Bir kez, burada.
         var fitsEditor = true
+        /// Gövdenin boyutu/satırı/karakteri (alt bilgi). Büyük yanıtta her
+        /// çizimde sayılmasın diye burada, arka planda bir kez.
+        var stats: TextStats = .empty
     }
 
     /// Ana thread dışında çalışır: büyük gövdeleri biçimlendirmek pahalıdır.
@@ -264,7 +267,8 @@ extension AppState {
             prettyText: pretty,
             language: CodeLanguage(kind),
             previewKind: ResponsePreview.kind(contentType: contentType, body: response.body),
-            fitsEditor: !WorkbenchLimits.isTooLargeForEditor(pretty, maxBytes: WorkbenchLimits.maxOutputBytes)
+            fitsEditor: !WorkbenchLimits.isTooLargeForEditor(pretty, maxBytes: WorkbenchLimits.maxOutputBytes),
+            stats: TextStats(pretty)
         )
     }
 

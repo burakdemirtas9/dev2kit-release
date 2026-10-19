@@ -12,6 +12,8 @@ struct ResponseView: View {
     @State private var showingSize = false
     @State private var copiedCorrelationID = false
     @StateObject private var folding = CodeFoldingController()
+    /// Yanıtta tıklanan yer (satır, sütun): alt bilgide (Workbench ile ortak).
+    @State private var cursor: (line: Int, column: Int)?
     /// Yanıtın KENDİ araması; istek gövdesindeki aramadan bağımsızdır.
     @StateObject private var search = EditorSearchController()
 
@@ -139,9 +141,17 @@ struct ResponseView: View {
                             language: display.language,
                             isEditable: false,
                             folding: folding,
-                            search: search
+                            search: search,
+                            onCursorChange: { cursor = ($0, $1) }
                         )
                         .background(Theme.editorBackground)
+                        EditorFooter {
+                            if let cursor, !display.prettyText.isEmpty {
+                                Text("Satır \(cursor.line), Sütun \(cursor.column)")
+                            }
+                        } trailing: {
+                            Text(display.stats.summaryTR)
+                        }
                     }
                 case .preview:
                     if let previewKind = display.previewKind {

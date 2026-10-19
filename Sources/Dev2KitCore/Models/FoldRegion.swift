@@ -70,4 +70,51 @@ public struct FoldRegion: Equatable, Sendable, Identifiable {
         guard length > 0 else { return nil }
         return NSRange(location: openEnd, length: length)
     }
+
+    /// Katlı bölgenin özeti (açılışın arkasında gösterilir): nesnede anahtar,
+    /// dizide eleman sayısı (doğrudan çocuklar, iç içe olanlar sayılmaz);
+    /// XML/HTML'de gizli satır sayısı. Kullanıcı isteği (2026-10-19).
+    public func summary(in characters: NSString) -> String {
+        switch kind {
+        case .object:
+            let count = Self.directChildCount(in: characters, from: hiddenRange.location)
+            return "… \(count) \(count == 1 ? "key" : "keys")"
+        case .array:
+            let count = Self.directChildCount(in: characters, from: hiddenRange.location)
+            return "… \(count) \(count == 1 ? "item" : "items")"
+        case .element:
+            let lines = max(closeLine - openLine - 1, 0)
+            return "… \(lines) \(lines == 1 ? "line" : "lines")"
+        }
+    }
+
+    /// Açılış parantezinden sonraki ilk düzeydeki eleman sayısı: derinlik 0'da
+    /// virgüller + 1 (içerik varsa). Dizgi içindeki ayraçlar sayılmaz.
+    static func directChildCount(in text: NSString, from start: Int) -> Int {
+        var depth = 0
+        var commas = 0
+        var hasContent = false
+        var inString = false
+        var escaped = false
+        var index = start
+        while index < text.length {
+            let unit = text.character(at: index)
+            index += 1
+            if inString {
+                if escaped { escaped = false } else if unit == 92 { escaped = true } else if unit == 34 { inString = false }
+                continue
+            }
+            switch unit {
+            case 34: inString = true; hasContent = true
+            case 123, 91: depth += 1; hasContent = true      // { [
+            case 125, 93:                                      // } ]
+                if depth == 0 { return hasContent ? commas + 1 : 0 }
+                depth -= 1
+            case 44: if depth == 0 { commas += 1 }            // ,
+            case 32, 9, 10, 13: break
+            default: hasContent = true
+            }
+        }
+        return hasContent ? commas + 1 : 0
+    }
 }
