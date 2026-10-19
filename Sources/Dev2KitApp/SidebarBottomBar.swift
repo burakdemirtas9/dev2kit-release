@@ -77,7 +77,7 @@ struct SidebarBottomBar: View {
             }
             .padding(8)
         }
-        .background(.bar)
+        // Zemin kenar çubuğu malzemesi (SidebarView).
         .fileImporter(
             isPresented: $showingImporter,
             allowedContentTypes: [.json]

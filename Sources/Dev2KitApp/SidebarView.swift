@@ -65,6 +65,7 @@ struct SidebarView: View {
     /// yerde biter.
     var body: some View {
         VStack(spacing: 0) {
+            searchField(hitCount: searchHitCount)
             requestList
             TokenFactoryPanel(isDropTargeted: tokenFactoryDropTargeted)
                 // Yukarıdan sürüklenen istekler bırakılınca KOPYALANIR
@@ -78,6 +79,15 @@ struct SidebarView: View {
                 }
             SidebarBottomBar()
         }
+        // Workbench'teki gibi camlı, içerikten ayrışan sütun (çizgi yerine).
+        .background { SidebarMaterial().ignoresSafeArea() }
+    }
+
+    private var searchHitCount: Int {
+        let matches = appState.visibleCollections.filter {
+            !($0.collection.isUngrouped && $0.requests.isEmpty) && !$0.collection.isTokenFactory
+        }
+        return RequestSearch.totalRequests(in: matches)
     }
 
     @ViewBuilder private var requestList: some View {
@@ -172,13 +182,14 @@ struct SidebarView: View {
             draggingCollectionID = nil
             return true
         }
+        // Kenar çubuğu stili: Workbench'teki gibi camlı zemin ve sıkı satırlar.
+        .listStyle(.sidebar)
+        .environment(\.sidebarRowSize, .small)
+        .scrollContentBackground(.hidden)
         // ⌘F menü komutu view'ın odak durumuna erişemiyor; AppState'teki sayaç
         // üzerinden köprülenir.
         .onChange(of: appState.searchFocusRequest) {
             searchFocused = true
-        }
-        .safeAreaInset(edge: .top, spacing: 0) {
-            searchBar(hitCount: RequestSearch.totalRequests(in: matches))
         }
         .alert(
             "Koleksiyonu Yeniden Adlandır",
@@ -237,7 +248,8 @@ struct SidebarView: View {
     }
 
     /// Sidebar filtresi. ⌘F odaklanır, Esc temizler, ⏎ ilk sonucu seçer.
-    private func searchBar(hitCount: Int) -> some View {
+    /// Görünüm Workbench'in arama kutusuyla aynı: gömme, yuvarlak alan.
+    private func searchField(hitCount: Int) -> some View {
         @Bindable var state = appState
         return VStack(spacing: 0) {
             HStack(spacing: 6) {
@@ -276,10 +288,11 @@ struct SidebarView: View {
                 }
             }
             .padding(.horizontal, 8)
-            .padding(.vertical, 6)
-            Divider()
+            .padding(.vertical, 5)
+            .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
+            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(searchFocused ? Theme.accent.opacity(0.6) : Color.primary.opacity(0.08)))
+            .padding(8)
         }
-        .background(.bar)
     }
 
     /// Arama alanında ⏎: ilk eşleşen isteği seçer, odağı listeye bırakmadan.

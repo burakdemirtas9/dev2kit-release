@@ -54,7 +54,6 @@ struct RequestDetailView: View {
                         TokenFactoryBanner(variable: (request.tokenOutput ?? TokenOutput()).trimmedVariableName)
                     }
                     requestBar
-                    Divider()
                     editorTabs
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -148,17 +147,19 @@ struct RequestDetailView: View {
     }
 
     private var controlsRow: some View {
-        HStack(spacing: 8) {
-            MethodPicker(selection: $request.method)
-                .frame(width: 100)
-
+        HStack(alignment: .top, spacing: 8) {
+            // Metot + adres tek kapsülde (API Client yeni düzen, 2026-10-20).
             TemplateTextField(
                 placeholder: "https://api.example.com/{{path}}",
                 text: urlBinding,
-                limit: .url
-            ) {
-                appState.send(request)
-            }
+                limit: .url,
+                onSubmit: { appState.send(request) },
+                capsuleLeading: AnyView(
+                    MethodPicker(selection: $request.method, bordered: false)
+                        .frame(width: 92)
+                        .padding(.leading, 4)
+                )
+            )
 
             if appState.isSending {
                 Button {
@@ -173,7 +174,10 @@ struct RequestDetailView: View {
                     appState.send(request)
                 } label: {
                     Label("Gönder", systemImage: "paperplane.fill")
+                        .padding(.horizontal, 6)
+                        .frame(height: 28)
                 }
+                .buttonStyle(PrimaryActionButtonStyle())
                 .keyboardShortcut(.return, modifiers: .command)
                 .disabled(request.url.isEmpty)
             }
@@ -182,6 +186,7 @@ struct RequestDetailView: View {
                 showingOptions = true
             } label: {
                 Image(systemName: "gearshape")
+                    .frame(width: 16, height: 22)
             }
             .help("İstek ayarları: zaman aşımı, yönlendirme, çerez")
             .popover(isPresented: $showingOptions, arrowEdge: .bottom) {
@@ -192,6 +197,7 @@ struct RequestDetailView: View {
                 showingCurl = true
             } label: {
                 Image(systemName: "terminal")
+                    .frame(width: 16, height: 22)
             }
             .help("cURL komutu olarak al")
             .disabled(request.url.isEmpty)
@@ -199,7 +205,9 @@ struct RequestDetailView: View {
                 CurlPopover(request: request)
             }
         }
-        .padding(10)
+        .padding(.horizontal, 12)
+        .padding(.top, 10)
+        .padding(.bottom, 6)
     }
 
     /// İstek adı ve kayıt durumu.
@@ -213,7 +221,7 @@ struct RequestDetailView: View {
             TextField("İstek adı", text: $request.name)
                 .inputLimit(.name)
                 .textFieldStyle(.plain)
-                .font(.headline)
+                .font(.system(size: 14, weight: .semibold))
                 .lineLimit(1)
                 .frame(maxWidth: 360, alignment: .leading)
 
@@ -235,7 +243,8 @@ struct RequestDetailView: View {
             saveStatus
         }
         .padding(.horizontal, 12)
-        .padding(.top, 8)
+        .frame(height: 34)
+        .overlay(alignment: .bottom) { Divider() }
     }
 
     /// Otomatik kaydın görünür hali.
@@ -273,7 +282,10 @@ struct RequestDetailView: View {
                 marked: request.body.hasContent ? [.body] : [],
                 counts: [.headers: request.activeHeaderCount, .params: request.activeQueryParamCount]
             )
-            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 12)
+            .padding(.bottom, 8)
+            Divider()
 
             // Token sekmesi açıkken normal bir isteğe geçilirse Headers'a düşülür.
             switch appState.editorTab == .token && !isTokenFactory ? .headers : appState.editorTab {

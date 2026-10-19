@@ -47,30 +47,33 @@ struct KeyValueEditor: View {
 
     private var toolbar: some View {
         HStack {
-            Picker("", selection: $isBulk) {
-                Text("Alanlar").tag(false)
-                Text("Toplu Düzenle").tag(true)
+            // Küçük seçici: seçili olan camlı (istek sekmeleriyle aynı dil).
+            HStack(spacing: 2) {
+                modeChip("Alanlar", bulk: false)
+                modeChip("Toplu Düzenle", bulk: true)
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .fixedSize()
 
             Spacer()
 
             Button {
                 validate()
             } label: {
-                Label(
-                    isBulk ? "Doğrula & Biçimlendir" : "Doğrula",
-                    systemImage: isBulk ? "wand.and.stars" : "checkmark.seal"
-                )
+                Label {
+                    Text(isBulk ? "Doğrula & Biçimlendir" : "Doğrula")
+                } icon: {
+                    Image(systemName: isBulk ? "wand.and.stars" : "checkmark.circle")
+                        .foregroundStyle(Theme.up)
+                }
+                .font(.secondaryText)
             }
+            .controlSize(.small)
             .help(isBulk
                   ? "Satırları denetle ve \"anahtar: değer\" biçimine getir"
                   : "Boş anahtar, tekrar eden anahtar gibi sorunları denetle")
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .overlay(alignment: .bottom) { Divider().opacity(0.6) }
         .onChange(of: isBulk) { _, nowBulk in
             message = nil
             if nowBulk {
@@ -139,7 +142,7 @@ struct KeyValueEditor: View {
 
     private var fieldEditor: some View {
         GeometryReader { geometry in
-            let keyWidth = max(140, (geometry.size.width - Self.checkWidth - Self.actionWidth) * 0.38)
+            let keyWidth = max(140, (geometry.size.width - 2 * Self.sideInset - Self.checkWidth - Self.actionWidth) * 0.42)
             let rows = entries.indices.map { RowRef(id: entries[$0].id, index: $0) }
                 + (entries.count < InputLimits.maxRows ? [RowRef(id: draft.id, index: nil)] : [])
             ScrollView {
@@ -147,19 +150,15 @@ struct KeyValueEditor: View {
                     Section {
                         ForEach(rows) { row in
                             tableRow(row, keyWidth: keyWidth)
-                            Divider()
+                                .padding(.horizontal, Self.sideInset)
+                            Divider().opacity(0.5)
                         }
                     } header: {
                         tableHeader(keyWidth: keyWidth)
                     }
                 }
-                .overlay(alignment: .topLeading) { columnLines(keyWidth: keyWidth, totalWidth: geometry.size.width) }
             }
-            .clipShape(RoundedRectangle(cornerRadius: 6))
-            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Theme.tableLine))
         }
-        .padding(.horizontal, 10)
-        .padding(.bottom, 10)
     }
 
     private func tableHeader(keyWidth: CGFloat) -> some View {
@@ -169,22 +168,35 @@ struct KeyValueEditor: View {
             Text("Değer").padding(.horizontal, 8).frame(maxWidth: .infinity, alignment: .leading)
             Color.clear.frame(width: Self.actionWidth)
         }
-        .font(.secondaryText.weight(.semibold))
+        .font(.secondaryText)
         .foregroundStyle(.secondary)
         .frame(height: 26)
+        .padding(.horizontal, Self.sideInset)
+        // Kutusuz, kenardan kenara tablo (2026-10-20 düzeni): başlık hafif
+        // tonlu, satırlar yalnızca yatay ince çizgiyle ayrılır.
+        .background(Color.primary.opacity(0.04))
         .background(.bar)
-        .overlay(alignment: .bottom) { Divider() }
+        .overlay(alignment: .bottom) { Divider().opacity(0.6) }
     }
 
-    /// Sütun ayırıcıları tablo boyunca tek çizgi (satır başına çizmek yerine).
-    private func columnLines(keyWidth: CGFloat, totalWidth: CGFloat) -> some View {
-        ZStack(alignment: .topLeading) {
-            ForEach([Self.checkWidth, Self.checkWidth + keyWidth, totalWidth - Self.actionWidth], id: \.self) { x in
-                Rectangle().fill(Theme.tableLine).frame(width: 1).offset(x: x)
-            }
+    /// Satırların kenar boşluğu (kutusuz tabloda içerik hizası).
+    private static let sideInset: CGFloat = 8
+
+    private func modeChip(_ title: String, bulk: Bool) -> some View {
+        let isSelected = isBulk == bulk
+        return Button {
+            isBulk = bulk
+        } label: {
+            Text(title)
+                .font(.secondaryText.weight(isSelected ? .medium : .regular))
+                .foregroundStyle(isSelected ? Color.primary : Color.secondary)
+                .padding(.horizontal, 10)
+                .frame(minHeight: 22)
+                .background { if isSelected { SelectedChip() } }
+                .contentShape(RoundedRectangle(cornerRadius: 6))
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .allowsHitTesting(false)
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 
     /// Taslak ve gerçek satır AYNI görünüm yapısında (yalnızca bağlama ve

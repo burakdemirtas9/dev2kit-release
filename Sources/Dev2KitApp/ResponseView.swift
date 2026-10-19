@@ -86,39 +86,22 @@ struct ResponseView: View {
                 if let id = appState.selectedRequestID, let advice = appState.tokenRetryAdvice[id] {
                     TokenRetryBanner(requestID: id, advice: advice)
                 }
+                // Sekmeler istek sekmeleriyle aynı dilde: sola yaslı, seçili
+                // olan camlı (2026-10-20). Arama ve katlama sağda, yalnızca
+                // gövde sekmesinde.
+                HStack(spacing: 2) {
+                    ForEach(availableTabs(display), id: \.self) { tab in
+                        responseTabButton(tab, title: tab == .redirects ? "\(tab.rawValue) (\(response.redirects.count))" : tab.rawValue)
+                    }
+                    Spacer()
+                    if selectedTab == .body {
+                        SearchToggleButton(search: search)
+                        FoldButtons(folding: folding)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.bottom, 6)
                 Divider()
-                ZStack {
-                    // Sekmeler ortada kalsın; katlama düğmeleri sağ uçta durur.
-                    HStack {
-                        Spacer()
-                        // Arama ve katlama yalnızca gövde sekmesinde anlamlı.
-                        if selectedTab == .body {
-                            SearchToggleButton(search: search)
-                            FoldButtons(folding: folding)
-                        }
-                    }
-                    Picker("", selection: $selectedTab) {
-                    ForEach(Tab.allCases, id: \.self) { tab in
-                        switch tab {
-                        case .redirects:
-                            // Zincir yoksa sekmeyi hiç gösterme.
-                            if !response.redirects.isEmpty || response.redirectStop != nil {
-                                Text("\(tab.rawValue) (\(response.redirects.count))").tag(tab)
-                            }
-                        case .preview:
-                            // Önizlenecek bir şey yoksa (JSON, düz metin) gösterme.
-                            if display.previewKind != nil {
-                                Text(tab.rawValue).tag(tab)
-                            }
-                        default:
-                            Text(tab.rawValue).tag(tab)
-                        }
-                    }
-                }
-                    .pickerStyle(.segmented)
-                    .fixedSize()
-                }
-                .padding(8)
 
                 switch selectedTab {
                 case .body:
@@ -332,12 +315,47 @@ struct ResponseView: View {
         .accessibilityLabel("İzleme kimliğini kopyala")
     }
 
+    /// Gösterilecek sekmeler: yönlendirme zinciri yoksa "Yönlendirme",
+    /// önizlenecek bir şey yoksa (JSON, düz metin) "Önizleme" yok.
+    private func availableTabs(_ display: AppState.ResponseDisplay) -> [Tab] {
+        Tab.allCases.filter { tab in
+            switch tab {
+            case .redirects: return !display.data.redirects.isEmpty || display.data.redirectStop != nil
+            case .preview: return display.previewKind != nil
+            default: return true
+            }
+        }
+    }
+
+    private func responseTabButton(_ tab: Tab, title: String) -> some View {
+        let isSelected = selectedTab == tab
+        return Button {
+            selectedTab = tab
+        } label: {
+            Text(title)
+                .fontWeight(isSelected ? .medium : .regular)
+                .foregroundStyle(isSelected ? Color.primary : Color.secondary)
+                .padding(.horizontal, 10)
+                .frame(minHeight: 24)
+                .background { if isSelected { SelectedChip() } }
+                .contentShape(RoundedRectangle(cornerRadius: 6))
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+    }
+
     private func statusBar(_ display: AppState.ResponseDisplay) -> some View {
         let response = display.data
         return HStack(spacing: 16) {
+            // Durum kodu rozet (2026-10-20 düzeni): renkli yazı, aynı tonda zemin.
+            let statusColor = response.isSuccess ? Theme.up : (response.statusCode < 500 ? Theme.warning : Theme.down)
             Text("\(response.statusCode)")
                 .font(.system(.body, design: .monospaced)).bold()
-                .foregroundStyle(response.isSuccess ? Theme.up : (response.statusCode < 500 ? Theme.warning : Theme.down))
+                .foregroundStyle(statusColor)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 1)
+                .background(statusColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 5))
+                .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(statusColor.opacity(0.3)))
             if let timing = response.timing {
                 Button {
                     showingTiming = true

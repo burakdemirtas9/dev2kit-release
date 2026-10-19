@@ -229,9 +229,8 @@ struct ContentView: View {
             Color.clear
                 .frame(width: 9)
                 .contentShape(Rectangle())
-            Rectangle()
-                .fill(Color(nsColor: .separatorColor))
-                .frame(width: 1)
+            // Görünür çizgi yok: kenar çubuğu camlı zeminiyle ayrışıyor
+            // (Workbench'teki gibi, 2026-10-20). Sürükleme alanı duruyor.
         }
         // push/pop dengesiz kalırsa imleç yığını bozuluyor (ayraç üstündeyken
         // pencere değişince "pop" gelmeyebiliyor); bayrakla eşleştiriliyor.

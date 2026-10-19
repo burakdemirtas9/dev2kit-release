@@ -9,11 +9,14 @@ import Dev2KitCore
 /// `attributedTitle`'ı ise renkli çiziliyor.
 struct MethodPicker: NSViewRepresentable {
     @Binding var selection: HTTPMethod
+    /// Çerçevesiz: adres kapsülünün solunda (2026-10-20).
+    var bordered = true
 
     func makeCoordinator() -> Coordinator { Coordinator(selection: $selection) }
 
     func makeNSView(context: Context) -> NSPopUpButton {
         let button = NSPopUpButton(frame: .zero, pullsDown: false)
+        button.isBordered = bordered
         for method in HTTPMethod.allCases {
             let item = NSMenuItem(title: method.rawValue, action: nil, keyEquivalent: "")
             item.attributedTitle = NSAttributedString(string: method.rawValue, attributes: [

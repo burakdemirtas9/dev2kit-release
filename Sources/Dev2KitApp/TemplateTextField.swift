@@ -13,6 +13,10 @@ struct TemplateTextField: View {
     /// Tablo hücresinde kenarlıksız (`KeyValueEditor`); tek başına alanda çerçeveli.
     var bordered = true
     var onSubmit: (() -> Void)?
+    /// Verilirse alan kapsül içinde, solunda bu görünümle (adres çubuğu:
+    /// metot seçici + adres, 2026-10-20). Öneri listesi kapsülün DIŞINDA,
+    /// altında kalır.
+    var capsuleLeading: AnyView?
 
     @Environment(AppState.self) private var appState
     @FocusState private var isFocused: Bool
@@ -34,56 +38,83 @@ struct TemplateTextField: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            styled(TextField(placeholder, text: $text))
-                .font(.system(.body, design: .monospaced))
-                // Odak dışında metni vurgulu katman çizer (aşağıda); alanın
-                // kendi yazısı saydam kalır, imleç ve seçim yine alanın.
-                .foregroundStyle(showsHighlight ? AnyShapeStyle(.clear) : AnyShapeStyle(.primary))
-                .autocorrectionDisabled()
-                .focused($isFocused)
-                .onSubmit { onSubmit?() }
-                .inputLimit(limit)
-                .overlay(alignment: .leading) {
-                    if showsHighlight {
-                        VariableHighlight(text: text)
-                            .padding(.leading, bordered ? Self.borderedInset : Self.plainInset)
-                    }
+            if let capsuleLeading {
+                HStack(spacing: 0) {
+                    capsuleLeading
+                    Divider().frame(height: 16)
+                    field.padding(.horizontal, 8)
                 }
-
-            if !suggestions.isEmpty {
-                VStack(alignment: .leading, spacing: 0) {
-                    ForEach(suggestions, id: \.self) { suggestion in
-                        Button {
-                            complete(with: suggestion)
-                        } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: suggestion.hasPrefix("secret:") ? "key.fill" : "curlybraces")
-                                    .font(.tinyText)
-                                    .foregroundStyle(Theme.purple)
-                                Text(suggestion)
-                                    .font(.secondaryMono)
-                            }
-                            .padding(.vertical, 4)
-                            .padding(.horizontal, 8)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .background(Theme.editorBackground)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .frame(height: 28)
+                .background(Theme.editorBackground.opacity(0.6), in: RoundedRectangle(cornerRadius: 8))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 6)
-                        .strokeBorder(Theme.purple.opacity(0.4))
+                    RoundedRectangle(cornerRadius: 8)
+                        .strokeBorder(isFocused ? Theme.accent.opacity(0.8) : Color(nsColor: .separatorColor),
+                                      lineWidth: isFocused ? 1.5 : 1)
                 )
+            } else {
+                field
             }
+            suggestionList
+        }
+    }
+
+    /// Alanın kendisi (vurgu katmanıyla); kapsül ya da tek başına.
+    private var field: some View {
+        styled(TextField(placeholder, text: $text))
+            .font(.system(.body, design: .monospaced))
+            // Odak dışında metni vurgulu katman çizer (aşağıda); alanın
+            // kendi yazısı saydam kalır, imleç ve seçim yine alanın.
+            .foregroundStyle(showsHighlight ? AnyShapeStyle(.clear) : AnyShapeStyle(.primary))
+            .autocorrectionDisabled()
+            .focused($isFocused)
+            .onSubmit { onSubmit?() }
+            .inputLimit(limit)
+            .overlay(alignment: .leading) {
+                if showsHighlight {
+                    VariableHighlight(text: text)
+                        .padding(.leading, isBordered ? Self.borderedInset : Self.plainInset)
+                }
+            }
+    }
+
+    @ViewBuilder
+    private var suggestionList: some View {
+        if !suggestions.isEmpty {
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(suggestions, id: \.self) { suggestion in
+                    Button {
+                        complete(with: suggestion)
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: suggestion.hasPrefix("secret:") ? "key.fill" : "curlybraces")
+                                .font(.tinyText)
+                                .foregroundStyle(Theme.purple)
+                            Text(suggestion)
+                                .font(.secondaryMono)
+                        }
+                        .padding(.vertical, 4)
+                        .padding(.horizontal, 8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .background(Theme.editorBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .overlay(
+                RoundedRectangle(cornerRadius: 6)
+                    .strokeBorder(Theme.purple.opacity(0.4))
+            )
         }
     }
 
     /// Yazının alan kenarından uzaklığı (ekran dışında çizilip ölçüldü).
     static let borderedInset: CGFloat = 6
     static let plainInset: CGFloat = 0
+
+    /// Kapsülde alanın kendi çerçevesi yok.
+    private var isBordered: Bool { bordered && capsuleLeading == nil }
 
     /// Vurgu yalnızca odak dışında: yazarken alan olduğu gibi kalır.
     private var showsHighlight: Bool {
@@ -92,7 +123,7 @@ struct TemplateTextField: View {
 
     @ViewBuilder
     private func styled(_ field: TextField<Text>) -> some View {
-        if bordered {
+        if isBordered {
             field.textFieldStyle(.roundedBorder)
         } else {
             field.textFieldStyle(.plain)

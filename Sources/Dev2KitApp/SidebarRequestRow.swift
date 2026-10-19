@@ -21,6 +21,7 @@ struct SidebarRequestRow: View {
                 .frame(width: 44, alignment: .leading)
             Text(request.name)
                 .lineLimit(1)
+            Spacer(minLength: 4)
             if isDirty {
                 Image(systemName: "circle.fill")
                     .font(.system(size: 6))

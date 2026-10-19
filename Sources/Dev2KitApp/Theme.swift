@@ -68,6 +68,9 @@ enum Theme {
     /// karşılamadığı mavi (PUT) ve pembe (OPTIONS), paletin doygunluğunda.
     static let methodBlue = Color(nsColor: dynamicColor(light: "#2f6bd8", dark: "#7fa8f5"))
     static let methodPink = Color(nsColor: dynamicColor(light: "#c23a8c", dark: "#f07fc4"))
+    /// Dolgulu birincil düğmenin zemini: iki modda da marka moru (gf-purple).
+    /// Koyu moddaki lila `accent` beyaz yazıyla okunmuyordu (~2,3:1).
+    static let primaryFill = Color(nsColor: NSColor(hex: "#5d3ebc"))
     /// Alandaki `{{değişken}}`: tanımlıysa mor, tanımsızsa `down`.
     static let variable = purple
 }
@@ -144,4 +147,38 @@ struct TabChrome: ViewModifier {
             .contentShape(shape)
             .padding(.top, 4)
     }
+}
+
+/// Birincil eylem ("Gönder"): `Theme.primaryFill` dolgu, beyaz yazı. Sistemin
+/// vurgulu düğmesi pencere etkin değilken griye dönüyor; birincil eylem
+/// her durumda belli olsun (API Client yeni düzen, 2026-10-20).
+struct PrimaryActionButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.body.weight(.semibold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 8)
+            .background(Theme.primaryFill.opacity(isEnabled ? 1 : 0.4), in: RoundedRectangle(cornerRadius: 7))
+            .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(.white.opacity(0.18)))
+            .opacity(configuration.isPressed ? 0.8 : 1)
+            .contentShape(RoundedRectangle(cornerRadius: 7))
+    }
+}
+
+/// Kenar çubuğu sütununun zemini: sistemin kenar çubuğu malzemesi (buzlu,
+/// pencerenin arkasını gösterir). Listenin `.sidebar` stili yalnızca listenin
+/// arkasını boyuyor; altındaki Token Factory ve alt çubuk da aynı camda
+/// olsun diye bütün sütuna verilir (API Client yeni düzen, 2026-10-20).
+struct SidebarMaterial: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.material = .sidebar
+        view.blendingMode = .behindWindow
+        view.state = .followsWindowActiveState
+        return view
+    }
+
+    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {}
 }
