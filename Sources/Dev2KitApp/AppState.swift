@@ -360,6 +360,16 @@ final class AppState {
     var pendingImport: PendingImport?
 
     /// Öneri listesi için: aktif environment değişken adları + "secret:isim" girdileri.
+    /// Alandaki `{{ad}}`'a tıklanınca baloncukta gösterilecek bilgi.
+    func variablePreview(for name: String) -> TemplateVariables.Preview {
+        TemplateVariables.preview(
+            for: name,
+            environment: activeEnvironment,
+            tokenVariables: tokenSources(for: activeEnvironment).map { ($0.variable, $0.request.name) },
+            secretNames: secretNames
+        )
+    }
+
     func templateSuggestions(matching token: String) -> [String] {
         TemplateSuggestions.options(
             environment: activeEnvironment,

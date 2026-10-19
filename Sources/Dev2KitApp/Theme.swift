@@ -64,6 +64,12 @@ enum Theme {
     static let purple = Color(nsColor: dynamicColor(light: "#5d3ebc", dark: "#aa9cd5"))
     static let muted = Color(nsColor: dynamicColor(light: "#606a7c", dark: "#aa9cd5"))
     static let editorBackground = Color(nsColor: editorBackgroundNS)
+    /// Yalnızca HTTP metodu renkleri (Postman dağılımı, 2026-10-19): paletin
+    /// karşılamadığı mavi (PUT) ve pembe (OPTIONS), paletin doygunluğunda.
+    static let methodBlue = Color(nsColor: dynamicColor(light: "#2f6bd8", dark: "#7fa8f5"))
+    static let methodPink = Color(nsColor: dynamicColor(light: "#c23a8c", dark: "#f07fc4"))
+    /// Alandaki `{{değişken}}`: tanımlıysa mor, tanımsızsa `down`.
+    static let variable = purple
 }
 
 private extension NSColor {
@@ -81,14 +87,17 @@ private extension NSColor {
 }
 
 extension Theme {
-    /// HTTP metodunun rengi; kenar çubuğu ve sekmeler aynı rengi kullanır.
+    /// HTTP metodunun rengi; kenar çubuğu, sekmeler ve metot seçici aynı
+    /// rengi kullanır. Dağılım Postman'daki gibi (kullanıcı isteği,
+    /// 2026-10-19), tonlar bizim paletten.
     static func color(for method: HTTPMethod) -> Color {
         switch method {
-        case .get: return up
+        case .get, .head: return up
         case .post: return warning
-        case .put, .patch: return purple
+        case .put: return methodBlue
+        case .patch: return purple
         case .delete: return down
-        case .head, .options: return muted
+        case .options: return methodPink
         }
     }
 }

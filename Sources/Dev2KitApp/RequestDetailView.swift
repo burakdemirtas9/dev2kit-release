@@ -149,12 +149,8 @@ struct RequestDetailView: View {
 
     private var controlsRow: some View {
         HStack(spacing: 8) {
-            Picker("", selection: $request.method) {
-                ForEach(HTTPMethod.allCases) { method in
-                    Text(method.rawValue).tag(method)
-                }
-            }
-            .frame(width: 100)
+            MethodPicker(selection: $request.method)
+                .frame(width: 100)
 
             TemplateTextField(
                 placeholder: "https://api.example.com/{{path}}",

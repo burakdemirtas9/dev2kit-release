@@ -223,6 +223,14 @@ extension AppState {
         }
     }
 
+    /// Alandaki `{{token}}` baloncuğu için bellekteki token (aktif
+    /// environment'ta). Ağa çıkılmaz; alınmadıysa `nil`.
+    func cachedToken(forVariable variable: String) -> TokenFactory.IssuedToken? {
+        let environment = activeEnvironment
+        guard let source = tokenSources(for: environment).first(where: { $0.variable == variable }) else { return nil }
+        return tokenCache[tokenKey(source, environment: environment)]
+    }
+
     /// cURL dışa aktarımı için: bellekte geçerli token varsa o, yoksa değişken
     /// adı (`{{token}}`) yazılır. Token almak için ağa ÇIKILMAZ.
     func cachedTokenBindings(for environment: EnvironmentModel?) -> (EnvironmentModel?, SecretStore) {
