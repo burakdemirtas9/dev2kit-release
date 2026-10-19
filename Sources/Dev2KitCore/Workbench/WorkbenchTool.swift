@@ -111,6 +111,12 @@ public struct WorkbenchAction: Identifiable, Sendable {
     public let reverse: (@Sendable (String, String, WorkbenchOptions) throws -> String)?
     public let run: @Sendable (String, WorkbenchOptions) throws -> String
 
+    /// Üst satırda eylem seçicisinin yanında seçenek var mı (ayırıcı için).
+    public var hasOptions: Bool {
+        usesIndentation || usesSortKeys || usesKeywordCase || usesDelimiter || usesDetectTypes || usesRootName
+            || usesURLSafe || usesFormEncoding || usesCount || usesHashOutput || usesHMACKey
+    }
+
     public init(
         id: String,
         title: String,

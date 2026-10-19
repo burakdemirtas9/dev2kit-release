@@ -27,13 +27,12 @@ struct WorkbenchToolView: View {
             }
             header
             Divider()
-            HStack(spacing: 0) {
-                inputPane
-                Divider()
-                outputPane
+            // Sürüklenebilir ayırıcı: girdi/çıktı genişliğini kullanıcı ayarlar.
+            // Durum bilgisi tek çubuk yerine her bölmenin alt bilgisinde.
+            HSplitView {
+                inputPane.frame(minWidth: 260)
+                outputPane.frame(minWidth: 260)
             }
-            Divider()
-            statusBar
         }
         // ⌘F: odaktaki bölmede (son tıklanan editör) arama.
         .onChange(of: workbench.searchRequest) {
@@ -76,6 +75,9 @@ struct WorkbenchToolView: View {
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 .fixedSize()
+            }
+            if tool.actions.count > 1, action.hasOptions {
+                Divider().frame(height: 16)
             }
             if action.usesIndentation {
                 Picker("Indent", selection: Binding(
@@ -165,9 +167,61 @@ struct WorkbenchToolView: View {
                 .help("Write 12 as a number, true/false as booleans and empty cells as null. Leading zeros (012) and numbers over 15 digits stay text.")
             }
             Spacer(minLength: 0)
+            outputControls
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 12)
+        .frame(minHeight: 40)
+    }
+
+    /// Çıktıya ait kontroller üst satırın sağında (çıktı bölmesinin başlığı
+    /// sadeleşir): görünüm, ara, düzenle, girdi yap, kopyala.
+    @ViewBuilder
+    private var outputControls: some View {
+        let showsTree = workbench.showsTree
+        HStack(spacing: 4) {
+            if workbench.action.supportsTree {
+                Picker("View", selection: Binding(
+                    get: { workbench.document.outputMode },
+                    set: { workbench.select(outputMode: $0) }
+                )) {
+                    ForEach(WorkbenchState.OutputMode.allCases) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+                .controlSize(.small)
+                .help("Show the output as text or as a tree of the input")
+                .padding(.trailing, 6)
+            }
+            if !showsTree {
+                if !workbench.outputHiddenFromEditor {
+                    SearchToggleButton(search: outputSearch, strings: .english)
+                }
+                Button {
+                    workbench.toggleOutputEditing()
+                } label: {
+                    Image(systemName: workbench.isEditingOutput ? "pencil.circle.fill" : "pencil").iconHitTarget()
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(workbench.isEditingOutput ? AnyShapeStyle(Theme.accent) : AnyShapeStyle(.secondary))
+                .disabled(workbench.displayedOutput.isEmpty || workbench.outputHiddenFromEditor)
+                .help(workbench.isEditingOutput
+                      ? "Stop editing. Edits are replaced when the input or options change."
+                      : "Edit output")
+                .accessibilityLabel("Edit output")
+                Button {
+                    workbench.useOutputAsInput()
+                } label: {
+                    Image(systemName: "arrow.uturn.left").iconHitTarget()
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .disabled(workbench.displayedOutput.isEmpty)
+                .help("Use output as input (chain another action)")
+                .accessibilityLabel("Use output as input")
+                CopyButton(text: workbench.displayedOutput, help: "Copy output")
+            }
+        }
     }
 
     /// Tek seçeneğe bağlama: değişince araç yeniden çalışır.
@@ -187,7 +241,7 @@ struct WorkbenchToolView: View {
         }()
         let canUndo = workbench.clearedInput?.documentID == workbench.document.id
         return VStack(spacing: 0) {
-            paneHeader("Input", stats: workbench.inputStats) {
+            paneHeader("Input") {
                 if canUndo {
                     Button("Undo Clear") { workbench.undoClear() }
                         .controlSize(.small)
@@ -224,7 +278,9 @@ struct WorkbenchToolView: View {
                 CodeEditor(
                     text: Binding(get: { workbench.input }, set: { workbench.input = $0 }),
                     language: workbench.highlightsSyntax ? CodeLanguage(workbench.tool.syntax) : .plain,
-                    folding: CodeLanguage(workbench.tool.syntax).supportsFolding ? inputFolding : nil,
+                    // Her dilde: satır numaraları da bununla geliyor (SQL'de
+                    // yoktu). Katlamayan dil boş bölge döndürür, oklar çıkmaz.
+                    folding: inputFolding,
                     search: inputSearch,
                     errorOffset: issueOffset,
                     onFocus: { workbench.focus(.input) },
@@ -232,6 +288,7 @@ struct WorkbenchToolView: View {
                         onRejected: { workbench.reportLimit($0.english) },
                         onLongLine: { workbench.acceptInputHiddenFromEditor($0) }
                     ),
+                    onCursorChange: { workbench.updateInputCursor(line: $0, column: $1) },
                     focusRequest: workbench.inputFocusRequest
                 )
                 .id(workbench.document.id)
@@ -240,13 +297,31 @@ struct WorkbenchToolView: View {
                         SampleInputHint(
                             sample: workbench.tool.sampleInput,
                             note: "Paste or type here. Kept in memory only — never written to disk or history.",
-                            leading: CodeLanguage(workbench.tool.syntax).supportsFolding ? inputFolding.gutterWidth : 0
+                            leading: inputFolding.gutterWidth
                         )
                     }
                 }
             }
+            paneFooter { inputFooterLeading } trailing: {
+                Text(workbench.inputStats.summary)
+            }
         }
         .frame(maxWidth: .infinity)
+        .background(Theme.editorBackground)
+    }
+
+    /// Girdi alt bilgisinin solu: sınır uyarısı > ⌘S notu > imleç konumu.
+    @ViewBuilder
+    private var inputFooterLeading: some View {
+        if let notice = workbench.limitNotice {
+            Label(notice, systemImage: "exclamationmark.octagon.fill")
+                .foregroundStyle(Theme.down)
+                .help(notice)
+        } else if workbench.saveNotice {
+            Label("Kept in memory only — nothing is written to disk.", systemImage: "memorychip")
+        } else if let cursor = workbench.inputCursor, !workbench.input.isEmpty {
+            Text("Ln \(cursor.line), Col \(cursor.column)")
+        }
     }
 
     private func oversizedDetail(limit: Int) -> String {
@@ -259,49 +334,13 @@ struct WorkbenchToolView: View {
         let showsTree = workbench.showsTree
         let outputSyntax = workbench.action.outputSyntax ?? workbench.tool.syntax
         return VStack(spacing: 0) {
-            paneHeader(showsTree ? "Tree" : "Output", stats: showsTree ? .empty : workbench.outputStats) {
-                if workbench.action.supportsTree {
-                    Picker("View", selection: Binding(
-                        get: { workbench.document.outputMode },
-                        set: { workbench.select(outputMode: $0) }
-                    )) {
-                        ForEach(WorkbenchState.OutputMode.allCases) { Text($0.title).tag($0) }
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                    .fixedSize()
-                    .controlSize(.small)
-                    .help("Show the output as text or as a tree of the input")
+            paneHeader(showsTree ? "Tree" : "Output") {
+                if !showsTree, !workbench.outputHiddenFromEditor {
+                    FoldButtons(folding: outputFolding, english: true)
                 }
-                if !showsTree {
-                    if !workbench.outputHiddenFromEditor {
-                        FoldButtons(folding: outputFolding, english: true)
-                        SearchToggleButton(search: outputSearch, strings: .english)
-                    }
-                    Button {
-                        workbench.toggleOutputEditing()
-                    } label: {
-                        Image(systemName: workbench.isEditingOutput ? "pencil.circle.fill" : "pencil").iconHitTarget()
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(workbench.isEditingOutput ? AnyShapeStyle(Theme.accent) : AnyShapeStyle(.secondary))
-                    .disabled(workbench.displayedOutput.isEmpty || workbench.outputHiddenFromEditor)
-                    .help(workbench.isEditingOutput
-                          ? "Stop editing. Edits are replaced when the input or options change."
-                          : "Edit output")
-                    .accessibilityLabel("Edit output")
-                    Button {
-                        workbench.useOutputAsInput()
-                    } label: {
-                        Image(systemName: "arrow.uturn.left").iconHitTarget()
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.secondary)
-                    .disabled(workbench.displayedOutput.isEmpty)
-                    .help("Use output as input (chain another action)")
-                    .accessibilityLabel("Use output as input")
-                    CopyButton(text: workbench.displayedOutput, help: "Copy output")
-                }
+                Text(outputStatus)
+                    .font(.secondaryMono)
+                    .foregroundStyle(.tertiary)
             }
             if !showsTree, outputSearch.isPresented {
                 EditorSearchBar(search: outputSearch, strings: .english)
@@ -329,14 +368,15 @@ struct WorkbenchToolView: View {
                         text: Binding(get: { workbench.displayedOutput }, set: { workbench.editOutput($0) }),
                         language: workbench.outputStats.bytes <= WorkbenchState.highlightLimit ? CodeLanguage(outputSyntax) : .plain,
                         isEditable: workbench.isEditingOutput,
-                        folding: CodeLanguage(outputSyntax).supportsFolding ? outputFolding : nil,
+                        folding: outputFolding,
                         search: outputSearch,
                         onFocus: { workbench.focus(.output) },
                         limits: EditorLimits(
                             maxDisplayBytes: WorkbenchLimits.maxOutputBytes,
                             onRejected: { workbench.reportLimit($0.english) },
                             onLongLine: { _ in workbench.reportLimit(WorkbenchLimits.longLineEditMessage) }
-                        )
+                        ),
+                        onCursorChange: { workbench.updateOutputCursor(line: $0, column: $1) }
                     )
                     // Katlama editör kurulurken bağlanır: çıktının dili eylemle
                     // değişince (Escape → düz metin) editör yeniden kurulmalı.
@@ -344,8 +384,44 @@ struct WorkbenchToolView: View {
                 }
             }
             .frame(maxHeight: .infinity)
+            paneFooter { validationLabel } trailing: { outputFooterTrailing }
         }
         .frame(maxWidth: .infinity)
+        .background(Theme.editorBackground)
+    }
+
+    /// Çıktı başlığındaki durum: "Ready", "Running…", "Editing"…
+    private var outputStatus: String {
+        if workbench.isRunning { return "Running…" }
+        if workbench.isLargeInput, workbench.isStale { return "Waiting for Run" }
+        if workbench.isEditingOutput { return "Editing" }
+        return "Ready"
+    }
+
+    /// Çıktı alt bilgisinin sağı: büyük girdide "Run", değilse süre ve boyut.
+    @ViewBuilder
+    private var outputFooterTrailing: some View {
+        if workbench.isLargeInput {
+            Text("Large input: not run automatically")
+            Button("Run") { workbench.runNow() }
+                .controlSize(.mini)
+                .disabled(!workbench.isStale)
+        } else {
+            if let cursor = workbench.outputCursor, !workbench.output.isEmpty, !workbench.showsTree {
+                Text("Ln \(cursor.line), Col \(cursor.column)")
+            }
+            if !workbench.outputStats.summary.isEmpty, !workbench.showsTree {
+                Text(workbench.outputStats.summary)
+            }
+            if let duration = workbench.lastRunDuration, !workbench.input.isEmpty || workbench.action.runsOnEmptyInput {
+                Text(Self.milliseconds(duration))
+            }
+        }
+    }
+
+    static func milliseconds(_ duration: Duration) -> String {
+        let ms = Double(duration.components.seconds) * 1_000 + Double(duration.components.attoseconds) / 1e15
+        return ms < 1 ? "<1 ms" : "\(Int(ms.rounded())) ms"
     }
 
     private func placeholder(_ text: String, isError: Bool = false) -> some View {
@@ -358,51 +434,24 @@ struct WorkbenchToolView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private func paneHeader<Trailing: View>(_ title: String, stats: TextStats, @ViewBuilder trailing: () -> Trailing) -> some View {
+    /// Bölme başlığı: 28 pt, başlık solda, kontroller sağda.
+    private func paneHeader<Trailing: View>(_ title: String, @ViewBuilder trailing: () -> Trailing) -> some View {
         HStack(spacing: 6) {
             Text(title).font(.secondaryText.weight(.semibold)).foregroundStyle(.secondary)
-            Text(stats.summary)
-                .font(.tinyText.monospacedDigit())
-                .foregroundStyle(.tertiary)
-                .lineLimit(1)
             Spacer(minLength: 0)
             trailing()
         }
         .padding(.horizontal, 10)
-        .frame(height: 30)
+        .frame(height: 28)
+        .background(.bar)
+        .overlay(alignment: .bottom) { Divider() }
     }
 
-    // MARK: Durum
-
-    private var statusBar: some View {
-        HStack(spacing: 8) {
-            validationLabel
-            Spacer(minLength: 0)
-            if let notice = workbench.limitNotice {
-                Label(notice, systemImage: "exclamationmark.octagon.fill")
-                    .font(.secondaryText)
-                    .foregroundStyle(Theme.down)
-                    .lineLimit(1)
-                    .help(notice)
-            }
-            if workbench.saveNotice {
-                Label("Kept in memory only — cleared when dev2kit quits. Nothing is written to disk.", systemImage: "memorychip")
-                    .font(.secondaryText)
-                    .foregroundStyle(.secondary)
-            }
-            if workbench.isRunning {
-                ProgressView().controlSize(.small)
-            }
-            if workbench.isLargeInput {
-                Text("Large input: not run automatically").font(.secondaryText).foregroundStyle(.secondary)
-                Button("Run") { workbench.runNow() }
-                    .controlSize(.small)
-                    .disabled(!workbench.isStale)
-            }
-        }
-        .padding(.horizontal, 14)
-        .frame(height: 30)
-        .background(.bar)
+    private func paneFooter<Leading: View, Trailing: View>(
+        @ViewBuilder _ leading: @escaping () -> Leading,
+        @ViewBuilder trailing: @escaping () -> Trailing
+    ) -> some View {
+        EditorFooter(leading: leading, trailing: trailing)
     }
 
     @ViewBuilder
@@ -415,9 +464,11 @@ struct WorkbenchToolView: View {
                 .font(.secondaryText)
                 .foregroundStyle(Theme.up)
         case .structurallyValid:
-            Label("Structure OK (full syntax not checked)", systemImage: "checkmark.circle")
+            // Alt bilgi dar: kısa hali, açıklama ipucunda.
+            Label("Structure OK", systemImage: "checkmark.circle")
                 .font(.secondaryText)
                 .foregroundStyle(.secondary)
+                .help("Brackets, quotes and comments are balanced; the full syntax was not checked.")
         case .invalid(let issue):
             Label(issue.localizedDescription, systemImage: "exclamationmark.octagon.fill")
                 .font(.secondaryText)
@@ -510,16 +561,8 @@ private struct WorkbenchTab: View {
             .accessibilityLabel("Close \(title)")
         }
         .padding(.horizontal, 12)
-        .frame(height: 30)
-        .background(isSelected ? Theme.editorBackground : (hovering ? Color.primary.opacity(0.05) : .clear),
-                    ignoresSafeAreaEdges: [])
-        .overlay(alignment: .top) {
-            if isSelected { Rectangle().fill(Theme.accent).frame(height: 2) }
-        }
-        .overlay(alignment: .trailing) {
-            Rectangle().fill(Color(nsColor: .separatorColor)).frame(width: 1)
-        }
-        .contentShape(Rectangle())
+        .frame(height: 28)
+        .modifier(TabChrome(isSelected: isSelected, hovering: hovering))
         .onHover { hovering = $0 }
         .onTapGesture(perform: onSelect)
         .accessibilityElement(children: .combine)
@@ -833,5 +876,28 @@ struct SampleInputHint: View {
         .padding(.leading, leading + 5)
         .padding(.trailing, 16)
         .allowsHitTesting(false)
+    }
+}
+
+/// Editör alt bilgisi (Workbench ve API Client ortak): 24 pt, 11 pt eş
+/// aralıklı, ikincil renk; solda durum/imleç, sağda sayılar.
+struct EditorFooter<Leading: View, Trailing: View>: View {
+    @ViewBuilder let leading: () -> Leading
+    @ViewBuilder let trailing: () -> Trailing
+
+    var body: some View {
+        HStack(spacing: 10) {
+            leading()
+                .lineLimit(1)
+            Spacer(minLength: 8)
+            HStack(spacing: 10) { trailing() }
+                .lineLimit(1)
+        }
+        .font(.secondaryMono)
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 10)
+        .frame(height: 24)
+        .background(.bar)
+        .overlay(alignment: .top) { Divider() }
     }
 }

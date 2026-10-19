@@ -248,6 +248,8 @@ struct CodeEditor: NSViewRepresentable {
     var onFocus: (() -> Void)?
     /// Verilirse kullanıcının değişiklikleri bu sınırlarla denetlenir.
     var limits: EditorLimits?
+    /// İmleç değişince (satır, sütun; 1'den başlar). Workbench alt bilgisi.
+    var onCursorChange: ((Int, Int) -> Void)?
     /// Değiştikçe editör odak alır (imleç yanıp söner). Workbench araç,
     /// sekme ya da mod değişince artırır; ilk kurulumda da uygulanır.
     var focusRequest: Int?
@@ -448,8 +450,24 @@ struct CodeEditor: NSViewRepresentable {
         }
 
         func textViewDidChangeSelection(_ notification: Notification) {
-            guard let textView = notification.object as? NSTextView, textView.window?.firstResponder === textView else { return }
+            guard let textView = notification.object as? NSTextView else { return }
+            if let onCursorChange = parent.onCursorChange {
+                let position = Self.cursorPosition(in: textView)
+                onCursorChange(position.line, position.column)
+            }
+            guard textView.window?.firstResponder === textView else { return }
             parent.onFocus?()
+        }
+
+        /// Satır: imleçten önceki satır sonu sayısı + 1; sütun: satır başından
+        /// karakter. Büyük metinde (4 MB) imleç hareketi başına birkaç ms.
+        static func cursorPosition(in textView: NSTextView) -> (line: Int, column: Int) {
+            let text = textView.string as NSString
+            let location = min(textView.selectedRange().location, text.length)
+            let prefix = text.substring(to: location) as NSString
+            let line = max(1, TextStats.lineCount(prefix))
+            let lineStart = text.lineRange(for: NSRange(location: location, length: 0)).location
+            return (line, location - lineStart + 1)
         }
 
         func textView(_ textView: NSTextView, shouldChangeTextIn range: NSRange, replacementString text: String?) -> Bool {

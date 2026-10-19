@@ -70,17 +70,14 @@ struct ContentView: View {
         }
     }
 
-    /// Pencerenin üst ortasındaki mod seçici. Sistem segmentli kontrolü:
-    /// macOS 26'da cam görünümünü kendisi alır (docs/TASARIM.md §1).
+    /// Pencerenin üst ortasındaki mod seçici: sistemin segmentli kontrolü
+    /// (cam başparmak, sürüklenebilir) + seçili modda yeşil nokta
+    /// (`ModeSegmentedControl`, TASARIM §1 istisnası).
     private var modePicker: some View {
         @Bindable var state = appState
-        return Picker("Mod", selection: $state.mode) {
-            ForEach(AppMode.allCases) { Text($0.title).tag($0) }
-        }
-        .pickerStyle(.segmented)
-        .labelsHidden()
-        .fixedSize()
-        .help("API Client ile Workbench arasında geç")
+        return ModeSegmentedControl(selection: $state.mode)
+            .fixedSize()
+            .help("API Client ile Workbench arasında geç")
     }
 
     var body: some View {

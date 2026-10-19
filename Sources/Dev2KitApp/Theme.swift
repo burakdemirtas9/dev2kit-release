@@ -110,3 +110,29 @@ extension Font {
     static let tinyMono = Font.system(size: 10, design: .monospaced)
 }
 
+/// Sekme görünümü (API Client ve Workbench ortak): üst köşeleri yuvarlak
+/// sekme, seçilide editör zemini ve üstte vurgu çizgisi (şeklin içinde).
+/// Kullanıcı isteği (2026-10-19): köşeli sekmeler sert görünüyordu.
+struct TabChrome: ViewModifier {
+    let isSelected: Bool
+    let hovering: Bool
+    static let radius: CGFloat = 8
+    private var shape: UnevenRoundedRectangle {
+        UnevenRoundedRectangle(topLeadingRadius: Self.radius, topTrailingRadius: Self.radius, style: .continuous)
+    }
+
+    func body(content: Content) -> some View {
+        content
+            // Görünüm (stil değil) arka planı güvenli alana taşmaz: seçili
+            // sekme pencerenin tepesine kadar uzanmasın.
+            .background {
+                shape.fill(isSelected ? Theme.editorBackground : (hovering ? Color.primary.opacity(0.06) : .clear))
+            }
+            .overlay(alignment: .top) {
+                if isSelected { Rectangle().fill(Theme.accent).frame(height: 2) }
+            }
+            .clipShape(shape)
+            .contentShape(shape)
+            .padding(.top, 4)
+    }
+}

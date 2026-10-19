@@ -69,6 +69,29 @@ final class WorkbenchState {
     // MARK: Açık sekmenin sonucu
 
     private(set) var output = ""
+    /// Son çalıştırmanın süresi; çıktı bölmesinin alt bilgisinde gösterilir.
+    private(set) var lastRunDuration: Duration?
+    /// Girdideki imleç (satır, sütun; 1'den başlar): girdi bölmesinin alt
+    /// bilgisinde. Hata mesajındaki satırı bulmayı kolaylaştırır.
+    private(set) var inputCursor: CursorPosition?
+
+    struct CursorPosition: Equatable {
+        let line: Int
+        let column: Int
+    }
+
+    /// Çıktıda tıklanan yer (alt bilgide). Çıktı yeniden hesaplanınca düşer.
+    private(set) var outputCursor: CursorPosition?
+
+    func updateOutputCursor(line: Int, column: Int) {
+        let position = CursorPosition(line: line, column: column)
+        if position != outputCursor { outputCursor = position }
+    }
+
+    func updateInputCursor(line: Int, column: Int) {
+        let position = CursorPosition(line: line, column: column)
+        if position != inputCursor { inputCursor = position }
+    }
     /// Çıktı editörde gösterilemeyecek kadar büyük ya da uzun satırlı
     /// (ör. 1 MB'ı aşan Minify çıktısı): yalnızca kopyalanabilir.
     private(set) var outputHiddenFromEditor = false
@@ -392,6 +415,9 @@ final class WorkbenchState {
     private func documentChanged() {
         inputFocusRequest += 1
         output = ""
+        lastRunDuration = nil
+        inputCursor = nil
+        outputCursor = nil
         outputHiddenFromEditor = false
         editedOutput = nil
         isEditingOutput = false
@@ -428,7 +454,10 @@ final class WorkbenchState {
             }
             // Büyük yığın: derin girdide yığın taşmasın (BackgroundWork).
             let result = await BackgroundWork.run {
-                Self.compute(text: text, tool: tool, action: refreshOutput ? action : nil, options: options, wantsTree: wantsTree)
+                let start = ContinuousClock.now
+                var result = Self.compute(text: text, tool: tool, action: refreshOutput ? action : nil, options: options, wantsTree: wantsTree)
+                result.duration = start.duration(to: .now)
+                return result
             }
             guard !Task.isCancelled else { return }
             self?.apply(result, generation: current, refreshOutput: refreshOutput)
@@ -443,6 +472,8 @@ final class WorkbenchState {
         let inputStats: TextStats
         let outputStats: TextStats
         var outputTooLargeForEditor = false
+        /// Hesaplama süresi (çıktı bölmesinin alt bilgisinde).
+        var duration: Duration = .zero
     }
 
     nonisolated private static func compute(
@@ -481,6 +512,7 @@ final class WorkbenchState {
         guard generation == self.generation else { return }
         if refreshOutput {
             output = result.output
+            lastRunDuration = result.duration
             outputHiddenFromEditor = result.outputTooLargeForEditor
             if result.outputTooLargeForEditor { isEditingOutput = false; editedOutput = nil }
             actionIssue = result.issue

@@ -24,6 +24,7 @@ struct WorkbenchView: View {
 /// Kategoriye göre gruplu araç listesi ve arama.
 struct WorkbenchSidebar: View {
     @Environment(WorkbenchState.self) private var workbench
+    @FocusState private var searchFocused: Bool
 
     var body: some View {
         @Bindable var state = workbench
@@ -36,10 +37,29 @@ struct WorkbenchSidebar: View {
                 TextField("Search tools", text: $state.searchQuery)
                     .inputLimit(.search, english: true)
                     .textFieldStyle(.plain)
+                    .focused($searchFocused)
+                // ⌘K ipucu: arama kutusuna kısayolla gidilir.
+                Text("⌘K")
+                    .font(.tinyMono)
+                    .foregroundStyle(.tertiary)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1)
+                    .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(.quaternary))
+                    .opacity(workbench.searchQuery.isEmpty ? 1 : 0)
+                    .accessibilityHidden(true)
             }
             .padding(.horizontal, 8)
-            .padding(.vertical, 6)
-            .background(.bar)
+            .padding(.vertical, 5)
+            .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
+            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(searchFocused ? Theme.accent.opacity(0.6) : Color.primary.opacity(0.08)))
+            .padding(8)
+            .background {
+                // Görünmez düğme: ⌘K arama kutusuna odaklar.
+                Button("") { searchFocused = true }
+                    .keyboardShortcut("k", modifiers: .command)
+                    .opacity(0)
+                    .accessibilityHidden(true)
+            }
             Divider()
             List(selection: Binding(
                 get: { workbench.selectedToolID },
@@ -53,21 +73,61 @@ struct WorkbenchSidebar: View {
                 ForEach(WorkbenchTool.Category.allCases, id: \.self) { category in
                     let inCategory = tools.filter { $0.category == category }
                     if category == .compare, WorkbenchCatalog.diffCheckerMatches(workbench.searchQuery) {
-                        Section(category.title) {
+                        Section {
                             ToolLabel(title: "Diff Checker", symbol: "arrow.left.arrow.right.square")
                                 .tag(WorkbenchCatalog.diffCheckerID)
+                        } header: {
+                            SectionTitle(category.title)
                         }
                     } else if !inCategory.isEmpty {
-                        Section(category.title) {
+                        Section {
                             ForEach(inCategory) { tool in
                                 ToolLabel(title: tool.title, symbol: tool.symbol)
                                     .tag(tool.id)
                             }
+                        } header: {
+                            SectionTitle(category.title)
                         }
                     }
                 }
             }
+            .listStyle(.sidebar)
+            // Sıkı satırlar (önerideki ~28 pt): sistemin küçük kenar çubuğu
+            // boyutu; özel çizim yok.
+            .environment(\.sidebarRowSize, .small)
+            Divider()
+            localBadge
         }
+    }
+
+    /// Güvenlik durumu görünür (TASARIM §1.3): Workbench araçları ağa çıkmaz,
+    /// girdi yalnızca bellekte. ("Offline Mode" değil: API Client ağa çıkıyor.)
+    private var localBadge: some View {
+        HStack(spacing: 6) {
+            Text("Local only")
+                .font(.secondaryMono)
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 0)
+            Circle().fill(Theme.up).frame(width: 7, height: 7)
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 30)
+        .help("Workbench tools run on this Mac only: no network requests; inputs stay in memory and are never written to disk or history.")
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// Bölüm başlığı: 10,5 pt, büyük harf, aralıklı, eş aralıklı (vurgu
+/// tipografiyle, TASARIM §1.4).
+private struct SectionTitle: View {
+    let title: String
+    init(_ title: String) { self.title = title }
+
+    var body: some View {
+        Text(title.uppercased())
+            .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
+            .tracking(0.8)
+            .foregroundStyle(.tertiary)
     }
 }
 

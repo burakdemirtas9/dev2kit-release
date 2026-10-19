@@ -96,23 +96,10 @@ private struct RequestTab: View {
         }
         .font(.callout)
         .padding(.horizontal, 10)
-        .frame(height: 32)
-        // `ignoresSafeAreaEdges: []`: renkli arka plan varsayılan olarak güvenli
-        // alana taşıyor; sekme çubuğu başlık çubuğunun hemen altında olduğu
-        // için seçili sekmenin rengi pencerenin tepesine kadar uzanıyordu.
-        .background(
-            isSelected ? Theme.editorBackground : (hovering ? Color.primary.opacity(0.05) : .clear),
-            ignoresSafeAreaEdges: []
-        )
-        .overlay(alignment: .top) {
-            if isSelected {
-                Rectangle().fill(Theme.accent).frame(height: 2)
-            }
-        }
-        .overlay(alignment: .trailing) {
-            Rectangle().fill(Color(nsColor: .separatorColor)).frame(width: 1)
-        }
-        .contentShape(Rectangle())
+        .frame(height: 28)
+        // Ortak sekme görünümü (yuvarlak üst köşeler; arka plan güvenli alana
+        // taşmaz, seçili sekme pencerenin tepesine kadar uzanmaz).
+        .modifier(TabChrome(isSelected: isSelected, hovering: hovering))
         .onHover { hovering = $0 }
         // TEK gesture: tek tık ANINDA seçer, çift tık sekmeyi kalıcı yapar.
         //
