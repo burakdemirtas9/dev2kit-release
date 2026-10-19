@@ -66,6 +66,9 @@ enum SyntaxHighlighter {
         Rule(#"\b(?:true|false|null)\b"#, Theme.syntaxKeyword),
         Rule(#""(?:\\.|[^"\\])*""#, Theme.syntaxString),
         Rule(#"("(?:\\.|[^"\\])*")\s*:"#, Theme.syntaxKey, group: 1),
+        // Yorum gönderilmez (`RequestBodyComments`); gri görünsün. Dizgi önce
+        // eşleşip geçildiği için "https://…" içindeki `//` yorum sayılmaz.
+        Rule(#""(?:\\.|[^"\\])*"|(//[^\n]*|/\*[\s\S]*?\*/)"#, Theme.syntaxComment, group: 1),
     ]
 
     private static let markupRules: [Rule] = [

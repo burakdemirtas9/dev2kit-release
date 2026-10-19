@@ -520,7 +520,10 @@ public final class RequestEngine: @unchecked Sendable {
             return
 
         case .raw(let content, let contentType):
-            let data = Data(try resolver.resolve(content).utf8)
+            // Yorumlar yalnızca kullanıcı için; çözümden ÖNCE kalkar (yorumdaki
+            // tanımsız {{değişken}} isteği durdurmasın).
+            let sendable = RequestBodyComments.sendable(content, contentType: contentType)
+            let data = Data(try resolver.resolve(sendable).utf8)
             guard !data.isEmpty else { return }
             try setBody(data, contentType: contentType.isEmpty ? nil : contentType,
                     on: &request, method: model.method)

@@ -220,7 +220,9 @@ public enum SecretReferences {
         for entry in model.queryParams where entry.enabled { texts += [entry.key, entry.value] }
         switch model.body {
         case .none: break
-        case .raw(let content, _): texts.append(content)
+        case .raw(let content, let contentType):
+            // Yorumdaki {{değişken}} gönderilmez; token almasın, hata vermesin.
+            texts.append(RequestBodyComments.sendable(content, contentType: contentType))
         case .formURLEncoded(let fields), .multipartForm(let fields):
             for field in fields where field.enabled { texts += [field.key, field.value] }
         }

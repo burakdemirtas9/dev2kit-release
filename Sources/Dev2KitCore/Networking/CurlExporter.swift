@@ -54,8 +54,9 @@ public enum CurlExporter {
         switch model.body {
         case .none:
             break
-        case .raw(let content, _):
-            let resolved = try resolver.resolve(content)
+        case .raw(let content, let contentType):
+            // Gönderilenle aynı: yorumlar dışa aktarılmaz.
+            let resolved = try resolver.resolve(RequestBodyComments.sendable(content, contentType: contentType))
             if !resolved.isEmpty {
                 parts.append("--data-raw \(shellQuote(resolved))")
             }
