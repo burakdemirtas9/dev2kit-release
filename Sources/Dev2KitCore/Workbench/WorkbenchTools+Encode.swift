@@ -22,15 +22,10 @@ extension WorkbenchTools {
         keywords: ["encode", "decode", "kodla", "çöz", "basic auth"],
         syntax: .plain,
         actions: [
-            WorkbenchAction(id: "encode", title: "Encode", usesURLSafe: true, outputSyntax: .plain,
-                            reverse: { output, _, _ in
-                                guard let data = Base64Codec.decode(output) else { throw WorkbenchIssue(message: "Base64 değil") }
-                                return String(decoding: data, as: UTF8.self)
-                            }) { input, options in
+            WorkbenchAction(id: "encode", title: "Encode", usesURLSafe: true, outputSyntax: .plain) { input, options in
                 Base64Codec.encode(Data(input.utf8), urlSafe: options.base64URLSafe)
             },
-            WorkbenchAction(id: "decode", title: "Decode", usesURLSafe: true, outputSyntax: .plain,
-                            reverse: { output, _, options in Base64Codec.encode(Data(output.utf8), urlSafe: options.base64URLSafe) }) { input, _ in
+            WorkbenchAction(id: "decode", title: "Decode", usesURLSafe: true, outputSyntax: .plain) { input, _ in
                 guard let data = Base64Codec.decode(input) else {
                     throw WorkbenchIssue(message: "Base64 olarak çözülemedi (geçersiz karakter ya da uzunluk)")
                 }
@@ -45,12 +40,10 @@ extension WorkbenchTools {
         keywords: ["percent", "yüzde", "query", "encode", "decode", "kodla", "çöz"],
         syntax: .plain,
         actions: [
-            WorkbenchAction(id: "encode", title: "Encode", usesFormEncoding: true, outputSyntax: .plain,
-                            reverse: { output, _, options in try URLCodec.decode(output, form: options.formEncoding) }) { input, options in
+            WorkbenchAction(id: "encode", title: "Encode", usesFormEncoding: true, outputSyntax: .plain) { input, options in
                 URLCodec.encode(input, form: options.formEncoding)
             },
-            WorkbenchAction(id: "decode", title: "Decode", usesFormEncoding: true, outputSyntax: .plain,
-                            reverse: { output, _, options in URLCodec.encode(output, form: options.formEncoding) }) { input, options in
+            WorkbenchAction(id: "decode", title: "Decode", usesFormEncoding: true, outputSyntax: .plain) { input, options in
                 try URLCodec.decode(input, form: options.formEncoding)
             },
         ],
@@ -105,12 +98,10 @@ extension WorkbenchTools {
         keywords: ["hexadecimal", "onaltılık", "bytes", "bayt", "encode", "decode"],
         syntax: .plain,
         actions: [
-            WorkbenchAction(id: "encode", title: "Encode", outputSyntax: .plain,
-                            reverse: { output, _, _ in String(decoding: try HexCodec.decode(output), as: UTF8.self) }) { input, _ in
+            WorkbenchAction(id: "encode", title: "Encode", outputSyntax: .plain) { input, _ in
                 HexCodec.encode(Data(input.utf8))
             },
-            WorkbenchAction(id: "decode", title: "Decode", outputSyntax: .plain,
-                            reverse: { output, _, _ in HexCodec.encode(Data(output.utf8)) }) { input, _ in
+            WorkbenchAction(id: "decode", title: "Decode", outputSyntax: .plain) { input, _ in
                 DecodedText.text(try HexCodec.decode(input))
             },
         ],

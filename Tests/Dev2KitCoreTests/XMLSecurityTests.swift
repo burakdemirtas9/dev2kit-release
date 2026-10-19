@@ -45,7 +45,6 @@ final class XMLSecurityTests: XCTestCase {
     private var paths: [(name: String, run: (String) -> String)] {
         var paths: [(String, (String) -> String)] = [
             ("validateXML", { "\(MarkupTools.validateXML($0))" }),
-            ("XMLConverter types", { (try? XMLConverter.toJSON($0, detectTypes: true, indent: " ")) ?? "" }),
             ("MarkupFormatter", { (try? MarkupFormatter.beautify($0, flavor: .xml, indent: " ")) ?? "" }),
             ("Beautifier (API Client)", { (try? Beautifier.beautify($0, as: .xml)) ?? "" }),
             ("Diff Checker", { DiffChecker.compare($0, "<r/>", language: .xml).rows.map { "\($0)" }.joined() }),

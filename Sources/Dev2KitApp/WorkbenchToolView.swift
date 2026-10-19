@@ -159,13 +159,6 @@ struct WorkbenchToolView: View {
                 }
                 .help("HMAC key (UTF-8). Kept in memory only, cleared with the tab.")
             }
-            if action.usesDetectTypes {
-                Toggle("Detect types", isOn: Binding(
-                    get: { workbench.options.detectTypes },
-                    set: { var options = workbench.options; options.detectTypes = $0; workbench.update(options: options) }
-                ))
-                .help("Write 12 as a number, true/false as booleans and empty cells as null. Leading zeros (012) and numbers over 15 digits stay text.")
-            }
             Spacer(minLength: 0)
             outputControls
         }
@@ -197,18 +190,21 @@ struct WorkbenchToolView: View {
                 if !workbench.outputHiddenFromEditor {
                     SearchToggleButton(search: outputSearch, strings: .english)
                 }
-                Button {
-                    workbench.toggleOutputEditing()
-                } label: {
-                    Image(systemName: workbench.isEditingOutput ? "pencil.circle.fill" : "pencil").iconHitTarget()
+                // Kalem yalnızca biçimlendiricilerde (kullanıcı kararı, 2026-10-20).
+                if workbench.tool.allowsOutputEditing {
+                    Button {
+                        workbench.toggleOutputEditing()
+                    } label: {
+                        Image(systemName: workbench.isEditingOutput ? "pencil.circle.fill" : "pencil").iconHitTarget()
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(workbench.isEditingOutput ? AnyShapeStyle(Theme.accent) : AnyShapeStyle(.secondary))
+                    .disabled(workbench.displayedOutput.isEmpty || workbench.outputHiddenFromEditor)
+                    .help(workbench.isEditingOutput
+                          ? "Stop editing. Edits are replaced when the input or options change."
+                          : "Edit output")
+                    .accessibilityLabel("Edit output")
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(workbench.isEditingOutput ? AnyShapeStyle(Theme.accent) : AnyShapeStyle(.secondary))
-                .disabled(workbench.displayedOutput.isEmpty || workbench.outputHiddenFromEditor)
-                .help(workbench.isEditingOutput
-                      ? "Stop editing. Edits are replaced when the input or options change."
-                      : "Edit output")
-                .accessibilityLabel("Edit output")
                 Button {
                     workbench.useOutputAsInput()
                 } label: {

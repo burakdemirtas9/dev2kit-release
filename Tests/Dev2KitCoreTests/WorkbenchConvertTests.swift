@@ -6,10 +6,6 @@ final class CSVConverterTests: XCTestCase {
         try CSVConverter.fromJSON(json, delimiter: delimiter)
     }
 
-    private func json(_ csv: String, detectTypes: Bool = true) throws -> JSONValue {
-        try JSONDocument.parse(CSVConverter.toJSON(csv, detectTypes: detectTypes, indent: "  "))
-    }
-
     // MARK: JSON → CSV
 
     func testArrayOfObjectsUsesFirstSeenColumnOrderAndBlankForMissing() throws {
@@ -38,10 +34,9 @@ final class CSVConverterTests: XCTestCase {
         XCTAssertEqual(try csv(#"[{"n":12345678901234567890}]"#), "n\n12345678901234567890")
     }
 
-    func testSingleColumnEmptyRowSurvivesRoundTrip() throws {
-        let text = try csv(#"[{"a":"x"},{"a":""},{"a":"y"}]"#)
-        XCTAssertEqual(text, "a\nx\n\"\"\ny")
-        XCTAssertEqual(try json(text, detectTypes: false), try JSONDocument.parse(#"[{"a":"x"},{"a":""},{"a":"y"}]"#))
+    func testSingleColumnEmptyRowIsQuotedNotDropped() throws {
+        // Boş hücre tırnaklı: aksi halde tek sütunda boş satır, satır kaybı olur.
+        XCTAssertEqual(try csv(#"[{"a":"x"},{"a":""},{"a":"y"}]"#), "a\nx\n\"\"\ny")
     }
 
     func testRejectsNonTabularInputWithReason() {
@@ -54,123 +49,11 @@ final class CSVConverterTests: XCTestCase {
         XCTAssertEqual(try csv("[]"), "")
         XCTAssertEqual(try csv("[{}]"), "")
     }
-
-    // MARK: CSV → JSON
-
-    func testHeaderRowAndDetectedTypes() throws {
-        XCTAssertEqual(try json("id,ad,aktif,not\n1,Ali,true,\n2.5,Ayşe,false,null"),
-                       try JSONDocument.parse(#"[{"id":1,"ad":"Ali","aktif":true,"not":null},{"id":2.5,"ad":"Ayşe","aktif":false,"not":null}]"#))
-    }
-
-    func testDetectTypesKeepsIdentifierLikeValuesAsText() throws {
-        // Posta kodu, telefon, kart numarası, yerel ondalık: metin kalır.
-        let value = try json("a,b,c,d,e,f\n012,+90555,1234567890123456,\"1,5\",.5,1e3")
-        XCTAssertEqual(value, try JSONDocument.parse(#"[{"a":"012","b":"+90555","c":"1234567890123456","d":"1,5","e":".5","f":1e3}]"#))
-    }
-
-    func testDetectTypesOffKeepsEverythingText() throws {
-        XCTAssertEqual(try json("a,b,c\n1,true,", detectTypes: false), try JSONDocument.parse(#"[{"a":"1","b":"true","c":""}]"#))
-    }
-
-    func testDottedHeadersNestUnlessAnotherHeaderIsAPrefix() throws {
-        XCTAssertEqual(try json("adres.il,adres.ilce,ad\nİzmir,Bornova,Ali"),
-                       try JSONDocument.parse(#"[{"adres":{"il":"İzmir","ilce":"Bornova"},"ad":"Ali"}]"#))
-        XCTAssertEqual(try json("a,a.b,.x,y.\n1,2,3,4"),
-                       try JSONDocument.parse(#"[{"a":1,"a.b":2,".x":3,"y.":4}]"#))
-    }
-
-    func testRoundTripThroughCSVKeepsStructure() throws {
-        let original = #"[{"id":1,"adres":{"il":"İzmir"},"etiket":["a","b"],"not":null,"aktif":true}]"#
-        XCTAssertEqual(try json(try csv(original)), try JSONDocument.parse(original))
-    }
-
-    func testDelimiterIsDetectedFromHeader() throws {
-        XCTAssertEqual(CSVConverter.detectDelimiter("a;b;c\n1,5;2;3"), .semicolon)
-        XCTAssertEqual(CSVConverter.detectDelimiter("a\tb\n1\t2"), .tab)
-        XCTAssertEqual(CSVConverter.detectDelimiter("\"x;y\",b\n1,2"), .comma)
-        XCTAssertEqual(CSVConverter.detectDelimiter("tek"), .comma)
-        XCTAssertEqual(try json("a;b\n\"1,5\";x"), try JSONDocument.parse(#"[{"a":"1,5","b":"x"}]"#))
-    }
-
-    func testQuotedFieldsWithNewlinesQuotesAndCRLF() throws {
-        XCTAssertEqual(try json("a,b\r\n\"satır1\r\nsatır2\",\"say \"\"hi\"\"\"\r\n"),
-                       try JSONDocument.parse(#"[{"a":"satır1\r\nsatır2","b":"say \"hi\""}]"#))
-    }
-
-    func testRaggedRowsBlankLinesBOMAndHeaderFixes() throws {
-        XCTAssertEqual(try json("\u{FEFF}ad,,ad\n\nAli,x,y,fazla\nAyşe\n"),
-                       try JSONDocument.parse(#"[{"ad":"Ali","column2":"x","ad_2":"y","column4":"fazla"},{"ad":"Ayşe","column2":null,"ad_2":null}]"#))
-    }
-
-    func testHeaderOnlyGivesEmptyArray() throws {
-        XCTAssertEqual(try json("a,b"), .array([]))
-    }
-
-    func testUnclosedQuoteIsReportedWithPosition() {
-        guard case .invalid(let issue) = CSVConverter.validate("a,b\n1,\"açık") else { return XCTFail() }
-        XCTAssertEqual(issue.line, 2)
-        XCTAssertEqual(issue.column, 3)
-        XCTAssertEqual(CSVConverter.validate("a,b\n1,2"), .valid)
-    }
-
-    func testArrayCellsBecomeValuesOnlyWhenValidJSON() throws {
-        XCTAssertEqual(try json("a,b\n\"[1,2]\",[bozuk"), try JSONDocument.parse(#"[{"a":[1,2],"b":"[bozuk"}]"#))
-    }
 }
 
 final class XMLConverterTests: XCTestCase {
-    private func json(_ xml: String, detectTypes: Bool = false) throws -> JSONValue {
-        try JSONDocument.parse(XMLConverter.toJSON(xml, detectTypes: detectTypes, indent: "  "))
-    }
-
     private func xml(_ json: String, root: String = "root") throws -> String {
         try XMLConverter.fromJSON(json, rootName: root, indent: "  ")
-    }
-
-    // MARK: XML → JSON
-
-    func testAttributesTextAndRepeatedSiblings() throws {
-        let value = try json(#"<siparis no="7" durum="acik"><kalem>a</kalem><kalem>b</kalem><not/></siparis>"#)
-        XCTAssertEqual(value, try JSONDocument.parse(#"{"siparis":{"@durum":"acik","@no":"7","kalem":["a","b"],"not":""}}"#))
-    }
-
-    func testTextNextToAttributesGoesToHashText() throws {
-        XCTAssertEqual(try json(#"<fiyat para="TRY">12.50</fiyat>"#),
-                       try JSONDocument.parse(##"{"fiyat":{"@para":"TRY","#text":"12.50"}}"##))
-    }
-
-    func testIndentationWhitespaceIsNotDataAndCDATAIsText() throws {
-        XCTAssertEqual(try json("<a>\n  <b>\n    x\n  </b>\n  <c><![CDATA[<raw> & ]]></c>\n</a>"),
-                       try JSONDocument.parse(#"{"a":{"b":"x","c":"<raw> &"}}"#))
-    }
-
-    func testDetectTypesIsOptIn() throws {
-        XCTAssertEqual(try json("<a><n>12</n><b>true</b><z>012</z></a>"),
-                       try JSONDocument.parse(#"{"a":{"n":"12","b":"true","z":"012"}}"#))
-        XCTAssertEqual(try json("<a><n>12</n><b>true</b><z>012</z></a>", detectTypes: true),
-                       try JSONDocument.parse(#"{"a":{"n":12,"b":true,"z":"012"}}"#))
-        XCTAssertFalse(WorkbenchTools.xmlToJSON.defaultOptions.detectTypes, "XML'de varsayılan kapalı")
-        XCTAssertTrue(WorkbenchTools.csvToJSON.defaultOptions.detectTypes, "CSV'de varsayılan açık")
-    }
-
-    func testNamespacedNamesAreKeptAsWritten() throws {
-        let value = try json(#"<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body><x>1</x></soap:Body></soap:Envelope>"#)
-        XCTAssertEqual(value, try JSONDocument.parse(#"{"soap:Envelope":{"@xmlns:soap":"http://schemas.xmlsoap.org/soap/envelope/","soap:Body":{"x":"1"}}}"#))
-    }
-
-    func testInvalidXMLReportsPosition() {
-        XCTAssertThrowsError(try json("<a>\n<b></a>")) { error in
-            XCTAssertEqual((error as? WorkbenchIssue)?.line, 2)
-        }
-    }
-
-    func testExternalEntitiesAreNotResolved() throws {
-        let secret = FileManager.default.temporaryDirectory.appendingPathComponent("dev2kit-xxe-\(UUID()).txt")
-        try "GIZLI".write(to: secret, atomically: true, encoding: .utf8)
-        defer { try? FileManager.default.removeItem(at: secret) }
-        let input = "<!DOCTYPE a [<!ENTITY x SYSTEM \"\(secret.absoluteString)\">]><a>&x;</a>"
-        let output = (try? XMLConverter.toJSON(input, detectTypes: false, indent: "  ")) ?? ""
-        XCTAssertFalse(output.contains("GIZLI"))
     }
 
     // MARK: JSON → XML
@@ -204,12 +87,11 @@ final class XMLConverterTests: XCTestCase {
         """)
     }
 
-    func testAttributeAndTextKeysRoundTrip() throws {
-        let original = ##"{"siparis":{"@no":"7","kalem":["a","b"],"fiyat":{"@para":"TRY","#text":"12.50"}}}"##
+    func testAttributeAndTextKeysBecomeAttributesAndText() throws {
         let text = try xml(##"{"@no":"7","kalem":["a","b"],"fiyat":{"@para":"TRY","#text":"12.50"}}"##, root: "siparis")
         XCTAssertTrue(text.contains(#"<siparis no="7">"#))
         XCTAssertTrue(text.contains(#"<fiyat para="TRY">12.50</fiyat>"#))
-        XCTAssertEqual(try json(text), try JSONDocument.parse(original))
+        XCTAssertTrue(text.contains("<kalem>a</kalem>") && text.contains("<kalem>b</kalem>"))
     }
 
     func testEscapesTextAndAttributes() throws {
@@ -283,10 +165,21 @@ final class YAMLWriterTests: XCTestCase {
 final class WorkbenchConvertCatalogTests: XCTestCase {
     func testConvertersAreSeparateToolsUnderConvert() {
         let ids = WorkbenchCatalog.all.filter { $0.category == .convert }.map(\.id)
-        XCTAssertEqual(ids, ["json-to-csv", "csv-to-json", "json-to-xml", "xml-to-json", "json-to-yaml"])
-        XCTAssertEqual(WorkbenchCatalog.matching("excel").map(\.id), ["json-to-csv", "csv-to-json"])
-        XCTAssertEqual(WorkbenchCatalog.matching("yml").map(\.id), ["json-to-yaml"])
-        XCTAssertTrue(WorkbenchCatalog.matching("dönüştür").count == 5)
+        // Kullanıcı kararı (2026-10-20): CSV → JSON ve XML → JSON kalktı, YAML ↔
+        // Properties son iki eleman.
+        XCTAssertEqual(ids, ["json-to-csv", "json-to-xml", "json-to-yaml", "yaml-to-properties", "properties-to-yaml"])
+        XCTAssertEqual(WorkbenchCatalog.matching("excel").map(\.id), ["json-to-csv"])
+        XCTAssertEqual(WorkbenchCatalog.matching("yml").map(\.id), ["json-to-yaml", "yaml-to-properties", "properties-to-yaml"])
+    }
+
+    func testObjectConverterCategory() {
+        let ids = WorkbenchCatalog.all.filter { $0.category == .objects }.map(\.id)
+        XCTAssertEqual(ids, ["json-to-java", "json-to-kotlin", "json-to-swift", "json-to-ts-interface", "json-to-ts-type", "json-to-python"])
+        XCTAssertEqual(WorkbenchTool.Category.objects.title, "Object Converter")
+        XCTAssertEqual(WorkbenchCatalog.matching("lombok").map(\.id), ["json-to-java"])
+        for tool in WorkbenchCatalog.all where tool.category == .objects {
+            XCTAssertNoThrow(try tool.actions[0].run(tool.sampleInput, tool.defaultOptions), tool.id)
+        }
     }
 
     func testConvertersHaveNoReverseOrTree() {
@@ -294,6 +187,6 @@ final class WorkbenchConvertCatalogTests: XCTestCase {
             XCTAssertNil(tool.actions[0].reverse, tool.id)
             XCTAssertFalse(tool.actions[0].supportsTree, tool.id)
         }
-        XCTAssertEqual(WorkbenchTools.csvToJSON.inputName, "CSV")
+        XCTAssertEqual(WorkbenchTools.propertiesToYAML.inputName, "Properties")
     }
 }

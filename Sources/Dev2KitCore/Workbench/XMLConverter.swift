@@ -1,117 +1,14 @@
 import Foundation
 
-/// JSON ↔ XML (docs/V2.md "1e"). Kural, Jackson `XmlMapper` / xml2js'e yakın
-/// ve iki yönde aynı:
-/// - Öznitelik `@ad`, eleman metni `#text`.
-/// - Aynı adlı kardeş elemanlar dizi; dizi tekrar eden eleman.
-/// - Kök: XML → JSON'da `{ "kökAdı": … }`; JSON → XML'de kök adı seçilir.
-///
-/// XML → JSON:
-/// - Dış varlıklar ÇÖZÜLMEZ (XXE), `MarkupTools.validateXML` ile aynı.
-/// - Metin kırpılır (girintili XML'in boşlukları veri sayılmaz); karışık
-///   içerikte parçalar boşlukla birleşir. Yorum ve işleme talimatı düşer.
-/// - Öznitelik sırası korunamaz (`XMLParser` sözlük veriyor): alfabetik.
-/// - "Detect types" varsayılan KAPALI: XML'de her şey metin, yanlış tahmin
-///   veriyi bozar.
-///
-/// JSON → XML:
+/// JSON → XML (docs/V2.md "1e"; XML → JSON 2026-10-20'de kullanıcı kararıyla
+/// kaldırıldı). Kural Jackson `XmlMapper` / xml2js'e yakın:
+/// - `@ad` anahtarı öznitelik, `#text` eleman metni.
+/// - Dizi tekrar eden eleman; kök adı seçilir.
 /// - XML adı olamayan anahtar (`first name`, `1st`) güvenli ada çevrilir
 ///   (`first_name`, `_1st`) ve çıktının başında yorumla bildirilir.
 /// - XML 1.0'da yazılamayan karakter (U+0000–U+001F, sekme/satır sonu hariç)
 ///   hata: sessizce atmak veriyi bozar.
 public enum XMLConverter {
-    static let maxDepth = JSONDocument.maxDepth
-
-    // MARK: XML → JSON
-
-    public static func toJSON(_ input: String, detectTypes: Bool, indent: String) throws -> String {
-        let parser = XMLParser(data: Data(input.utf8))
-        parser.shouldResolveExternalEntities = false
-        let builder = TreeBuilder()
-        parser.delegate = builder
-        guard parser.parse(), let root = builder.root else {
-            if builder.tooDeep {
-                throw WorkbenchIssue(message: "XML \(maxDepth) seviyeden derin")
-            }
-            if case .invalid(let issue) = MarkupTools.validateXML(input) { throw issue }
-            throw WorkbenchIssue(message: "Geçersiz XML")
-        }
-        let document = JSONValue.object([(root.name, value(of: root, detectTypes: detectTypes))])
-        return try JSONFormatter.beautify(document.compact(), indent: indent)
-    }
-
-    private final class Node {
-        let name: String
-        let attributes: [(key: String, value: String)]
-        var children: [Node] = []
-        var texts: [String] = []
-        var pending = ""
-
-        init(name: String, attributes: [String: String]) {
-            self.name = name
-            self.attributes = attributes.sorted { $0.key < $1.key }.map { ($0.key, $0.value) }
-        }
-
-        func flush() {
-            let text = pending.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !text.isEmpty { texts.append(text) }
-            pending = ""
-        }
-    }
-
-    private final class TreeBuilder: NSObject, XMLParserDelegate {
-        var stack: [Node] = []
-        var root: Node?
-        var tooDeep = false
-
-        func parser(_ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?,
-                    qualifiedName qName: String?, attributes attributeDict: [String: String] = [:]) {
-            guard stack.count < XMLConverter.maxDepth else {
-                tooDeep = true
-                parser.abortParsing()
-                return
-            }
-            stack.last?.flush()
-            stack.append(Node(name: elementName, attributes: attributeDict))
-        }
-
-        func parser(_ parser: XMLParser, didEndElement elementName: String, namespaceURI: String?, qualifiedName qName: String?) {
-            guard let node = stack.popLast() else { return }
-            node.flush()
-            if let parent = stack.last { parent.children.append(node) } else { root = node }
-        }
-
-        func parser(_ parser: XMLParser, foundCharacters string: String) {
-            stack.last?.pending += string
-        }
-
-        func parser(_ parser: XMLParser, foundCDATA CDATABlock: Data) {
-            stack.last?.pending += String(decoding: CDATABlock, as: UTF8.self)
-        }
-    }
-
-    private static func value(of node: Node, detectTypes: Bool) -> JSONValue {
-        func scalar(_ text: String) -> JSONValue {
-            detectTypes ? ValueInference.value(of: text, emptyIsNull: false) : .string(text)
-        }
-        let text = node.texts.joined(separator: " ")
-        if node.attributes.isEmpty, node.children.isEmpty { return scalar(text) }
-
-        var members: [(key: String, value: JSONValue)] = node.attributes.map { ("@" + $0.key, scalar($0.value)) }
-        var order: [String] = []
-        var groups: [String: [JSONValue]] = [:]
-        for child in node.children {
-            if groups[child.name] == nil { order.append(child.name) }
-            groups[child.name, default: []].append(value(of: child, detectTypes: detectTypes))
-        }
-        for name in order {
-            let values = groups[name] ?? []
-            members.append((name, values.count == 1 ? values[0] : .array(values)))
-        }
-        if !text.isEmpty { members.append(("#text", scalar(text))) }
-        return .object(members)
-    }
-
     // MARK: JSON → XML
 
     public static let defaultRootName = "root"

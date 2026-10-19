@@ -11,6 +11,8 @@ public struct WorkbenchTool: Identifiable, Sendable {
         case format
         case encode
         case convert
+        /// JSON örneğinden sınıf/tip tanımı (2026-10-20).
+        case objects
         case compare
         case preview
 
@@ -20,6 +22,7 @@ public struct WorkbenchTool: Identifiable, Sendable {
             case .format: return "Format"
             case .encode: return "Encode / Decode"
             case .convert: return "Convert"
+            case .objects: return "Object Converter"
             case .compare: return "Compare"
             case .preview: return "Preview"
             }
@@ -43,6 +46,10 @@ public struct WorkbenchTool: Identifiable, Sendable {
     /// Birden çok belge (sekme) açılabilir mi. Yalnızca JSON (kullanıcı
     /// kararı, 2026-10-19: diğer araçlarda gereksiz).
     public let supportsTabs: Bool
+    /// Çıktı sağ tarafta düzenlenebilir mi (kalem). Yalnızca biçimlendiriciler
+    /// (kullanıcı kararı, 2026-10-20): kodlayıcı ve dönüştürücüde çıktıyı
+    /// düzenlemek kafa karıştırıyordu.
+    public var allowsOutputEditing: Bool { category == .format }
     /// Boş girdide soluk gösterilen örnek (API Client gövdesindeki gibi):
     /// ne yapıştırılacağı ilk bakışta anlaşılsın.
     public let sampleInput: String
@@ -86,9 +93,8 @@ public struct WorkbenchAction: Identifiable, Sendable {
     public let usesIndentation: Bool
     public let usesSortKeys: Bool
     public let usesKeywordCase: Bool
-    /// Dönüştürücü seçenekleri: CSV ayracı, tip algılama, XML kök adı.
+    /// Dönüştürücü seçenekleri: CSV ayracı, XML kök adı.
     public let usesDelimiter: Bool
-    public let usesDetectTypes: Bool
     public let usesRootName: Bool
     /// Kodlayıcı seçenekleri (step 2a): Base64 URL-safe, URL form kodlaması,
     /// üretim adedi (UUID), hash çıktı biçimi, HMAC anahtarı.
@@ -113,7 +119,7 @@ public struct WorkbenchAction: Identifiable, Sendable {
 
     /// Üst satırda eylem seçicisinin yanında seçenek var mı (ayırıcı için).
     public var hasOptions: Bool {
-        usesIndentation || usesSortKeys || usesKeywordCase || usesDelimiter || usesDetectTypes || usesRootName
+        usesIndentation || usesSortKeys || usesKeywordCase || usesDelimiter || usesRootName
             || usesURLSafe || usesFormEncoding || usesCount || usesHashOutput || usesHMACKey
     }
 
@@ -124,7 +130,6 @@ public struct WorkbenchAction: Identifiable, Sendable {
         usesSortKeys: Bool = false,
         usesKeywordCase: Bool = false,
         usesDelimiter: Bool = false,
-        usesDetectTypes: Bool = false,
         usesRootName: Bool = false,
         usesURLSafe: Bool = false,
         usesFormEncoding: Bool = false,
@@ -143,7 +148,6 @@ public struct WorkbenchAction: Identifiable, Sendable {
         self.usesSortKeys = usesSortKeys
         self.usesKeywordCase = usesKeywordCase
         self.usesDelimiter = usesDelimiter
-        self.usesDetectTypes = usesDetectTypes
         self.usesRootName = usesRootName
         self.usesURLSafe = usesURLSafe
         self.usesFormEncoding = usesFormEncoding
@@ -165,8 +169,6 @@ public struct WorkbenchOptions: Hashable, Sendable {
     public var uppercaseKeywords: Bool
     /// JSON → CSV ayracı.
     public var csvDelimiter: CSVDelimiter
-    /// CSV/XML → JSON: `12`, `true`, boş hücre metin yerine sayı/boolean/null.
-    public var detectTypes: Bool
     /// JSON → XML kök eleman adı.
     public var xmlRootName: String
     public var base64URLSafe: Bool
@@ -183,7 +185,6 @@ public struct WorkbenchOptions: Hashable, Sendable {
         sortKeys: Bool = false,
         uppercaseKeywords: Bool = true,
         csvDelimiter: CSVDelimiter = .comma,
-        detectTypes: Bool = true,
         xmlRootName: String = XMLConverter.defaultRootName,
         base64URLSafe: Bool = false,
         formEncoding: Bool = false,
@@ -200,7 +201,6 @@ public struct WorkbenchOptions: Hashable, Sendable {
         self.sortKeys = sortKeys
         self.uppercaseKeywords = uppercaseKeywords
         self.csvDelimiter = csvDelimiter
-        self.detectTypes = detectTypes
         self.xmlRootName = xmlRootName
     }
 }
@@ -319,10 +319,16 @@ public enum WorkbenchCatalog {
         WorkbenchTools.sql,
         WorkbenchTools.markdown,
         WorkbenchTools.jsonToCSV,
-        WorkbenchTools.csvToJSON,
         WorkbenchTools.jsonToXML,
-        WorkbenchTools.xmlToJSON,
         WorkbenchTools.jsonToYAML,
+        WorkbenchTools.yamlToProperties,
+        WorkbenchTools.propertiesToYAML,
+        WorkbenchTools.jsonToJava,
+        WorkbenchTools.jsonToKotlin,
+        WorkbenchTools.jsonToSwift,
+        WorkbenchTools.jsonToTypeScriptInterface,
+        WorkbenchTools.jsonToTypeScriptType,
+        WorkbenchTools.jsonToPython,
         WorkbenchTools.jwt,
         WorkbenchTools.base64,
         WorkbenchTools.url,

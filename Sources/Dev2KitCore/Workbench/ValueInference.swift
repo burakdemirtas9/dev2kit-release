@@ -1,32 +1,15 @@
 import Foundation
 
-/// Metin hücresinden JSON değeri tahmini ("Detect types"): CSV → JSON ve
-/// XML → JSON ortak kuralı.
+/// Düz sayı kuralı: Properties → YAML'da hangi değerin tırnaksız sayı
+/// yazılacağı (önceden CSV/XML → JSON'un "Detect types"ı; o araçlar
+/// 2026-10-20'de kaldırıldı).
 ///
 /// Tutucu: yanlış tahmin veriyi bozar, kaçırılan tahmin yalnızca tırnak bırakır.
 /// - `012`, `+1`, `.5`, `1,5` metin kalır (posta kodu, telefon, yerel ondalık).
 /// - 15'ten fazla basamaklı sayı metin kalır: kart, IBAN parçası, TCKN gibi
 ///   kimlikler JavaScript'te (double) hassasiyet kaybeder.
-/// - `[`/`{` ile başlayıp geçerli JSON olan hücre değer olur: JSON → CSV
-///   dizileri hücreye JSON metni olarak yazar, gidiş-dönüş tutarlı kalsın.
 enum ValueInference {
     static let maxNumberDigits = 15
-
-    static func value(of text: String, emptyIsNull: Bool) -> JSONValue {
-        switch text {
-        case "": return emptyIsNull ? .null : .string("")
-        case "true": return .bool(true)
-        case "false": return .bool(false)
-        case "null": return .null
-        default: break
-        }
-        if isPlainNumber(text) { return .number(text) }
-        if let first = text.first, first == "[" || first == "{",
-           let value = try? JSONDocument.parse(text), value.isContainer {
-            return value
-        }
-        return .string(text)
-    }
 
     /// JSON sayı dilbilgisi (`-?(0|[1-9]\d*)(\.\d+)?([eE][+-]?\d+)?`) ve
     /// basamak sınırı.

@@ -39,13 +39,13 @@ final class EncodeToolsTests: XCTestCase {
         XCTAssertThrowsError(try URLCodec.decode("%ZZ", form: false))
     }
 
-    func testEncodersAreTwoWay() throws {
-        // Çıktı düzenlenince girdi güncellenir (ters dönüşüm).
-        for tool in [WorkbenchTools.base64, WorkbenchTools.url, WorkbenchTools.hex] {
-            for action in tool.actions {
-                let input = action.id == "decode" ? try tool.action(id: "encode").run("dev2kit ş", .init()) : "dev2kit ş"
-                let output = try action.run(input, .init())
-                XCTAssertEqual(try action.reverse?(output, input, .init()), input, "\(tool.id) \(action.id)")
+    func testOnlyFormattersAllowOutputEditing() {
+        // Kullanıcı kararı (2026-10-20): sağ tarafta düzenleme yalnızca
+        // biçimlendiricilerde; kodlayıcı ve dönüştürücüde ters dönüşüm yok.
+        for tool in WorkbenchCatalog.all {
+            XCTAssertEqual(tool.allowsOutputEditing, tool.category == .format, tool.id)
+            if tool.category != .format {
+                XCTAssertTrue(tool.actions.allSatisfy { $0.reverse == nil }, tool.id)
             }
         }
     }

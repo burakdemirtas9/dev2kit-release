@@ -85,9 +85,10 @@ final class WorkbenchLanguageToolsTests: XCTestCase {
 
     func testCatalogHasStep1bTools() {
         XCTAssertEqual(WorkbenchCatalog.all.filter { $0.category == .format }.map(\.id), ["json", "xml", "html", "css", "sql", "markdown"])
-        // JavaScript/TypeScript Workbench'ten kaldırıldı (kullanıcı kararı).
-        XCTAssertTrue(WorkbenchCatalog.matching("typescript").isEmpty)
-        XCTAssertEqual(WorkbenchCatalog.matching("soap").map(\.id), ["xml", "json-to-xml", "xml-to-json"])
+        // JavaScript/TypeScript biçimlendiricisi kaldırıldı (kullanıcı kararı);
+        // "typescript" yalnızca Object Converter'daki tip üreticilerini bulur.
+        XCTAssertEqual(WorkbenchCatalog.matching("typescript").map(\.id), ["json-to-ts-interface", "json-to-ts-type"])
+        XCTAssertEqual(WorkbenchCatalog.matching("soap").map(\.id), ["xml", "json-to-xml"])
     }
 
     func testEveryToolsActionsReverse() throws {

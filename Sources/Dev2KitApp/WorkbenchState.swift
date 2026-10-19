@@ -245,7 +245,7 @@ final class WorkbenchState {
     /// ama metin kalır; girdi ya da seçenek değişince çıktı yeniden
     /// hesaplanır ve düzenleme bırakılır.
     func toggleOutputEditing() {
-        guard !outputHiddenFromEditor else { return }
+        guard tool.allowsOutputEditing, !outputHiddenFromEditor else { return }
         // Düzenleme girdiye yansır: girdi sınırlarını aşan çıktı düzenlenmez.
         if !isEditingOutput, let issue = WorkbenchLimits.outputEditIssue(displayedOutput) {
             reportLimit(issue)

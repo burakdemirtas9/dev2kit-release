@@ -28,8 +28,16 @@ final class BackgroundWorkTests: XCTestCase {
             let options = WorkbenchOptions(sortKeys: true)
             for tool in WorkbenchCatalog.all where tool.syntax == .json {
                 _ = tool.validate?(json)
-                for action in tool.actions where (try? action.run(json, options)) == nil {
-                    failures.append("\(tool.id) \(action.id)")
+                for action in tool.actions {
+                    do {
+                        _ = try action.run(json, options)
+                    } catch {
+                        // Object Converter derinliği bilerek sınırlar (kullanıcı
+                        // kararı): çökmeden, açıklayıcı hatayla reddetmeli.
+                        let rejectsDepth = tool.category == .objects
+                            && (error as? ObjectCodeGenerator.GenerateError) == .tooDeep(ObjectCodeGenerator.maxDepth)
+                        if !rejectsDepth { failures.append("\(tool.id) \(action.id)") }
+                    }
                 }
             }
             if let value = try? JSONDocument.parse(json) { _ = JSONTreeNode(value: value).children }
@@ -41,21 +49,14 @@ final class BackgroundWorkTests: XCTestCase {
     }
 
     func testDeepestXMLThroughXMLToolsAndDiff() async {
-        let depth = XMLConverter.maxDepth
+        let depth = JSONDocument.maxDepth
         let xml = String(repeating: "<a>", count: depth) + "1" + String(repeating: "</a>", count: depth)
         let ok = await BackgroundWork.run { () -> Bool in
-            guard (try? XMLConverter.toJSON(xml, detectTypes: true, indent: "  ")) != nil else { return false }
             for action in WorkbenchTools.xml.actions { _ = try? action.run(xml, .init()) }
             _ = MarkupTools.validateXML(xml)
             _ = DiffChecker.compare(xml, xml, language: .xml)
             return true
         }
-        XCTAssertTrue(ok, "en derin izinli XML dönüştürülebilmeli")
-        // Sınırın bir fazlası çökmez, açıklayıcı hata verir.
-        let tooDeep = String(repeating: "<a>", count: depth + 1) + String(repeating: "</a>", count: depth + 1)
-        let message = await BackgroundWork.run { () -> String in
-            do { _ = try XMLConverter.toJSON(tooDeep, detectTypes: false, indent: " "); return "" } catch { return error.localizedDescription }
-        }
-        XCTAssertTrue(message.contains("derin"), message)
+        XCTAssertTrue(ok, "en derin XML araçlardan çökmeden geçmeli")
     }
 }

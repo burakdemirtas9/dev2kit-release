@@ -164,11 +164,19 @@ extension WorkbenchTool {
         case "uuid": return "number"
         case "hash": return "checkmark.seal"
         case "hex": return "number.square"
+        case "yaml-to-properties": return "list.bullet.indent"
+        case "properties-to-yaml": return "list.bullet.rectangle"
+        case "json-to-java": return "cup.and.saucer"
+        case "json-to-kotlin": return "k.square"
+        case "json-to-swift": return "swift"
+        case "json-to-ts-interface", "json-to-ts-type": return "t.square"
+        case "json-to-python": return "p.square"
         default:
             switch category {
             case .format: return "text.alignleft"
             case .encode: return "lock.rotation"
             case .convert: return "arrow.left.arrow.right"
+            case .objects: return "shippingbox"
             case .compare: return "arrow.left.arrow.right.square"
             case .preview: return "eye"
             }

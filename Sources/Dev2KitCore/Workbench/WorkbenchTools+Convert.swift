@@ -18,16 +18,6 @@ extension WorkbenchTools {
         try CSVConverter.fromJSON(input, delimiter: options.csvDelimiter)
     }
 
-    public static let csvToJSON = converter(
-        id: "csv-to-json", title: "CSV → JSON", input: "CSV", syntax: .plain, output: .json,
-        keywords: ["excel", "spreadsheet", "tablo", "table"],
-        usesIndentation: true, usesDetectTypes: true,
-        validate: CSVConverter.validate,
-        sample: "id,name,city\n1,Ada,London\n2,Linus,Helsinki"
-    ) { input, options in
-        try CSVConverter.toJSON(input, detectTypes: options.detectTypes, indent: options.indentation.unit)
-    }
-
     public static let jsonToXML = converter(
         id: "json-to-xml", title: "JSON → XML", input: "JSON", syntax: .json, output: .xml,
         keywords: ["soap"],
@@ -36,17 +26,6 @@ extension WorkbenchTools {
         sample: #"{ "order": { "@id": "42", "item": ["api", "tools"] } }"#
     ) { input, options in
         try XMLConverter.fromJSON(input, rootName: options.xmlRootName, indent: options.indentation.unit)
-    }
-
-    public static let xmlToJSON = converter(
-        id: "xml-to-json", title: "XML → JSON", input: "XML", syntax: .xml, output: .json,
-        keywords: ["soap"],
-        usesIndentation: true, usesDetectTypes: true,
-        validate: MarkupTools.validateXML,
-        defaultOptions: WorkbenchOptions(detectTypes: false),
-        sample: #"<order id="42"><item>api</item><item>tools</item></order>"#
-    ) { input, options in
-        try XMLConverter.toJSON(input, detectTypes: options.detectTypes, indent: options.indentation.unit)
     }
 
     public static let jsonToYAML = converter(
@@ -58,6 +37,62 @@ extension WorkbenchTools {
         try YAMLWriter.fromJSON(input)
     }
 
+    /// YAML → Properties / Properties → YAML (Spring yapılandırması,
+    /// 2026-10-20): `PropertiesConverter`.
+    public static let yamlToProperties = converter(
+        id: "yaml-to-properties", title: "YAML → Properties", input: "YAML", syntax: .plain, output: .plain,
+        keywords: ["yml", "spring", "application.yml", "application.properties", "properties"],
+        validate: YAMLReader.validate,
+        sample: "server:\n  port: 8080\nspring:\n  application:\n    name: demo\n  profiles:\n    active:\n      - dev\n      - local"
+    ) { input, _ in
+        try PropertiesConverter.fromYAML(input)
+    }
+
+    public static let propertiesToYAML = converter(
+        id: "properties-to-yaml", title: "Properties → YAML", input: "Properties", syntax: .plain, output: .plain,
+        keywords: ["yml", "spring", "application.yml", "application.properties", "properties"],
+        validate: PropertiesConverter.validate,
+        sample: "server.port=8080\nspring.application.name=demo\nspring.profiles.active[0]=dev\nspring.profiles.active[1]=local"
+    ) { input, _ in
+        try PropertiesConverter.toYAML(input)
+    }
+
+    // MARK: Object Converter (JSON → sınıf/tip, `ObjectCodeGenerator`)
+
+    static let objectSample = #"{ "id": 42, "customer_name": "Ada", "total": 12.5, "address": { "city": "İstanbul" }, "items": [{ "sku": "A1", "qty": 1 }] }"#
+
+    static func objectConverter(id: String, title: String, language: ObjectCodeGenerator.Language,
+                                output: Beautifier.Kind, keywords: [String]) -> WorkbenchTool {
+        converter(
+            id: id, title: title, input: "JSON", syntax: .json, output: output,
+            keywords: ["dto", "class", "model", "sınıf", "pojo", "type"] + keywords,
+            category: .objects,
+            validate: JSONTool.validate,
+            sample: objectSample
+        ) { input, _ in
+            try ObjectCodeGenerator.generate(input, language: language)
+        }
+    }
+
+    public static let jsonToJava = objectConverter(
+        id: "json-to-java", title: "JSON → Java DTO", language: .java, output: .javascript,
+        keywords: ["java", "lombok", "spring", "record"])
+    public static let jsonToKotlin = objectConverter(
+        id: "json-to-kotlin", title: "JSON → Kotlin Data Class", language: .kotlin, output: .javascript,
+        keywords: ["kotlin", "data class"])
+    public static let jsonToSwift = objectConverter(
+        id: "json-to-swift", title: "JSON → Swift Codable", language: .swift, output: .javascript,
+        keywords: ["swift", "codable", "struct", "ios"])
+    public static let jsonToTypeScriptInterface = objectConverter(
+        id: "json-to-ts-interface", title: "JSON → TypeScript Interface", language: .typeScriptInterface, output: .javascript,
+        keywords: ["typescript", "ts", "interface"])
+    public static let jsonToTypeScriptType = objectConverter(
+        id: "json-to-ts-type", title: "JSON → TypeScript Type", language: .typeScriptType, output: .javascript,
+        keywords: ["typescript", "ts", "type alias"])
+    public static let jsonToPython = objectConverter(
+        id: "json-to-python", title: "JSON → Python Dataclass", language: .python, output: .plain,
+        keywords: ["python", "dataclass", "py"])
+
     static func converter(
         id: String,
         title: String,
@@ -67,8 +102,8 @@ extension WorkbenchTools {
         keywords: [String],
         usesIndentation: Bool = false,
         usesDelimiter: Bool = false,
-        usesDetectTypes: Bool = false,
         usesRootName: Bool = false,
+        category: WorkbenchTool.Category = .convert,
         validate: @escaping @Sendable (String) -> WorkbenchValidation,
         defaultOptions: WorkbenchOptions = WorkbenchOptions(),
         sample: String,
@@ -78,12 +113,12 @@ extension WorkbenchTools {
             id: id,
             title: title,
             inputName: input,
-            category: .convert,
+            category: category,
             keywords: ["convert", "dönüştür", "çevir"] + keywords,
             syntax: syntax,
             actions: [
                 WorkbenchAction(id: "convert", title: "Convert", usesIndentation: usesIndentation,
-                                usesDelimiter: usesDelimiter, usesDetectTypes: usesDetectTypes,
+                                usesDelimiter: usesDelimiter,
                                 usesRootName: usesRootName, outputSyntax: output, run: run),
             ],
             validate: validate,

@@ -1,6 +1,6 @@
 import Foundation
 
-/// JSON → YAML (docs/V2.md "1e"); YAML okuma yok (step 3).
+/// JSON → YAML (docs/V2.md "1e") ve Properties → YAML; okuma `YAMLReader`.
 ///
 /// - Blok stil, 2 boşluk girinti. YAML girintide sekmeye izin vermiyor;
 ///   girinti seçeneği bu yüzden yok.
@@ -17,7 +17,11 @@ public enum YAMLWriter {
     private static let indicators = Set("-?:,[]{}#&*!|>'\"%@`+.0123456789 ")
 
     public static func fromJSON(_ input: String) throws -> String {
-        block(try JSONDocument.parse(input)).joined(separator: "\n")
+        write(try JSONDocument.parse(input))
+    }
+
+    public static func write(_ value: JSONValue) -> String {
+        block(value).joined(separator: "\n")
     }
 
     private static func block(_ value: JSONValue) -> [String] {
