@@ -51,5 +51,6 @@ extension L10nTable {
         "tokenFactory.selfReference": L10nEntry("\"%1$@\" kendisi {{%2$@}} kullanıyor; token request'leri başka bir token'a bağlı olamaz.", "\"%1$@\" itself uses {{%2$@}}; token requests can’t depend on another token."),
         "tokenFactory.dropHint": L10nEntry("Bırak: Token Factory'ye kopyalanır", "Drop to copy into Token Factory"),
         "tokenFactory.add": L10nEntry("Token Request'i Ekle", "Add Token Request"),
+        "token.deleteMany.message": L10nEntry("Kalıcı olarak silinir. %1$@ kullanan request'ler artık token alamaz.", "They’re deleted permanently. Requests that use %1$@ can no longer get a token."),
     ]
 }

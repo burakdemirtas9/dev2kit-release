@@ -27,6 +27,39 @@ public enum MultiSelection {
         selection.intersection(live)
     }
 
+    /// Tıklamada basılı tuş: düz, ⌘ (tek tek ekle/çıkar), ⇧ (aralık).
+    public enum Click: Sendable {
+        case plain
+        case toggle
+        case range
+    }
+
+    /// `List` kullanmayan satırlar (Token Factory) için tıklama kuralı; Finder
+    /// ile aynı. `anchor`: aralığın sabit ucu (son düz ya da ⌘ tıklanan).
+    ///
+    /// - Düz: yalnızca tıklanan; çapa o olur.
+    /// - ⌘: tıklanan eklenir ya da çıkarılır; çapa o olur. Son öğe de
+    ///   çıkarılabilir (küme boş kalır).
+    /// - ⇧: çapadan tıklanana kadar olan aralık (sıra `order`'a göre) seçimin
+    ///   yerine geçer; çapa değişmez. Çapa bu listede yoksa düz tıklama gibi.
+    public static func click(
+        _ id: UUID, _ click: Click, selection: Set<UUID>, anchor: UUID?, order: [UUID]
+    ) -> (selection: Set<UUID>, anchor: UUID?) {
+        switch click {
+        case .plain:
+            return ([id], id)
+        case .toggle:
+            var updated = selection
+            if updated.contains(id) { updated.remove(id) } else { updated.insert(id) }
+            return (updated, id)
+        case .range:
+            guard let anchor, let from = order.firstIndex(of: anchor), let to = order.firstIndex(of: id) else {
+                return ([id], id)
+            }
+            return (Set(order[min(from, to)...max(from, to)]), anchor)
+        }
+    }
+
     /// Bağlam menüsü hangi isteklere uygulanacak?
     ///
     /// macOS alışkanlığı: sağ tıklanan satır seçimin İÇİNDEYSE işlem tüm seçime,

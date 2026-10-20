@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import Dev2KitCore
 
@@ -6,11 +7,16 @@ import Dev2KitCore
 /// Koleksiyon listesinin İÇİNDE değil, altında sabit duruyor: kaydırınca
 /// kaybolmasın, kullanıcı token isteklerinin normal isteklerden ayrı bir yer
 /// olduğunu görsün. Satırlar `List` değil Button: liste seçimi ana listeye
-/// ait, iki ayrı `List` seçimi birbirini eziyordu.
+/// ait, iki ayrı `List` seçimi birbirini eziyordu. Çoklu seçim (⌘ tek tek,
+/// ⇧ aralık) bu yüzden elle: kural `MultiSelection.click` (Core, testli),
+/// küme ana listeyle ortak (`selectedRequestIDs`).
 struct TokenFactoryPanel: View {
     @Environment(AppState.self) private var appState
     @AppStorage("tokenFactoryCollapsed") private var collapsed = false
-    @State private var pendingDelete: RequestModel?
+    /// Silme onayı bekleyen token request'leri (tek ya da çoklu seçim).
+    @State private var pendingDelete: Set<UUID> = []
+    /// ⇧ aralığının sabit ucu: son düz ya da ⌘ tıklanan satır.
+    @State private var anchor: UUID?
     /// Yukarıdan bir istek panelin üstüne sürükleniyor (bırakma ContentView'da).
     var isDropTargeted = false
 
@@ -31,7 +37,7 @@ struct TokenFactoryPanel: View {
                     ScrollView {
                         VStack(spacing: 1) {
                             ForEach(requests) { request in
-                                row(request, environment: environment, problems: problems)
+                                row(request, order: requests.map(\.id), environment: environment, problems: problems)
                             }
                         }
                         .padding(.horizontal, 6)
@@ -63,19 +69,41 @@ struct TokenFactoryPanel: View {
             }
         }
         .confirmationDialog(
-            L10n.t("common.deleteNamed.title", pendingDelete?.name ?? ""),
-            isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
+            deleteTitle(requests),
+            isPresented: Binding(get: { !pendingDelete.isEmpty }, set: { if !$0 { pendingDelete = [] } }),
             titleVisibility: .visible
         ) {
-            Button(L10n.t("request.delete"), role: .destructive) {
-                if let request = pendingDelete { appState.deleteRequest(request.id) }
-                pendingDelete = nil
+            Button(pendingDelete.count > 1 ? L10n.plural("request.deleteMany", count: pendingDelete.count) : L10n.t("request.delete"),
+                   role: .destructive) {
+                appState.deleteRequests(pendingDelete)
+                pendingDelete = []
             }
-            Button(L10n.t("common.cancel"), role: .cancel) { pendingDelete = nil }
+            Button(L10n.t("common.cancel"), role: .cancel) { pendingDelete = [] }
         } message: {
-            let variable = (pendingDelete?.tokenOutput ?? TokenOutput()).trimmedVariableName
-            Text(L10n.t("token.delete.message", variable))
+            // Hangi token değişkenlerinin artık dolmayacağı adıyla söylenir.
+            let variables = requests.filter { pendingDelete.contains($0.id) }
+                .map { "{{\(($0.tokenOutput ?? TokenOutput()).trimmedVariableName)}}" }
+            Text(variables.count > 1
+                 ? L10n.t("token.deleteMany.message", variables.joined(separator: ", "))
+                 : L10n.t("token.delete.message", String(variables.first?.dropFirst(2).dropLast(2) ?? "")))
         }
+    }
+
+    /// Silme onayının başlığı: tek request'te adı, çoklu seçimde sayısı.
+    private func deleteTitle(_ requests: [RequestModel]) -> String {
+        if pendingDelete.count == 1, let request = requests.first(where: { pendingDelete.contains($0.id) }) {
+            return L10n.t("common.deleteNamed.title", request.name)
+        }
+        return L10n.plural("request.deleteMany.title", count: pendingDelete.count)
+    }
+
+    /// Tıklama: düz seçer, ⌘ ekler/çıkarır, ⇧ çapadan aralık seçer.
+    private func select(_ id: UUID, order: [UUID]) {
+        let flags = NSEvent.modifierFlags
+        let click: MultiSelection.Click = flags.contains(.command) ? .toggle : flags.contains(.shift) ? .range : .plain
+        let result = MultiSelection.click(id, click, selection: appState.selectedRequestIDs, anchor: anchor, order: order)
+        anchor = result.anchor
+        appState.applySelection(result.selection, order: order)
     }
 
     private func header(count: Int, hasProblems: Bool) -> some View {
@@ -143,16 +171,16 @@ struct TokenFactoryPanel: View {
         .padding(.bottom, 8)
     }
 
-    private func row(_ request: RequestModel, environment: EnvironmentModel?, problems: [TokenFactory.Problem]) -> some View {
+    private func row(_ request: RequestModel, order: [UUID], environment: EnvironmentModel?, problems: [TokenFactory.Problem]) -> some View {
         let output = request.tokenOutput ?? TokenOutput()
-        let isSelected = appState.selectedRequestID == request.id
+        let isSelected = appState.selectedRequestIDs.contains(request.id)
         let source = appState.tokenSources(for: environment).first { $0.request.id == request.id }
         let state = source.flatMap { appState.tokenState($0, environment: environment) }
         let hasProblem = problems.contains { $0.involves(request: request.name) }
         let isActive = output.applies(to: environment)
 
         return Button {
-            appState.applySelection([request.id], order: [request.id])
+            select(request.id, order: order)
         } label: {
             HStack(spacing: 6) {
                 Text(request.method.rawValue)
@@ -178,16 +206,23 @@ struct TokenFactoryPanel: View {
         .buttonStyle(.plain)
         .help(isActive ? request.name : L10n.t("token.panel.inactive", request.name))
         .contextMenu {
-            Button {
-                appState.duplicateRequest(request.id)
-            } label: {
-                Label(L10n.t("request.duplicate"), systemImage: "plus.square.on.square")
+            // Sağ tıklanan satır seçimdeyse işlem seçimdeki TOKEN request'lerine,
+            // değilse yalnızca o satıra (ana listede seçili olanlara dokunulmaz).
+            let picked = MultiSelection.targets(forContextMenuOn: request.id, selection: appState.selectedRequestIDs)
+                .intersection(order)
+            if picked.count <= 1 {
+                Button {
+                    appState.duplicateRequest(request.id)
+                } label: {
+                    Label(L10n.t("request.duplicate"), systemImage: "plus.square.on.square")
+                }
+                Divider()
             }
-            Divider()
             Button(role: .destructive) {
-                pendingDelete = request
+                pendingDelete = picked
             } label: {
-                Label(L10n.t("common.deleteEllipsis"), systemImage: "trash")
+                Label(picked.count > 1 ? L10n.plural("request.deleteManyEllipsis", count: picked.count) : L10n.t("common.deleteEllipsis"),
+                      systemImage: "trash")
             }
         }
     }
