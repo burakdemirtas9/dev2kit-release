@@ -15,6 +15,9 @@ public struct WorkbenchTool: Identifiable, Sendable {
         case objects
         case compare
         case preview
+        /// Diğer araçlar (JSONPath, 2026-10-20). Yeni ve tek başına araçlar
+        /// buraya; başlık bir kez tanımlı, tekrar açılmaz.
+        case others
 
         /// Workbench arayüzü İngilizce (kullanıcı kararı, 2026-10-18).
         public var title: String {
@@ -25,6 +28,7 @@ public struct WorkbenchTool: Identifiable, Sendable {
             case .objects: return "Object Converter"
             case .compare: return "Compare"
             case .preview: return "Preview"
+            case .others: return "Others"
             }
         }
     }
@@ -53,6 +57,11 @@ public struct WorkbenchTool: Identifiable, Sendable {
     /// Boş girdide soluk gösterilen örnek (API Client gövdesindeki gibi):
     /// ne yapıştırılacağı ilk bakışta anlaşılsın.
     public let sampleInput: String
+    /// Örnek yüklenince seçeneklere uygulanır (JSONPath: örneğe uyan sorgu).
+    public let sampleOptions: (@Sendable (inout WorkbenchOptions) -> Void)?
+    /// Girdiyi yerinde biçimlendirme (girdi bölmesinde "Format"). `nil`: yok.
+    /// Çıktısı girdiden farklı olan araçlarda girdiyi okunur yapmak için.
+    public let inputFormatter: (@Sendable (String, WorkbenchOptions) throws -> String)?
 
     public init(
         id: String,
@@ -65,9 +74,13 @@ public struct WorkbenchTool: Identifiable, Sendable {
         validate: (@Sendable (String) -> WorkbenchValidation)? = nil,
         defaultOptions: WorkbenchOptions = WorkbenchOptions(),
         sampleInput: String = "",
+        sampleOptions: (@Sendable (inout WorkbenchOptions) -> Void)? = nil,
+        inputFormatter: (@Sendable (String, WorkbenchOptions) throws -> String)? = nil,
         supportsTabs: Bool = false
     ) {
         self.sampleInput = sampleInput
+        self.sampleOptions = sampleOptions
+        self.inputFormatter = inputFormatter
         self.supportsTabs = supportsTabs
         self.id = id
         self.title = title
@@ -103,6 +116,8 @@ public struct WorkbenchAction: Identifiable, Sendable {
     public let usesCount: Bool
     public let usesHashOutput: Bool
     public let usesHMACKey: Bool
+    /// Girdinin üstünde tam genişlikte sorgu satırı (JSONPath).
+    public let usesQuery: Bool
     /// Boş girdide de çalışır (UUID üretme, "şu an" zaman damgası).
     public let runsOnEmptyInput: Bool
     /// Çıktının sözdizimi rengi aracınkinden farklıysa (Escape → düz metin).
@@ -116,6 +131,9 @@ public struct WorkbenchAction: Identifiable, Sendable {
     /// geçici olarak bozuk metin) girdiye dokunulmaz.
     public let reverse: (@Sendable (String, String, WorkbenchOptions) throws -> String)?
     public let run: @Sendable (String, WorkbenchOptions) throws -> String
+    /// Çıktıyla birlikte kısa özet üreten çalıştırma ("3 matches"). Verilirse
+    /// `run` bundan türetilir; özet çıktı bölmesinin başlığında görünür.
+    public let runWithSummary: (@Sendable (String, WorkbenchOptions) throws -> WorkbenchRunResult)?
 
     /// Üst satırda eylem seçicisinin yanında seçenek var mı (ayırıcı için).
     public var hasOptions: Bool {
@@ -136,10 +154,12 @@ public struct WorkbenchAction: Identifiable, Sendable {
         usesCount: Bool = false,
         usesHashOutput: Bool = false,
         usesHMACKey: Bool = false,
+        usesQuery: Bool = false,
         runsOnEmptyInput: Bool = false,
         outputSyntax: Beautifier.Kind? = nil,
         supportsTree: Bool = false,
         reverse: (@Sendable (String, String, WorkbenchOptions) throws -> String)? = nil,
+        runWithSummary: (@Sendable (String, WorkbenchOptions) throws -> WorkbenchRunResult)? = nil,
         run: @escaping @Sendable (String, WorkbenchOptions) throws -> String
     ) {
         self.id = id
@@ -154,11 +174,46 @@ public struct WorkbenchAction: Identifiable, Sendable {
         self.usesCount = usesCount
         self.usesHashOutput = usesHashOutput
         self.usesHMACKey = usesHMACKey
+        self.usesQuery = usesQuery
         self.runsOnEmptyInput = runsOnEmptyInput
         self.outputSyntax = outputSyntax
         self.supportsTree = supportsTree
         self.reverse = reverse
         self.run = run
+        self.runWithSummary = runWithSummary
+    }
+
+    /// Özetli eylem (`runWithSummary`); `run` ondan türetilir.
+    public init(
+        id: String,
+        title: String,
+        usesIndentation: Bool = false,
+        usesSortKeys: Bool = false,
+        usesQuery: Bool = false,
+        outputSyntax: Beautifier.Kind? = nil,
+        runWithSummary: @escaping @Sendable (String, WorkbenchOptions) throws -> WorkbenchRunResult
+    ) {
+        self.init(id: id, title: title, usesIndentation: usesIndentation, usesSortKeys: usesSortKeys,
+                  usesQuery: usesQuery, outputSyntax: outputSyntax, runWithSummary: runWithSummary) { input, options in
+            try runWithSummary(input, options).output
+        }
+    }
+
+    /// Özetli çalıştırma varsa onu, yoksa `run`'ı kullanır.
+    public func perform(_ input: String, options: WorkbenchOptions) throws -> WorkbenchRunResult {
+        if let runWithSummary { return try runWithSummary(input, options) }
+        return WorkbenchRunResult(output: try run(input, options))
+    }
+}
+
+/// Eylem sonucu: çıktı ve isteğe bağlı kısa özet.
+public struct WorkbenchRunResult: Sendable, Equatable {
+    public let output: String
+    public let summary: String?
+
+    public init(output: String, summary: String? = nil) {
+        self.output = output
+        self.summary = summary
     }
 }
 
@@ -179,6 +234,8 @@ public struct WorkbenchOptions: Hashable, Sendable {
     public var hashOutput: HashTool.Output
     /// HMAC anahtarı: yalnızca bellekte, sekmeyle birlikte gider.
     public var hmacKey: String
+    /// Sorgu (JSONPath). Yalnızca bellekte, sekmeyle birlikte gider.
+    public var query: String
 
     public init(
         indentation: Indentation = .default,
@@ -190,8 +247,10 @@ public struct WorkbenchOptions: Hashable, Sendable {
         formEncoding: Bool = false,
         generateCount: Int = 1,
         hashOutput: HashTool.Output = .hex,
-        hmacKey: String = ""
+        hmacKey: String = "",
+        query: String = "$"
     ) {
+        self.query = query
         self.base64URLSafe = base64URLSafe
         self.formEncoding = formEncoding
         self.generateCount = generateCount
@@ -336,6 +395,7 @@ public enum WorkbenchCatalog {
         WorkbenchTools.uuid,
         WorkbenchTools.hash,
         WorkbenchTools.hex,
+        WorkbenchTools.jsonPath,
     ]
 
     /// Diff Checker bir `WorkbenchTool` değil (iki girdi, kendi ekranı); kenar

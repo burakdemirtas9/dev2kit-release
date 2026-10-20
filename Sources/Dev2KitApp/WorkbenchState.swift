@@ -96,6 +96,8 @@ final class WorkbenchState {
     /// (ör. 1 MB'ı aşan Minify çıktısı): yalnızca kopyalanabilir.
     private(set) var outputHiddenFromEditor = false
     private(set) var actionIssue: WorkbenchIssue?
+    /// Eylemin kısa özeti ("3 matches"); yoksa `nil`.
+    private(set) var outputSummary: String?
     private(set) var validation: WorkbenchValidation = .empty
     private(set) var tree: JSONTreeNode?
     private(set) var inputStats = TextStats.empty
@@ -230,6 +232,40 @@ final class WorkbenchState {
     func update(options: WorkbenchOptions) {
         mutateDocument { $0.options = options }
         schedule(debounced: false)
+    }
+
+    /// Sorgu satırı (JSONPath): yazarken her tuşta değil, kısa beklemeyle.
+    func update(query: String) {
+        guard query != options.query else { return }
+        mutateDocument { $0.options.query = query }
+        schedule(debounced: true)
+    }
+
+    /// Boş girdiye aracın örneğini koyar (varsa örneğe uyan seçeneklerle).
+    func loadSample() {
+        guard !tool.sampleInput.isEmpty else { return }
+        if let apply = tool.sampleOptions {
+            var updated = options
+            apply(&updated)
+            mutateDocument { $0.options = updated }
+        }
+        input = tool.sampleInput
+        schedule(debounced: false)
+    }
+
+    /// Girdiyi yerinde biçimlendirir (aracın `inputFormatter`'ı). Arka planda:
+    /// büyük JSON ana iş parçacığını dondurmasın. Geçersiz girdide dokunulmaz;
+    /// hata zaten doğrulama satırında konumuyla görünüyor.
+    func formatInput() {
+        guard let formatter = tool.inputFormatter, !input.isEmpty else { return }
+        let text = input
+        let options = options
+        let documentID = document.id
+        Task { [weak self] in
+            let formatted = await BackgroundWork.run { try? formatter(text, options) }
+            guard let self, let formatted, self.document.id == documentID, self.input == text else { return }
+            self.input = formatted
+        }
     }
 
     func select(outputMode: OutputMode) {
@@ -423,6 +459,7 @@ final class WorkbenchState {
         isEditingOutput = false
         tree = nil
         actionIssue = nil
+        outputSummary = nil
         validation = .empty
         outputStats = .empty
         inputStats = TextStats(bytes: document.input.utf8.count, lines: 0, characters: 0)
@@ -466,6 +503,7 @@ final class WorkbenchState {
 
     private struct Result: Sendable {
         let output: String
+        var summary: String?
         let issue: WorkbenchIssue?
         let validation: WorkbenchValidation
         let tree: JSONTreeNode?
@@ -490,9 +528,14 @@ final class WorkbenchState {
         }
         let validation = tool.validate?(text) ?? .empty
         var output = ""
+        var summary: String?
         var issue: WorkbenchIssue?
         do {
-            if let action { output = try action.run(text, options) }
+            if let action {
+                let result = try action.perform(text, options: options)
+                output = result.output
+                summary = result.summary
+            }
         } catch let error as WorkbenchIssue {
             issue = error
         } catch {
@@ -502,7 +545,7 @@ final class WorkbenchState {
         if wantsTree, case .valid = validation, let value = try? JSONDocument.parse(text) {
             tree = JSONTreeNode(value: value)
         }
-        return Result(output: output, issue: issue, validation: validation, tree: tree,
+        return Result(output: output, summary: summary, issue: issue, validation: validation, tree: tree,
                       inputStats: inputStats, outputStats: TextStats(output),
                       outputTooLargeForEditor: WorkbenchLimits.isTooLargeForEditor(output, maxBytes: WorkbenchLimits.maxOutputBytes))
     }
@@ -516,6 +559,7 @@ final class WorkbenchState {
             outputHiddenFromEditor = result.outputTooLargeForEditor
             if result.outputTooLargeForEditor { isEditingOutput = false; editedOutput = nil }
             actionIssue = result.issue
+            outputSummary = result.summary
             outputStats = result.outputStats
         }
         validation = result.validation

@@ -170,6 +170,7 @@ extension WorkbenchTool {
         case "json-to-swift": return "swift"
         case "json-to-ts-interface", "json-to-ts-type": return "t.square"
         case "json-to-python": return "p.square"
+        case "jsonpath": return "text.magnifyingglass"
         default:
             switch category {
             case .format: return "text.alignleft"
@@ -178,6 +179,7 @@ extension WorkbenchTool {
             case .objects: return "shippingbox"
             case .compare: return "arrow.left.arrow.right.square"
             case .preview: return "eye"
+            case .others: return "ellipsis.circle"
             }
         }
     }

@@ -27,6 +27,12 @@ struct WorkbenchToolView: View {
             }
             header
             Divider()
+            // Sorgulu araç (JSONPath): girdi → sorgu → sonuç hiyerarşisi;
+            // sorgu iki bölmenin üstünde, tam genişlikte.
+            if workbench.action.usesQuery {
+                queryBar
+                Divider()
+            }
             // Sürüklenebilir ayırıcı: girdi/çıktı genişliğini kullanıcı ayarlar.
             // Durum bilgisi tek çubuk yerine her bölmenin alt bilgisinde.
             HSplitView {
@@ -220,6 +226,57 @@ struct WorkbenchToolView: View {
         }
     }
 
+    // MARK: Sorgu satırı
+
+    /// Sorgu hatası mı (girdi JSON hatası değil): girdi hataları konumlu gelir.
+    private var queryIssue: WorkbenchIssue? {
+        guard let issue = workbench.actionIssue, issue.offset == nil else { return nil }
+        return issue
+    }
+
+    private var queryBar: some View {
+        HStack(spacing: 8) {
+            Text("Query")
+                .font(.secondaryText.weight(.semibold))
+                .foregroundStyle(.secondary)
+            TextField("$.store.book[?@.price < 10].title", text: Binding(
+                get: { workbench.options.query },
+                set: { workbench.update(query: $0) }
+            ))
+            .textFieldStyle(.input)
+            .font(.system(.body, design: .monospaced))
+            .inputLimit(.headerValue, english: true)
+            .onSubmit { workbench.runNow() }
+            .accessibilityLabel("JSONPath query")
+            queryStatus
+                .frame(minWidth: 96, alignment: .trailing)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .help("JSONPath (RFC 9535): $ root, .name or ['name'], [0] [-1], *, .., [start:end:step], [?@.price < 10], length() count() match() search() value()")
+    }
+
+    /// Sorgunun durumu: çalışıyor, hata (kırmızı) ya da eşleşme sayısı (nötr).
+    @ViewBuilder
+    private var queryStatus: some View {
+        if workbench.isRunning {
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.small)
+                Text("Running…")
+            }
+            .font(.secondaryText)
+            .foregroundStyle(.secondary)
+        } else if queryIssue != nil {
+            Label("Query error", systemImage: MessageKind.error.symbol)
+                .font(.secondaryText)
+                .foregroundStyle(Theme.down)
+        } else if let summary = workbench.outputSummary {
+            Text(summary)
+                .font(.secondaryText.monospacedDigit())
+                .foregroundStyle(.secondary)
+        }
+    }
+
     /// Tek seçeneğe bağlama: değişince araç yeniden çalışır.
     private func optionBinding<Value>(_ keyPath: WritableKeyPath<WorkbenchOptions, Value>) -> Binding<Value> {
         Binding(
@@ -238,6 +295,24 @@ struct WorkbenchToolView: View {
         let canUndo = workbench.clearedInput?.documentID == workbench.document.id
         return VStack(spacing: 0) {
             paneHeader("Input") {
+                // Boş girdide örneği gerçekten yükler (soluk ipucu yalnızca gösterir).
+                if workbench.input.isEmpty, !workbench.tool.sampleInput.isEmpty {
+                    Button("Load sample") { workbench.loadSample() }
+                        .controlSize(.small)
+                        .help("Fill the input with a sample to try the tool")
+                }
+                if workbench.tool.inputFormatter != nil {
+                    Button {
+                        workbench.formatInput()
+                    } label: {
+                        Image(systemName: "text.alignleft").iconHitTarget()
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    .disabled(workbench.input.isEmpty || workbench.inputHiddenFromEditor)
+                    .help("Format input JSON")
+                    .accessibilityLabel("Format input")
+                }
                 if canUndo {
                     Button("Undo Clear") { workbench.undoClear() }
                         .controlSize(.small)
@@ -352,6 +427,9 @@ struct WorkbenchToolView: View {
                     }
                 } else if let issue = workbench.actionIssue, workbench.displayedOutput.isEmpty {
                     placeholder(issue.localizedDescription, isError: true)
+                } else if workbench.action.usesQuery, workbench.output == "[]" {
+                    // Eşleşme yok ≠ hata: nötr renk, sorgu geçerli.
+                    placeholder("No matches. The query is valid but selects nothing in this JSON.")
                 } else if workbench.outputHiddenFromEditor {
                     OversizedTextNotice(
                         title: "Output not shown: \(TextStats.size(workbench.outputStats.bytes))",
@@ -389,6 +467,8 @@ struct WorkbenchToolView: View {
     /// Çıktı başlığındaki durum: "Ready", "Running…", "Editing"…
     private var outputStatus: String {
         if workbench.isRunning { return "Running…" }
+        // Sorgulu araçta özet sorgu satırında; burada tekrar edilmez.
+        if !workbench.action.usesQuery, let summary = workbench.outputSummary, !workbench.isStale { return summary }
         if workbench.isLargeInput, workbench.isStale { return "Waiting for Run" }
         if workbench.isEditingOutput { return "Editing" }
         return "Ready"
