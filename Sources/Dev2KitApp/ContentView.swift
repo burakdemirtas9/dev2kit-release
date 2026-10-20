@@ -55,11 +55,7 @@ struct ContentView: View {
                     if let requestBinding = appState.selectedRequest {
                         RequestDetailView(request: requestBinding)
                     } else {
-                        ContentUnavailableView(
-                            "İstek Seç",
-                            systemImage: "paperplane",
-                            description: Text("Soldan bir istek seç veya yeni bir istek oluştur.")
-                        )
+                        NoRequestSelectedView()
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

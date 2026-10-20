@@ -124,6 +124,25 @@ extension AppState {
         persist()
     }
 
+    /// "Yeni istek" akışı tamamlanınca (boş durumdaki bağlantı): istek
+    /// seçilen yere eklenir ve düzenlemek için açılır. Akış iptal edilirse bu
+    /// hiç çağrılmaz; boş kayıt oluşmaz. Hedef çözülemezse (ör. boş yeni
+    /// koleksiyon adı) hiçbir şey yazılmaz.
+    @discardableResult
+    func createRequest(name: String, method: HTTPMethod, destination: CollectionDestination) -> UUID? {
+        guard let collectionID = resolve(destination),
+              let index = workspace.collections.firstIndex(id: collectionID) else { return nil }
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        let request = RequestModel(name: trimmed.isEmpty ? RequestModel().name : trimmed, method: method)
+        workspace.collections[index].requests.append(request)
+        // Filtre ya da kapalı koleksiyon yeni isteği gizlemesin.
+        clearSearch()
+        collapsedCollectionIDs.remove(collectionID)
+        showRequest(request.id)
+        persist()
+        return request.id
+    }
+
     /// ⌘N: yeni isteği en makul koleksiyona ekler — seçili isteğin koleksiyonu,
     /// yoksa ilk koleksiyon. Hiç koleksiyon yoksa bir tane açar; kısayol hiçbir
     /// durumda sessizce hiçbir şey yapmamalı.
