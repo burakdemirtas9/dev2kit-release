@@ -13,57 +13,43 @@ struct TLSSuggestionBanner: View {
     @State private var showingConfirm = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label {
-                Text("\(match.hostToAdd) için TLS profili yok.")
-                    .fontWeight(.medium)
-            } icon: {
-                Image(systemName: "lock.trianglebadge.exclamationmark")
-            }
-
-            Text("“\(match.profileName)” profili \(match.matchedPattern) kalıbını içeriyor. Bu host'u da o profile eklemek ister misin?")
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            ForEach(warnings, id: \.self) { warning in
-                Label(warning, systemImage: "exclamationmark.triangle.fill")
-                    .font(.secondaryText)
-                    .foregroundStyle(Theme.warning)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            HStack {
-                Button("Profili Aç") {
-                    appState.showTLSSettings()
+        // Öneri bilgi türünde (eskiden sarı zemin uyarı gibi okunuyordu);
+        // içindeki riskler ayrı uyarı satırları. Mor birincil eylem öneriyi taşır.
+        MessageBanner(
+            kind: .info,
+            title: "Bu host'u “\(match.profileName)” profiline ekle?",
+            message: "\(match.hostToAdd) için profil yok; “\(match.profileName)” \(match.matchedPattern) kalıbını içeriyor. İstek kendiliğinden yeniden gönderilmez.",
+            lines: warnings.map { MessageLine(.warning, $0) }
+        ) {
+            Button(match.carriesClientCertificate ? "Ekle…" : "Profile Ekle") {
+                // Kimlik taşıyan profilde tek tık yok: kullanıcı neyi
+                // onayladığını yazılı görsün.
+                if match.carriesClientCertificate {
+                    showingConfirm = true
+                } else {
+                    appState.acceptTLSSuggestion()
                 }
-                Spacer()
-                Button("Vazgeç") {
-                    appState.declineTLSSuggestion()
-                }
-                Button(match.carriesClientCertificate ? "Ekle…" : "Profile Ekle") {
-                    // Kimlik taşıyan profilde tek tık yok: kullanıcı neyi
-                    // onayladığını yazılı görsün.
-                    if match.carriesClientCertificate {
-                        showingConfirm = true
-                    } else {
-                        appState.acceptTLSSuggestion()
-                    }
-                }
-                // Bilinçli olarak `.defaultAction` DEĞİL: kutu kullanıcı yazarken
-                // beliriyor ve ⏎ güvenlikle ilgili bir değişikliği tek tuşa
-                // indirirdi. (Sandbox denemesinde tam olarak bu oldu: sıradan
-                // bir ⏎ host'u profile ekledi.)
             }
+            .buttonStyle(PrimaryActionButtonStyle())
+            // Bilinçli olarak `.defaultAction` DEĞİL: kutu kullanıcı yazarken
+            // beliriyor ve ⏎ güvenlikle ilgili bir değişikliği tek tuşa
+            // indirirdi. (Sandbox denemesinde tam olarak bu oldu: sıradan
+            // bir ⏎ host'u profile ekledi.)
+            Button("Profili Aç") {
+                appState.showTLSSettings(profileID: match.profileID)
+            }
+            Button("Vazgeç") {
+                appState.declineTLSSuggestion()
+            }
+            .buttonStyle(.borderless)
         }
-        .font(.callout)
-        .padding(12)
-        .background(Theme.warning.opacity(0.10), in: RoundedRectangle(cornerRadius: 8))
         .confirmationDialog(
-            "\(match.hostToAdd) eklensin mi?",
+            "\(match.hostToAdd) “\(match.profileName)” profiline eklensin mi?",
             isPresented: $showingConfirm,
             titleVisibility: .visible
         ) {
-            Button("Ekle", role: .destructive) { appState.acceptTLSSuggestion() }
+            // Yıkıcı değil: ekleme geri alınabilir. Risk mesajda yazılı.
+            Button("Profile Ekle") { appState.acceptTLSSuggestion() }
             Button("Vazgeç", role: .cancel) {}
         } message: {
             Text(confirmationMessage)
@@ -85,7 +71,7 @@ struct TLSSuggestionBanner: View {
 
     private var confirmationMessage: String {
         var lines = [
-            "“\(match.profileName)” profiline eklenecek ve kalıcı olacak; Host Profilleri ekranından geri alabilirsin.",
+            "Kalıcı olarak eklenir; istediğin zaman TLS > Host Profilleri'nden çıkarabilirsin.",
         ]
         lines.append(contentsOf: warnings)
         lines.append("İstek kendiliğinden yeniden gönderilmez.")

@@ -7,12 +7,37 @@ struct EnvironmentsView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
     @State private var selectedID: UUID?
+    /// Tanımsız değişkenden gelindiyse: henüz kaydedilmemiş yeni değişken.
+    @State private var draft: VariableDraft?
+    /// Değişken zaten varsa gidilecek satır.
+    @State private var focusEntryID: UUID?
+    /// Satır var ama kapalı ya da az önce kaydedildi: kullanıcıya not.
+    @State private var notice: (kind: MessageKind, text: String)?
 
     var body: some View {
         @Bindable var state = appState
         VStack(alignment: .leading, spacing: 12) {
             Text("Environment'lar")
                 .font(.title2).bold()
+
+            if let draft {
+                VariableDraftCard(
+                    draft: Binding(get: { draft }, set: { self.draft = $0 }),
+                    environments: appState.workspace.environments,
+                    onEnvironmentChange: { environmentID in
+                        if let environmentID { selectedID = environmentID }
+                        // Seçilen environment'ta bu ad zaten varsa oraya gidilir;
+                        // mevcut değerin üzerine yeni satır açılmaz.
+                        openExistingIfPresent(key: draft.key, in: environmentID)
+                    },
+                    onSave: save,
+                    onCancel: { self.draft = nil }
+                )
+            } else if let notice {
+                Label(notice.text, systemImage: notice.kind.symbol)
+                    .font(.secondaryText)
+                    .foregroundStyle(notice.kind.tint)
+            }
 
             HStack(alignment: .top, spacing: 0) {
                 VStack(spacing: 0) {
@@ -55,7 +80,8 @@ struct EnvironmentsView: View {
                 Divider()
 
                 if let selectedID, let binding = appState.environmentBinding(selectedID) {
-                    EnvironmentDetail(environment: binding, isActive: appState.workspace.activeEnvironmentID == selectedID) {
+                    EnvironmentDetail(environment: binding, isActive: appState.workspace.activeEnvironmentID == selectedID,
+                                      focusEntryID: focusEntryID) {
                         state.workspace.activeEnvironmentID = selectedID
                         appState.persist()
                     }
@@ -81,13 +107,173 @@ struct EnvironmentsView: View {
         .frame(width: 720, height: 620)
         .onAppear {
             selectedID = appState.workspace.activeEnvironmentID ?? appState.workspace.environments.first?.id
+            if let request = appState.takeVariableDefinitionRequest() {
+                start(request)
+            }
         }
+        // Pencere açıkken başka bir tanımsız değişkene tıklanırsa.
+        .onChange(of: appState.environmentsRequest) {
+            if let request = appState.takeVariableDefinitionRequest() {
+                start(request)
+            }
+        }
+    }
+
+    private func start(_ request: AppState.VariableDefinitionRequest) {
+        draft = nil
+        focusEntryID = nil
+        notice = nil
+        switch request.target {
+        case .environment(let id):
+            selectedID = id
+            if !openExistingIfPresent(key: request.key, in: id) {
+                draft = VariableDraft(key: request.key, environmentID: id, mustChoose: false)
+            }
+        case .choose:
+            draft = VariableDraft(key: request.key, environmentID: nil, mustChoose: true)
+        case .createNew:
+            draft = VariableDraft(key: request.key, environmentID: nil, mustChoose: false)
+        }
+    }
+
+    /// Değişken environment'ta varsa satırına gider (taslak kapanır).
+    @discardableResult
+    private func openExistingIfPresent(key: String, in environmentID: UUID?) -> Bool {
+        guard let environmentID,
+              let environment = appState.workspace.environments.first(where: { $0.id == environmentID }),
+              case .existing(let entryID, let isDisabled) = VariableDefinition.plan(for: key, in: environment)
+        else { return false }
+        draft = nil
+        selectedID = environmentID
+        focusEntryID = entryID
+        notice = isDisabled
+            ? (.warning, "{{\(key)}} bu environment'ta var ama satırı kapalı; işaretleyince kullanılır.")
+            : nil
+        return true
+    }
+
+    private func save(_ draft: VariableDraft) -> String? {
+        do {
+            let id = try appState.saveVariable(key: draft.key, value: draft.value, environmentID: draft.environmentID)
+            self.draft = nil
+            selectedID = id
+            notice = (.success, "{{\(draft.key.trimmingCharacters(in: .whitespaces))}} kaydedildi; istekte artık çözülüyor.")
+            return nil
+        } catch VariableDefinition.SaveError.duplicate {
+            return "Bu environment'ta bu adla bir değişken zaten var."
+        } catch VariableDefinition.SaveError.emptyKey {
+            return "Değişken adı boş olamaz."
+        } catch {
+            return error.localizedDescription
+        }
+    }
+}
+
+/// Kaydedilmemiş yeni değişken.
+struct VariableDraft: Equatable {
+    var key: String
+    var value = ""
+    /// `nil`: seçilmedi (`mustChoose`) ya da hiç environment yok (yenisi oluşur).
+    var environmentID: UUID?
+    let mustChoose: Bool
+}
+
+/// Tanımsız değişkene değer verme kartı: anahtar dolu, imleç değerde.
+/// Kaydet'e basılana kadar hiçbir şey yazılmaz.
+private struct VariableDraftCard: View {
+    @Binding var draft: VariableDraft
+    let environments: [EnvironmentModel]
+    let onEnvironmentChange: (UUID?) -> Void
+    let onSave: (VariableDraft) -> String?
+    let onCancel: () -> Void
+
+    @FocusState private var valueFocused: Bool
+    @State private var error: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                MessageIcon(kind: .info)
+                Text("Yeni değişken").fontWeight(.semibold)
+                Text(subtitle)
+                    .font(.secondaryText)
+                    .foregroundStyle(.secondary)
+            }
+            HStack(spacing: 8) {
+                TextField("isim", text: $draft.key)
+                    .inputLimit(.key)
+                    .textFieldStyle(.input)
+                    .font(.system(.body, design: .monospaced))
+                    .frame(width: 220)
+                TextField("değer", text: $draft.value)
+                    .inputLimit(.secretValue)
+                    .textFieldStyle(.input)
+                    .font(.system(.body, design: .monospaced))
+                    .focused($valueFocused)
+                    .onSubmit(save)
+            }
+            if environments.count > 1 || draft.mustChoose {
+                Picker("Environment", selection: Binding(
+                    get: { draft.environmentID },
+                    set: { newValue in
+                        draft.environmentID = newValue
+                        error = nil
+                        onEnvironmentChange(newValue)
+                    }
+                )) {
+                    if draft.environmentID == nil {
+                        Text("Seç…").tag(UUID?.none)
+                    }
+                    ForEach(environments) { environment in
+                        Text(environment.name.isEmpty ? "adsız" : environment.name).tag(UUID?.some(environment.id))
+                    }
+                }
+                .frame(maxWidth: 320)
+            }
+            if let error {
+                Label(error, systemImage: MessageKind.error.symbol)
+                    .font(.secondaryText)
+                    .foregroundStyle(Theme.down)
+            }
+            HStack {
+                Spacer()
+                Button("Vazgeç", action: onCancel)
+                Button("Kaydet", action: save)
+                    .buttonStyle(PrimaryActionButtonStyle())
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(!canSave)
+            }
+        }
+        .padding(12)
+        .background(MessageKind.info.background, in: RoundedRectangle(cornerRadius: 8))
+        .onAppear { DispatchQueue.main.async { valueFocused = true } }
+    }
+
+    private var subtitle: String {
+        if draft.mustChoose && draft.environmentID == nil {
+            return "Etkin environment yok; hangisine ekleneceğini seç."
+        }
+        if environments.isEmpty {
+            return "Henüz environment yok; kaydedince “Environment” oluşturulup etkin yapılır."
+        }
+        let name = environments.first { $0.id == draft.environmentID }?.name ?? ""
+        return "“\(name.isEmpty ? "adsız" : name)” environment'ına eklenecek."
+    }
+
+    private var canSave: Bool {
+        !draft.key.trimmingCharacters(in: .whitespaces).isEmpty && !(draft.mustChoose && draft.environmentID == nil)
+    }
+
+    private func save() {
+        guard canSave else { return }
+        error = onSave(draft)
     }
 }
 
 private struct EnvironmentDetail: View {
     @Binding var environment: EnvironmentModel
     let isActive: Bool
+    var focusEntryID: UUID?
     let makeActive: () -> Void
 
     var body: some View {
@@ -117,7 +303,8 @@ private struct EnvironmentDetail: View {
                 entries: $environment.variables,
                 keyPlaceholder: "isim (ör: baseUrl)",
                 valuePlaceholder: "değer (ör: https://api.example.com)",
-                valueLimit: .secretValue
+                valueLimit: .secretValue,
+                focusEntryID: focusEntryID
             )
 
             Divider()

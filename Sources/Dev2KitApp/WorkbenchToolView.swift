@@ -523,13 +523,13 @@ struct DocumentTabBar: View {
             isPresented: Binding(get: { pendingClose != nil }, set: { if !$0 { pendingClose = nil } }),
             titleVisibility: .visible
         ) {
-            Button("Close Tab", role: .destructive) {
+            Button("Close and Discard", role: .destructive) {
                 if let item = pendingClose { onClose(item.id) }
                 pendingClose = nil
             }
             Button("Cancel", role: .cancel) { pendingClose = nil }
         } message: {
-            Text("Its content is kept in memory only and will be lost.")
+            Text("Its content isn't saved anywhere and will be lost.")
         }
     }
 }

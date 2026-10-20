@@ -67,6 +67,60 @@ extension AppState {
         persist()
     }
 
+    // MARK: Tanımsız değişkene değer verme
+
+    /// Değeri verilecek değişken ve hedef environment (`VariableDefinition`).
+    struct VariableDefinitionRequest: Equatable {
+        let key: String
+        let target: VariableDefinition.Target
+    }
+
+    /// Alandaki tanımsız `{{ad}}`e tıklanınca: anahtar çıkarılır, hedef
+    /// environment belirlenir ve Environment'lar penceresi açılır. Burada
+    /// hiçbir şey yazılmaz; yeni değişken kullanıcı kaydedince eklenir.
+    func defineVariable(_ name: String) {
+        guard let key = VariableDefinition.key(from: name) else { return }
+        variableDefinitionRequest = VariableDefinitionRequest(
+            key: key,
+            target: VariableDefinition.target(activeID: workspace.activeEnvironmentID, environments: workspace.environments)
+        )
+        environmentsRequest += 1
+    }
+
+    func takeVariableDefinitionRequest() -> VariableDefinitionRequest? {
+        defer { variableDefinitionRequest = nil }
+        return variableDefinitionRequest
+    }
+
+    /// Taslağı kaydeder; `environmentID` yoksa yeni environment oluşturulur.
+    /// Etkin environment yoksa kaydedilen etkin olur: değer açık istekte
+    /// hemen çözülsün. Dönen değer değişkenin yazıldığı environment.
+    @discardableResult
+    func saveVariable(key: String, value: String, environmentID: UUID?) throws -> UUID {
+        guard !key.trimmingCharacters(in: .whitespaces).isEmpty else { throw VariableDefinition.SaveError.emptyKey }
+        let id: UUID
+        if let environmentID, workspace.environments.contains(where: { $0.id == environmentID }) {
+            id = environmentID
+        } else {
+            let environment = EnvironmentModel(name: "Environment")
+            workspace.environments.append(environment)
+            id = environment.id
+        }
+        guard let index = workspace.environments.firstIndex(id: id) else { return id }
+        do {
+            try VariableDefinition.add(key: key, value: value, to: &workspace.environments[index])
+        } catch {
+            // Yeni oluşturulan boş environment yarım kalmasın.
+            if environmentID == nil { workspace.environments.remove(at: index) }
+            throw error
+        }
+        if activeEnvironment == nil {
+            workspace.activeEnvironmentID = id
+        }
+        persist()
+        return id
+    }
+
     func environmentBinding(_ id: UUID) -> Binding<EnvironmentModel>? {
         guard let index = workspace.environments.firstIndex(id: id) else { return nil }
         let fallback = workspace.environments[index]

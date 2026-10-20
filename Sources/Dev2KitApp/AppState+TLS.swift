@@ -6,6 +6,13 @@ import Dev2KitCore
 /// TLS tarafı: kurum güven deposu (cacerts), host bazlı TLS profilleri ve
 /// oturum çerezleri. Üçü de istek motorunun güvenlik yapılandırmasını besler.
 
+/// Güven deposu işleminin sonucu. Başarı ve hata ekranda farklı görünür;
+/// eskiden ikisi de aynı gri metindi.
+struct TrustStoreNotice: Equatable {
+    let text: String
+    let isError: Bool
+}
+
 extension AppState {
     func reloadTrustStore() {
         let result = TrustStore.load()
@@ -13,23 +20,23 @@ extension AppState {
         engine.trustStoreCertificates = result.certificates
     }
 
-    func installCertificate(from url: URL) -> String {
+    func installCertificate(from url: URL) -> TrustStoreNotice {
         do {
             let destination = try TrustStore.install(from: url)
             reloadTrustStore()
-            return "\(destination.lastPathComponent) güven deposuna eklendi."
+            return TrustStoreNotice(text: "\(destination.lastPathComponent) eklendi.", isError: false)
         } catch {
-            return "Eklenemedi: \(error.localizedDescription)"
+            return TrustStoreNotice(text: "Eklenemedi: \(error.localizedDescription)", isError: true)
         }
     }
 
-    func removeCertificate(path: String) -> String {
+    func removeCertificate(path: String) -> TrustStoreNotice {
         do {
             try TrustStore.remove(path: path)
             reloadTrustStore()
-            return "Sertifika kaldırıldı."
+            return TrustStoreNotice(text: "Sertifika kaldırıldı.", isError: false)
         } catch {
-            return error.localizedDescription
+            return TrustStoreNotice(text: "Kaldırılamadı: \(error.localizedDescription)", isError: true)
         }
     }
 

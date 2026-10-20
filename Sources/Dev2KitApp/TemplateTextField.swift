@@ -17,6 +17,9 @@ struct TemplateTextField: View {
     /// metot seçici + adres, 2026-10-20). Öneri listesi kapsülün DIŞINDA,
     /// altında kalır.
     var capsuleLeading: AnyView?
+    /// `true` olunca alan odak alır (ör. tanımsız değişkene tıklanınca
+    /// Environment'lar penceresinde ilgili satırın değeri).
+    var focusRequested = false
 
     @Environment(AppState.self) private var appState
     @FocusState private var isFocused: Bool
@@ -58,6 +61,8 @@ struct TemplateTextField: View {
             suggestionList
                 .padding(.horizontal, bordered ? 0 : Self.cellInset)
         }
+        .onAppear { if focusRequested { requestFocus() } }
+        .onChange(of: focusRequested) { _, requested in if requested { requestFocus() } }
     }
 
     /// Alanın kendisi (vurgu katmanıyla); kapsül ya da tek başına.
@@ -135,6 +140,11 @@ struct TemplateTextField: View {
         }
     }
 
+    /// Bir sonraki turda: satır yeni göründüğünde alan henüz pencerede değil.
+    private func requestFocus() {
+        DispatchQueue.main.async { isFocused = true }
+    }
+
     private func complete(with suggestion: String) {
         guard let range = text.range(of: "{{", options: .backwards) else { return }
         text = String(text[..<range.upperBound]) + suggestion + "}}"
@@ -177,7 +187,15 @@ private struct VariableChip: View {
     @State private var showing = false
 
     var body: some View {
-        let defined = appState.variablePreview(for: name).isDefined
+        let preview = appState.variablePreview(for: name)
+        let defined = preview.isDefined
+        // Tanımsız environment değişkeni: baloncuk yerine doğrudan değer
+        // verilecek yere gidilir (kullanıcı isteği, 2026-10-20). Secret'lar
+        // environment'a yazılmaz; onlarda baloncuk kalır.
+        let definesInEnvironment: Bool = {
+            if case .undefined = preview { return VariableDefinition.key(from: name) != nil }
+            return false
+        }()
         Text(raw)
             .foregroundStyle(defined ? Theme.variable : Theme.down)
             .background(
@@ -185,8 +203,15 @@ private struct VariableChip: View {
                     .fill((defined ? Theme.variable : Theme.down).opacity(0.12))
             )
             .contentShape(Rectangle())
-            .onTapGesture { showing = true }
-            .help(defined ? "Değeri görmek için tıkla" : "Tanımsız değişken")
+            .onTapGesture {
+                if definesInEnvironment {
+                    appState.defineVariable(name)
+                } else {
+                    showing = true
+                }
+            }
+            .help(defined ? "Değeri görmek için tıkla"
+                  : (definesInEnvironment ? "Tanımsız değişken: tıkla, environment'ta değerini ver" : "Tanımsız değişken"))
             .popover(isPresented: $showing, arrowEdge: .bottom) {
                 VariablePreviewCard(
                     name: name,

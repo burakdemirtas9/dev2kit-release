@@ -80,10 +80,11 @@ final class AppState {
     var previewTabID: UUID? { tabs.preview }
 
     var saveError: String?
-    /// Açılışta workspace okunamadı uyarısı. `saveError`'dan ayrı: başarılı
+    /// Açılışta workspace okunamadı mesajı. `saveError`'dan ayrı: başarılı
     /// ilk kayıt `saveError`'ı temizliyor, uyarı kullanıcı görmeden siliniyordu.
-    /// Yalnızca kullanıcı kapatınca gider.
-    var startupWarning: String?
+    /// Yalnızca kullanıcı kapatınca gider. Yedek alındıysa uyarı, alınamadıysa
+    /// (kayıt kapalı) hata.
+    var startupMessage: ResultMessage?
 
     // MARK: - Sidebar arama
 
@@ -131,9 +132,26 @@ final class AppState {
 
     /// TLS ayarları penceresini açma isteği. Sidebar aramasındaki desenle aynı.
     private(set) var tlsSettingsRequest = 0
+    /// Environment'lar penceresini açma isteği (tanımsız değişkene tıklama).
+    var environmentsRequest = 0
+    /// Pencere açılınca değeri verilecek değişken; bir kez okunur.
+    var variableDefinitionRequest: VariableDefinitionRequest?
 
-    func showTLSSettings() {
+    /// Pencere açılınca seçilecek profil (TLS öneri kutusundaki "Profili Aç").
+    /// Pencere açılırken bir kez okunur ve temizlenir.
+    private(set) var tlsSettingsProfileID: UUID?
+
+    func showTLSSettings(profileID: UUID? = nil) {
+        tlsSettingsProfileID = profileID
         tlsSettingsRequest += 1
+    }
+
+    /// Açılışta seçilecek profil; yoksa ya da profil silinmişse `nil`.
+    func takeTLSSettingsProfileID() -> UUID? {
+        defer { tlsSettingsProfileID = nil }
+        guard let id = tlsSettingsProfileID,
+              workspace.tlsProfiles.contains(where: { $0.id == id }) else { return nil }
+        return id
     }
 
     // MARK: - Editör araması
@@ -287,14 +305,26 @@ final class AppState {
             self.workspace = WorkspaceModel()
             do {
                 let backup = try store.backUpUnreadableFile()
-                self.startupWarning = "Workspace okunamadı: \(error.localizedDescription)\n\n"
-                    + "Okunamayan dosya yedeklendi:\n\(backup.path)\n\nBoş bir workspace ile açıldı."
+                self.startupMessage = ResultMessage(
+                    kind: .warning,
+                    title: "Workspace okunamadı, boş açıldı",
+                    message: "Eski dosya silinmedi; yedeği aşağıda.",
+                    lines: [
+                        MessageLine(.info, "Yedek: \(backup.path)"),
+                        MessageLine(.info, "Neden: \(error.localizedDescription)"),
+                    ],
+                    revealURL: backup
+                )
             } catch let backupError {
                 self.persistenceBlocked = true
-                self.startupWarning = "Workspace okunamadı: \(error.localizedDescription)\n\n"
-                    + "Dosya yedeklenemedi (\(backupError.localizedDescription)). Üzerine yazılmaması için "
-                    + "bu oturumda değişiklikler KAYDEDİLMEYECEK. Dosyayı düzeltip ya da kenara alıp "
-                    + "uygulamayı yeniden aç:\n\(store.fileURL.path)"
+                self.startupMessage = ResultMessage(
+                    kind: .error,
+                    title: "Bu oturumda değişiklikler kaydedilmeyecek",
+                    message: "Workspace okunamadı (\(error.localizedDescription)) ve yedeklenemedi "
+                        + "(\(backupError.localizedDescription)); dosyanın üzerine yazılmasın diye kayıt kapalı.\n\n"
+                        + "Dosyayı düzeltip ya da kenara alıp uygulamayı yeniden aç:\n\(store.fileURL.path)",
+                    revealURL: store.fileURL
+                )
             }
         }
         if workspace.collections.isEmpty {
@@ -373,9 +403,43 @@ final class AppState {
         RequestEngine.Scope(environmentID: workspace.activeEnvironmentID)
     }
 
-    /// Import/export sonucunu (başarı, yeniden adlandırma, uyarılar) kullanıcıya
-    /// gösteren alert metni.
-    var portingMessage: String?
+    /// Import/export sonucu. Hata türü sistem alert'inde, diğerleri sonuç
+    /// penceresinde gösterilir (`ContentView`).
+    var portingMessage: ResultMessage?
+
+    /// Sıradaki gösterilecek mesaj. Öncelik: açılış, kayıt hatası, aktarım;
+    /// açılış mesajı ilk kayıt hatasının altında kaybolmasın.
+    var presentedMessage: ResultMessage? {
+        if let startupMessage { return startupMessage }
+        if let saveError {
+            return ResultMessage(
+                kind: .error,
+                title: "Değişiklikler kaydedilemedi",
+                message: "\(saveError)\n\nDüzenlemelerin bellekte duruyor; bir sonraki değişiklikte yeniden denenir. Disk alanını ve klasör izinlerini kontrol et."
+            )
+        }
+        return portingMessage
+    }
+
+    /// Yalnızca hâlâ gösterilen mesajsa kapatır: pencere kapanırken gelen
+    /// ikinci bildirim sıradaki mesajı silmesin.
+    func dismissMessage(_ id: UUID) {
+        if startupMessage?.id == id {
+            startupMessage = nil
+        } else if portingMessage?.id == id {
+            portingMessage = nil
+        }
+    }
+
+    func dismissPresentedMessage() {
+        if startupMessage != nil {
+            startupMessage = nil
+        } else if saveError != nil {
+            saveError = nil
+        } else {
+            portingMessage = nil
+        }
+    }
 
     var pendingImport: PendingImport?
 

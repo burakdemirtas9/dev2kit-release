@@ -15,6 +15,8 @@ struct KeyValueEditor: View {
     /// Anahtara göre satır notu: verilen satır soluklaşır ve yanında uyarı
     /// çıkar (ör. başlıklarda User-Agent: dev2kit kendi değerini gönderir).
     var keyNote: ((String) -> String?)? = nil
+    /// Verilirse o satıra kaydırılır ve değer alanı odak alır.
+    var focusEntryID: UUID? = nil
 
     @State private var isBulk = false
     @State private var bulkText = ""
@@ -145,19 +147,31 @@ struct KeyValueEditor: View {
             let keyWidth = max(140, (geometry.size.width - 2 * Self.sideInset - Self.checkWidth - Self.actionWidth) * 0.42)
             let rows = entries.indices.map { RowRef(id: entries[$0].id, index: $0) }
                 + (entries.count < InputLimits.maxRows ? [RowRef(id: draft.id, index: nil)] : [])
-            ScrollView {
-                LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
-                    Section {
-                        ForEach(rows) { row in
-                            tableRow(row, keyWidth: keyWidth)
-                                .padding(.horizontal, Self.sideInset)
-                            Divider().opacity(0.5)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
+                        Section {
+                            ForEach(rows) { row in
+                                tableRow(row, keyWidth: keyWidth)
+                                    .padding(.horizontal, Self.sideInset)
+                                    .id(row.id)
+                                Divider().opacity(0.5)
+                            }
+                        } header: {
+                            tableHeader(keyWidth: keyWidth)
                         }
-                    } header: {
-                        tableHeader(keyWidth: keyWidth)
                     }
                 }
+                .onAppear { scroll(proxy) }
+                .onChange(of: focusEntryID) { scroll(proxy) }
             }
+        }
+    }
+
+    private func scroll(_ proxy: ScrollViewProxy) {
+        guard let focusEntryID else { return }
+        DispatchQueue.main.async {
+            proxy.scrollTo(focusEntryID, anchor: .center)
         }
     }
 
@@ -232,7 +246,8 @@ struct KeyValueEditor: View {
                     }
                 }
             TemplateTextField(placeholder: isDraft ? valuePlaceholder : "", text: binding(row, \.value),
-                              limit: valueLimit, bordered: false)
+                              limit: valueLimit, bordered: false,
+                              focusRequested: focusEntryID != nil && row.id == focusEntryID)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Button {
                 entries.removeAll { $0.id == row.id }

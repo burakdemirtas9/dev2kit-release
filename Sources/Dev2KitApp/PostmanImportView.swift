@@ -299,6 +299,6 @@ struct PostmanImportView: View {
                 selectedUIDs.remove(uid)
             }
         }
-        lastResultMessage = ([report] + pendingFailures).joined(separator: "\n")
+        lastResultMessage = ([report.plainText] + pendingFailures).joined(separator: "\n")
     }
 }

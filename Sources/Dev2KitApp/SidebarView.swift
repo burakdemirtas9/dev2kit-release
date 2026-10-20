@@ -200,7 +200,7 @@ struct SidebarView: View {
         ) {
             TextField("Koleksiyon adı", text: $renameText)
                 .inputLimit(.name)
-            Button("Kaydet") {
+            Button("Yeniden Adlandır") {
                 if let id = renameTargetID {
                     appState.renameCollection(id, to: renameText)
                 }
@@ -209,13 +209,13 @@ struct SidebarView: View {
             Button("Vazgeç", role: .cancel) { renameTargetID = nil }
         }
         .alert(
-            "Koleksiyonu Sil",
+            "“\(deleteTarget?.name ?? "")” silinsin mi?",
             isPresented: Binding(
                 get: { deleteTarget != nil },
                 set: { if !$0 { deleteTarget = nil } }
             )
         ) {
-            Button("Sil", role: .destructive) {
+            Button("Koleksiyonu Sil", role: .destructive) {
                 if let target = deleteTarget {
                     appState.deleteCollection(target.id)
                 }
@@ -223,28 +223,32 @@ struct SidebarView: View {
             }
             Button("Vazgeç", role: .cancel) { deleteTarget = nil }
         } message: {
-            Text("\"\(deleteTarget?.name ?? "")\" ve içindeki \(deleteTarget?.requests.count ?? 0) istek kalıcı olarak silinecek.")
+            Text("İçindeki \(deleteTarget?.requests.count ?? 0) istek de kalıcı olarak silinir. Geri alınamaz.")
         }
         .alert(
-            deleteRequestTargets.count > 1 ? "İstekleri Sil" : "İsteği Sil",
+            deleteRequestTitle,
             isPresented: Binding(
                 get: { !deleteRequestTargets.isEmpty },
                 set: { if !$0 { deleteRequestTargets = [] } }
             )
         ) {
-            Button("Sil", role: .destructive) {
+            Button(deleteRequestTargets.count > 1 ? "\(deleteRequestTargets.count) İsteği Sil" : "İsteği Sil", role: .destructive) {
                 appState.deleteRequests(deleteRequestTargets)
                 deleteRequestTargets = []
             }
             Button("Vazgeç", role: .cancel) { deleteRequestTargets = [] }
         } message: {
-            if deleteRequestTargets.count == 1, let id = deleteRequestTargets.first {
-                Text("\"\(appState.request(withID: id)?.name ?? "")\" kalıcı olarak silinecek.")
-            } else {
-                Text("\(deleteRequestTargets.count) istek kalıcı olarak silinecek.")
-            }
+            Text("Kalıcı olarak silinir. Geri alınamaz.")
         }
         .frame(minWidth: 220)
+    }
+
+    /// Silme onayının başlığı: tek istekte adı, çoklu seçimde sayısı.
+    private var deleteRequestTitle: String {
+        if deleteRequestTargets.count == 1, let id = deleteRequestTargets.first {
+            return "“\(appState.request(withID: id)?.name ?? "")” silinsin mi?"
+        }
+        return "\(deleteRequestTargets.count) istek silinsin mi?"
     }
 
     /// Sidebar filtresi. ⌘F odaklanır, Esc temizler, ⏎ ilk sonucu seçer.

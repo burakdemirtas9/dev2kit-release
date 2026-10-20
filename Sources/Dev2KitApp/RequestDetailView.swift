@@ -137,12 +137,12 @@ struct RequestDetailView: View {
             isPresented: $showingRevertConfirm,
             titleVisibility: .visible
         ) {
-            Button("Geri Dön", role: .destructive) {
+            Button("Düzenlemeleri Sil", role: .destructive) {
                 appState.revertToLastSent(request.id)
             }
             Button("Vazgeç", role: .cancel) {}
         } message: {
-            Text("Son gönderimden sonra yaptığın düzenlemeler silinecek. Bu işlem geri alınamaz.")
+            Text("Son gönderimden sonraki düzenlemelerin silinir. Geri alınamaz.")
         }
     }
 

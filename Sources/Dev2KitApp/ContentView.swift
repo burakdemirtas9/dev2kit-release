@@ -157,16 +157,21 @@ struct ContentView: View {
             // geçince açık kalan doğrulama gizlenmesin.
             // Doğrulama kapalıyken her an görünür olmalı: açık unutulursa
             // kullanıcı bunu bir yanıta bakana kadar fark etmezdi.
+            // Tıklamak durumu DEĞİŞTİRMEZ, TLS ayarlarını açar; açıp kapatmak
+            // oradaki anahtardan (kullanıcı isteği, 2026-10-20: tek tıkla
+            // sessizce açılması beklenmedik bir durum değişikliğiydi).
             if appState.certificateValidationDisabled {
                 ToolbarItem(placement: .automatic) {
                     Button {
-                        appState.certificateValidationDisabled = false
+                        showingTLS = true
                     } label: {
-                        Label("Doğrulama kapalı", systemImage: "exclamationmark.shield.fill")
+                        // Arıza değil, açık bir risk: uyarı üçgeni. Renk bilerek
+                        // kırmızı (güvenlik gevşemesi her an göze çarpmalı).
+                        Label("Doğrulama kapalı", systemImage: "exclamationmark.triangle.fill")
                             .labelStyle(.titleAndIcon)
                     }
                     .foregroundStyle(Theme.down)
-                    .help("Sertifika doğrulaması tüm isteklerde KAPALI. Tıklayınca yeniden açılır.")
+                    .help("TLS ayarlarını aç")
                 }
             }
             if appState.isAPIClient {
@@ -201,24 +206,45 @@ struct ContentView: View {
             HistoryView()
         }
         .sheet(isPresented: $showingTLS) {
-            TLSProfilesView()
+            TLSSettingsView()
         }
-        // Yanıt panelindeki TLS öneri kutusundaki "Profili Aç" buraya bağlanır.
+        // Yanıt panelindeki TLS öneri kutusundaki "Profili Aç" buraya bağlanır
+        // (açılınca o profil seçili gelir).
+        // Alandaki tanımsız {{değişken}}e tıklama: Environment'lar penceresi
+        // değişkenin değer alanında açılır.
+        .onChange(of: appState.environmentsRequest) {
+            showingEnvironments = true
+        }
         .onChange(of: appState.tlsSettingsRequest) {
             showingTLS = true
         }
-        // Açılış uyarısı önce: kayıt hatası gelse de kaybolmasın.
-        .alert("Hata", isPresented: .constant(state.startupWarning != nil || state.saveError != nil)) {
-            Button("Tamam") {
-                if state.startupWarning != nil { state.startupWarning = nil } else { state.saveError = nil }
+        // Mesajlar tek kuyruktan (`presentedMessage`; açılış önce, kayıt
+        // hatası gelse de kaybolmasın). Gerçek hata sistem alert'inde;
+        // bilgi, başarı ve uyarı türüne göre ikonlu sonuç penceresinde
+        // (sistem alert'i tür gösteremiyor). docs/TASARIM.md "Mesaj tipleri".
+        .alert(
+            state.presentedMessage?.title ?? "",
+            isPresented: .constant(state.presentedMessage?.kind == .error)
+        ) {
+            if let url = state.presentedMessage?.revealURL {
+                Button("Finder'da Göster") {
+                    NSWorkspace.shared.activateFileViewerSelecting([url])
+                    state.dismissPresentedMessage()
+                }
             }
+            Button("Tamam") { state.dismissPresentedMessage() }
         } message: {
-            Text(state.startupWarning ?? state.saveError ?? "")
+            if let message = state.presentedMessage {
+                Text(([message.message].compactMap { $0 } + message.lines.map(\.text)).joined(separator: "\n"))
+            }
         }
-        .alert("Koleksiyon Aktarımı", isPresented: .constant(state.portingMessage != nil)) {
-            Button("Tamam") { state.portingMessage = nil }
-        } message: {
-            Text(state.portingMessage ?? "")
+        .sheet(item: Binding(
+            get: { state.presentedMessage.flatMap { $0.kind == .error ? nil : $0 } },
+            // Kapatma yalnızca pencerenin kendi düğmesinden (id ile): buradan
+            // kapatmak sıradaki mesajı da silebilirdi.
+            set: { _ in }
+        )) { message in
+            ResultSheet(message: message) { state.dismissMessage(message.id) }
         }
     }
 

@@ -56,7 +56,7 @@ struct ResponseView: View {
             securityReview(
                 findings,
                 title: "İstek engellendi",
-                subtitle: "Bu istek gönderilmedi ve bu haliyle gönderilemez.",
+                subtitle: "Bu istek gönderilmedi ve bu haliyle gönderilemez. Aşağıdaki sorunları düzeltince yeniden gönderebilirsin.",
                 icon: "xmark.shield.fill",
                 tint: Theme.down
             )
@@ -64,7 +64,7 @@ struct ResponseView: View {
             securityReview(
                 findings,
                 title: "İstek durduruldu",
-                subtitle: "Gönderilmeden önce kontrol etmen gereken durumlar var. Onaylarsan aynı durum bir daha sorulmaz.",
+                subtitle: "Göndermeden önce aşağıdakileri kontrol et. Onaylarsan aynı durum bir daha sorulmaz.",
                 icon: "exclamationmark.shield.fill",
                 tint: Theme.warning
             ) {
@@ -85,6 +85,8 @@ struct ResponseView: View {
                 statusBar(display)
                 if let id = appState.selectedRequestID, let advice = appState.tokenRetryAdvice[id] {
                     TokenRetryBanner(requestID: id, advice: advice)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
                 }
                 // Sekmeler istek sekmeleriyle aynı dilde: sola yaslı, seçili
                 // olan camlı (2026-10-20). Arama ve katlama sağda, yalnızca
@@ -197,7 +199,7 @@ struct ResponseView: View {
                 copiedCorrelationID = false
             }
             .alert(
-                "Dosyaya kaydedilemedi",
+                "Yanıt kaydedilemedi",
                 isPresented: Binding(
                     get: { fileSaveError != nil },
                     set: { if !$0 { fileSaveError = nil } }
@@ -205,7 +207,7 @@ struct ResponseView: View {
             ) {
                 Button("Tamam") { fileSaveError = nil }
             } message: {
-                Text(fileSaveError ?? "")
+                Text("\(fileSaveError ?? "")\n\nBaşka bir klasör seçip yeniden dene.")
             }
         }
     }

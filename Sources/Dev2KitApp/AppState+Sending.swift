@@ -68,7 +68,7 @@ extension AppState {
                         )
                     } catch let error as TokenError {
                         self.tokenBlockedSends[id] = usedTokens.map(\.variable)
-                        self.showTokenAlert(error.localizedDescription, for: id)
+                        self.showTokenAlert("Token alınamadı; istek gönderilmedi", error.localizedDescription, for: id)
                         throw error
                     }
                 }

@@ -118,19 +118,19 @@ extension AppState {
     func importCollection(from url: URL, source: ImportSource) {
         let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
         guard size <= ImportReviewer.maxImportBytes else {
-            portingMessage = "Dosya çok büyük (\(ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file))); en fazla \(ImportReviewer.maxImportBytes / 1_048_576) MB içe aktarılır."
+            portingMessage = importFailed("Dosya çok büyük (\(ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file))). En fazla \(ImportReviewer.maxImportBytes / 1_048_576) MB içe aktarılır; koleksiyonu bölüp parça parça aktar.")
             return
         }
         let data: Data
         do {
             data = try Data(contentsOf: url)
         } catch {
-            portingMessage = "Dosya okunamadı: \(error.localizedDescription)"
+            portingMessage = importFailed("Dosya okunamadı: \(error.localizedDescription)\n\nDosyanın yerini ve okuma iznini kontrol et.")
             return
         }
         switch prepareImport(data, source: source) {
         case .success(let prepared): importPrepared(prepared)
-        case .failure(let failure): portingMessage = failure.message
+        case .failure(let failure): portingMessage = importFailed(failure.message)
         }
     }
 
@@ -186,27 +186,30 @@ extension AppState {
     /// Onaylanan koleksiyonları ekler; kesin engelli istekler dışarıda kalır.
     /// Kullanıcıya gösterilecek özet metnini döner.
     @discardableResult
-    func commitImport(_ items: [PreparedImport]) -> String {
-        var lines: [String] = []
+    func commitImport(_ items: [PreparedImport]) -> ResultMessage {
+        var results: [ImportResult.Item] = []
         for item in items {
             let collection = item.review.importableCollection
             let skipped = item.review.blockedCount
-            if collection.requests.isEmpty, skipped > 0 {
-                lines.append("\"\(collection.name)\" aktarılmadı: tüm istekler güvenlik nedeniyle engellendi.")
-                continue
+            let rejected = collection.requests.isEmpty && skipped > 0
+            if !rejected {
+                workspace.collections.append(collection)
             }
-            workspace.collections.append(collection)
-            lines.append("\"\(collection.name)\" içe aktarıldı (\(collection.requests.count) istek).")
-            if skipped > 0 {
-                lines.append("\(skipped) istek güvenlik nedeniyle aktarılmadı.")
-            }
-            if item.wasRenamed {
-                lines.append("İsim çakıştığı için \"\(collection.name)\" olarak eklendi.")
-            }
-            lines.append(contentsOf: item.review.notes.map { "⚠︎ \($0)" })
+            results.append(ImportResult.Item(
+                name: collection.name,
+                importedCount: rejected ? 0 : collection.requests.count,
+                blockedCount: skipped,
+                wasRenamed: item.wasRenamed,
+                notes: item.review.notes
+            ))
         }
         persist()
-        return lines.joined(separator: "\n")
+        return ImportResult.message(for: results)
+    }
+
+    /// İçe aktarma hatası: sistem alert'inde, başarıdan ayrı başlıkla.
+    func importFailed(_ message: String) -> ResultMessage {
+        ResultMessage(kind: .error, title: "İçe aktarılamadı", message: message)
     }
 
     func exportCollection(_ id: UUID) {
@@ -218,9 +221,18 @@ extension AppState {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             try CollectionPorting.exportData(collection).write(to: url)
-            portingMessage = "\"\(collection.name)\" dışa aktarıldı.\nSecret değerleri dosyada YOK; yalnızca {{secret:isim}} referansları var."
+            portingMessage = ResultMessage(
+                kind: .success,
+                title: "Dışa aktarıldı",
+                message: "“\(collection.name)” · \(url.lastPathComponent)",
+                lines: [MessageLine(.info, "Secret değerleri dosyaya yazılmadı; dosyada yalnızca {{secret:isim}} referansları var.")]
+            )
         } catch {
-            portingMessage = "Dışa aktarma başarısız: \(error.localizedDescription)"
+            portingMessage = ResultMessage(
+                kind: .error,
+                title: "Dışa aktarılamadı",
+                message: "Seçilen konuma yazılamadı: \(error.localizedDescription)\n\nBaşka bir konum seçip yeniden dene."
+            )
         }
     }
 

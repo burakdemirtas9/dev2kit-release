@@ -63,18 +63,18 @@ struct TokenFactoryPanel: View {
             }
         }
         .confirmationDialog(
-            "\"\(pendingDelete?.name ?? "")\" silinsin mi?",
+            "“\(pendingDelete?.name ?? "")” silinsin mi?",
             isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
             titleVisibility: .visible
         ) {
-            Button("Sil", role: .destructive) {
+            Button("İsteği Sil", role: .destructive) {
                 if let request = pendingDelete { appState.deleteRequest(request.id) }
                 pendingDelete = nil
             }
             Button("Vazgeç", role: .cancel) { pendingDelete = nil }
         } message: {
             let variable = (pendingDelete?.tokenOutput ?? TokenOutput()).trimmedVariableName
-            Text("{{\(variable)}} kullanan istekler artık token alamaz.")
+            Text("Kalıcı olarak silinir. {{\(variable)}} kullanan istekler artık token alamaz.")
         }
     }
 

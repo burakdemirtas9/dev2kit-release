@@ -163,4 +163,25 @@ final class TLSSuggestionTests: XCTestCase {
         let text = String(decoding: data, as: UTF8.self)
         XCTAssertFalse(text.contains("api.firmaadi.local"), "ret kalıcı kaydedilmiş")
     }
+
+    // MARK: "Profili Aç"
+
+    /// Öneri kutusundaki "Profili Aç" TLS penceresini o profil seçili açar;
+    /// değer bir kez okunur, sonraki açılış (araç çubuğu) güven deposundan başlar.
+    func testShowTLSSettingsSelectsProfileOnce() {
+        let id = addProfile()
+        let before = state.tlsSettingsRequest
+        state.showTLSSettings(profileID: id)
+        XCTAssertEqual(state.tlsSettingsRequest, before + 1)
+        XCTAssertEqual(state.takeTLSSettingsProfileID(), id)
+        XCTAssertNil(state.takeTLSSettingsProfileID())
+    }
+
+    /// Pencere açılmadan profil silindiyse olmayan bir seçim verilmez.
+    func testShowTLSSettingsIgnoresDeletedProfile() {
+        let id = addProfile()
+        state.showTLSSettings(profileID: id)
+        state.deleteTLSProfile(id)
+        XCTAssertNil(state.takeTLSSettingsProfileID())
+    }
 }

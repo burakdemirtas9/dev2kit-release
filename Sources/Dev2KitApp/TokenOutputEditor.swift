@@ -148,7 +148,9 @@ struct TokenFactoryBanner: View {
     }
 }
 
-/// Alttan çıkan, kendiliğinden kaybolan kırmızı uyarı.
+/// Alttan çıkan, kendiliğinden kaybolan hata bildirimi (token alınamadı).
+/// Panel zemininde kırmızı kenar + hata ikonu: hata belli, metin okunur
+/// (eskiden tam kırmızı blok ve başlıksız ham hata metniydi).
 ///
 /// Kendiliğinden kaybolduğu için içerik ayrıca yanıt panelinde de kalır
 /// (istek gönderilmedi hatası); burası dikkat çekmek için. VoiceOver'a da
@@ -162,34 +164,46 @@ struct TokenAlertToast: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
-            Image(systemName: "exclamationmark.octagon.fill")
-            Text(alert.message)
-                .font(.callout)
-                .fixedSize(horizontal: false, vertical: true)
-                .textSelection(.enabled)
-            Spacer(minLength: 0)
-            if let variables = appState.tokenBlockedSends[alert.requestID] {
-                SendWithoutTokenButton(requestID: alert.requestID, variables: variables, onTint: true)
+            MessageIcon(kind: .error)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(alert.title)
+                    .fontWeight(.semibold)
+                Text(alert.message)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
+                if let variables = appState.tokenBlockedSends[alert.requestID] {
+                    SendWithoutTokenButton(requestID: alert.requestID, variables: variables)
+                        .padding(.top, 2)
+                }
             }
+            .font(.callout)
+            Spacer(minLength: 0)
             Button {
                 appState.dismissTokenAlert(alert.id)
             } label: {
                 Image(systemName: "xmark").iconHitTarget()
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Uyarıyı kapat")
+            .foregroundStyle(.secondary)
+            .accessibilityLabel("Bildirimi kapat")
         }
-        .foregroundStyle(.white)
         .padding(12)
         .frame(maxWidth: 560)
-        .background(Theme.down, in: RoundedRectangle(cornerRadius: 8))
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(alignment: .leading) {
+            UnevenRoundedRectangle(topLeadingRadius: 8, bottomLeadingRadius: 8)
+                .fill(Theme.down)
+                .frame(width: 3)
+        }
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.primary.opacity(0.1)))
         .shadow(radius: 6, y: 2)
         .padding(14)
         .task(id: alert.id) {
             NSAccessibility.post(
                 element: NSApp.mainWindow as Any,
                 notification: .announcementRequested,
-                userInfo: [.announcement: alert.message, .priority: NSAccessibilityPriorityLevel.high.rawValue]
+                userInfo: [.announcement: "\(alert.title). \(alert.message)", .priority: NSAccessibilityPriorityLevel.high.rawValue]
             )
             try? await Task.sleep(for: .seconds(Self.visibleSeconds))
             withAnimation(.easeOut(duration: 0.2)) { appState.dismissTokenAlert(alert.id) }
@@ -209,45 +223,36 @@ struct TokenRetryBanner: View {
 
     var body: some View {
         let names = advice.variables.map { "{{\($0)}}" }.joined(separator: ", ")
-        HStack(spacing: 10) {
-            switch advice {
-            case .offerRefresh(let status, _):
-                Image(systemName: "arrow.triangle.2.circlepath")
-                    .foregroundStyle(Theme.warning)
-                Text("Bu istek \(names) kullanıyor ve HTTP \(status) döndü. Token sunucuda geçersiz kılınmış olabilir.")
-                    .font(.secondaryText)
-                    .fixedSize(horizontal: false, vertical: true)
-                Spacer(minLength: 0)
+        // İkisi de uyarı: hata durum kodunda zaten görünüyor, bu şerit
+        // yönlendirme (eskiden ikinci hal kırmızıydı, arıza gibi okunuyordu).
+        switch advice {
+        case .offerRefresh(let status, _):
+            MessageBanner(
+                kind: .warning,
+                title: "Token geçersiz olabilir (HTTP \(status))",
+                message: "Bu istek \(names) kullanıyor; token sunucuda geçersiz kılınmış olabilir."
+            ) {
                 Button("Token'ı Yenile ve Tekrar Gönder") {
                     appState.refreshTokensAndResend(requestID)
                 }
+                .buttonStyle(PrimaryActionButtonStyle())
                 .controlSize(.small)
-            case .checkTokenContent(let status, let variables):
-                Image(systemName: "exclamationmark.octagon.fill")
-                    .foregroundStyle(Theme.down)
-                Text("Token yenilendi ama istek yine HTTP \(status) döndü. Token içeriğini kontrol et: doğru müşteri, scope ya da environment mı?")
-                    .font(.secondaryText)
-                    .fixedSize(horizontal: false, vertical: true)
-                Spacer(minLength: 0)
+            }
+        case .checkTokenContent(let status, let variables):
+            MessageBanner(
+                kind: .warning,
+                title: "Yeni token'la da HTTP \(status)",
+                message: "Sorun büyük ihtimalle token'ın içeriğinde: doğru müşteri, scope ya da environment mı?"
+            ) {
                 if let first = variables.first {
                     Button("Token İsteğini Aç") {
                         appState.openTokenRequest(producing: first)
                     }
+                    .buttonStyle(PrimaryActionButtonStyle())
                     .controlSize(.small)
                 }
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .background((advice.isContentProblem ? Theme.down : Theme.warning).opacity(0.12))
-        .accessibilityElement(children: .contain)
-    }
-}
-
-private extension TokenRetryAdvice {
-    var isContentProblem: Bool {
-        if case .checkTokenContent = self { return true }
-        return false
     }
 }
 
@@ -260,33 +265,13 @@ struct SendWithoutTokenButton: View {
     @Environment(AppState.self) private var appState
     let requestID: UUID
     let variables: [String]
-    /// Kırmızı uyarının içinde: sistem düğmesi orada gri bir kutu olarak
-    /// sırıtıyordu; uyarının geri kalanı gibi beyaz çizilir.
-    var onTint = false
 
     var body: some View {
         let names = variables.map { "{{\($0)}}" }.joined(separator: ", ")
-        Group {
-            if onTint {
-                Button {
-                    appState.sendWithoutTokens(requestID)
-                } label: {
-                    Text("Yine de Gönder (token olmadan)")
-                        .font(.callout.weight(.semibold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 10)
-                        .frame(minHeight: HitTarget.row)
-                        .overlay(Capsule().strokeBorder(.white, lineWidth: 1))
-                        .contentShape(Capsule())
-                }
-                .buttonStyle(.plain)
-            } else {
-                Button("Yine de Gönder (token olmadan)") {
-                    appState.sendWithoutTokens(requestID)
-                }
-                .controlSize(.small)
-            }
+        Button("Yine de Gönder (token olmadan)") {
+            appState.sendWithoutTokens(requestID)
         }
+        .controlSize(.small)
         .help("İstek Token Factory'ye gidilmeden gönderilir. \(names) aktif environment'ta aynı adlı değişken varsa onun değerini, yoksa boş değer alır.")
     }
 }

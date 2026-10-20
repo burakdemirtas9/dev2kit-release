@@ -123,7 +123,7 @@ public enum OutboundScanner {
         var result = try scan(files: files, projectName: directory.lastPathComponent)
         var notes = result.notes
         if kotlinCount > 0 { notes.append("\(kotlinCount) Kotlin dosyası taranmadı (şimdilik yalnızca Java).") }
-        if truncated { notes.append("Proje çok büyük; ilk \(files.count) dosya tarandı.") }
+        if truncated { notes.append("⚠︎ Proje çok büyük; yalnızca ilk \(files.count) dosya tarandı, bazı çağrılar eksik olabilir.") }
         result = OutboundScanResult(projectName: result.projectName, calls: result.calls, config: result.config, javaFileCount: result.javaFileCount, notes: notes)
         return result
     }

@@ -167,14 +167,20 @@ struct Dev2KitApp: App {
     private func confirmResetSecurityApprovals() {
         let alert = NSAlert()
         alert.messageText = "Güvenlik onayları sıfırlansın mı?"
-        alert.informativeText = "\"Yine de gönder\" ile onayladığın tüm uyarılar unutulur; aynı durumlar yeniden sorulur."
-        alert.addButton(withTitle: "Sıfırla")
+        alert.informativeText = "“Yine de Gönder” ile onayladığın uyarılar unutulur; aynı durumlar yeniden sorulur."
+        alert.addButton(withTitle: "Onayları Sıfırla")
         alert.addButton(withTitle: "Vazgeç")
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         do {
             try appState.resetSecurityApprovals()
         } catch {
-            NSAlert(error: error).runModal()
+            // Sistem hata metni bağlamsız ve İngilizce kalabiliyordu.
+            let failure = NSAlert()
+            failure.alertStyle = .critical
+            failure.messageText = "Güvenlik onayları sıfırlanamadı"
+            failure.informativeText = "\(error.localizedDescription)\n\nOnayların değişmedi."
+            failure.addButton(withTitle: "Tamam")
+            failure.runModal()
         }
     }
 

@@ -191,6 +191,9 @@ struct PrimaryActionButtonStyle: ButtonStyle {
             .font(.body.weight(.semibold))
             .foregroundStyle(.white)
             .padding(.horizontal, 8)
+            // Yükseklik vermeyen yerlerde (sonuç penceresi, şeritler) ince
+            // bir şerit gibi kalmasın; "Gönder" kendi yüksekliğini veriyor.
+            .frame(minHeight: 22)
             .background(Theme.primaryFill.opacity(isEnabled ? 1 : 0.4), in: RoundedRectangle(cornerRadius: 7))
             .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(.white.opacity(0.18)))
             .opacity(configuration.isPressed ? 0.8 : 1)

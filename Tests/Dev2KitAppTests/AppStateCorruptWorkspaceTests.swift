@@ -34,15 +34,18 @@ final class AppStateCorruptWorkspaceTests: XCTestCase {
 
         let backup = try XCTUnwrap(try backups().first, "bozuk dosyanın yedeği alınmalıydı")
         XCTAssertEqual(try Data(contentsOf: backup), corrupt)
+        let message = try XCTUnwrap(state.startupMessage)
+        XCTAssertEqual(message.kind, .warning, "veri kaybolmadı; hata değil uyarı")
         XCTAssertTrue(
-            state.startupWarning?.contains(backup.lastPathComponent) == true,
-            "uyarı yedeğin yerini söylemeli: \(state.startupWarning ?? "nil")"
+            message.plainText.contains(backup.lastPathComponent),
+            "uyarı yedeğin yerini söylemeli: \(message.plainText)"
         )
+        XCTAssertEqual(message.revealURL?.lastPathComponent, backup.lastPathComponent)
         // Hemen ardından gelen başarılı kayıt uyarıyı silmemeli.
         let saved = expectation(description: "ilk kayıt bitti")
         DispatchQueue.main.async { saved.fulfill() }
         wait(for: [saved], timeout: 2)
-        XCTAssertNotNil(state.startupWarning)
+        XCTAssertNotNil(state.startupMessage)
         // Uygulama boş workspace ile açılır ve normal şekilde kaydeder.
         XCTAssertNoThrow(try store.load())
         XCTAssertFalse(state.persistenceBlocked)
@@ -57,7 +60,8 @@ final class AppStateCorruptWorkspaceTests: XCTestCase {
         state.waitForPendingWrites()
 
         XCTAssertTrue(state.persistenceBlocked)
-        XCTAssertTrue(state.startupWarning?.contains("KAYDEDİLMEYECEK") == true)
+        XCTAssertEqual(state.startupMessage?.kind, .error)
+        XCTAssertTrue(state.startupMessage?.title.contains("kaydedilmeyecek") == true)
         try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: store.fileURL.path)
         XCTAssertEqual(try Data(contentsOf: store.fileURL), corrupt, "dosyanın üzerine yazılmamalıydı")
         XCTAssertTrue(try backups().isEmpty)

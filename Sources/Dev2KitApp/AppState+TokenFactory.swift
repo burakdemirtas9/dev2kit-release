@@ -219,7 +219,7 @@ extension AppState {
         } catch {
             tokenCache[key] = nil
             tokenStates[key] = isLive(key) ? .failed(error.localizedDescription) : nil
-            showTokenAlert("{{\(source.variable)}} güncellenemedi: \(error.localizedDescription)", for: request.id)
+            showTokenAlert("Token güncellenemedi", "{{\(source.variable)}}: \(error.localizedDescription)", for: request.id)
         }
     }
 
@@ -270,8 +270,8 @@ extension AppState {
         editorTab = .token
     }
 
-    func showTokenAlert(_ message: String, for requestID: UUID) {
-        tokenAlert = TokenAlert(requestID: requestID, message: message)
+    func showTokenAlert(_ title: String, _ message: String, for requestID: UUID) {
+        tokenAlert = TokenAlert(requestID: requestID, title: title, message: message)
     }
 
     func dismissTokenAlert(_ id: UUID) {
@@ -305,6 +305,9 @@ extension AppState {
     struct TokenAlert: Equatable, Identifiable {
         let id = UUID()
         let requestID: UUID
+        /// Ne oldu (ör. "istek gönderilmedi"); ham hata metni tek başına
+        /// sonucu söylemiyordu.
+        let title: String
         let message: String
     }
 }

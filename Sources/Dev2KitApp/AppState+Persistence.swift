@@ -63,7 +63,7 @@ extension AppState {
                     self.saveState = .saved(Date())
                     return
                 }
-                self.saveError = "Kaydedilemedi: \(error.localizedDescription)"
+                self.saveError = "workspace.json yazılamadı: \(error.localizedDescription)"
                 self.saveState = .failed(error.localizedDescription)
             }
         }
