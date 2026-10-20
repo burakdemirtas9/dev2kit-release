@@ -219,13 +219,12 @@ public enum CurlImporter {
         model.method = explicitMethod ?? (hasBody(model) ? .post : .get)
 
         // curl gövdeli GET gönderebiliyor, URLSession gönderemiyor. İstek
-        // sorunsuz içe aktarılır ama gönderilemeyeceği ŞİMDİ söylenir;
-        // kullanıcı bunu gönderirken anlamsız bir sistem hatasıyla karşılaşmasın.
+        // sorunsuz içe aktarılır ama gövdesiz gideceği ŞİMDİ söylenir.
         if !model.method.allowsBody, hasBody(model) {
             warnings.append(
-                "⚠︎ \(model.method.rawValue) gövdesi gönderilemiyor: macOS'un ağ katmanı "
-                + "gövdeli \(model.method.rawValue) isteğini reddediyor. Metodu POST yap "
-                + "ya da gövdeyi Query sekmesine taşı."
+                "⚠︎ \(model.method.rawValue) isteği gövdesiz gönderilir: macOS'un ağ katmanı "
+                + "gövdeli \(model.method.rawValue) göndermiyor. Gövde editörde korunur; "
+                + "göndermek için metodu POST yap ya da gövdeyi Query sekmesine taşı."
             )
         }
 

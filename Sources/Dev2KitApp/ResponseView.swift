@@ -11,6 +11,10 @@ struct ResponseView: View {
     @State private var showingTiming = false
     @State private var showingSize = false
     @State private var copiedCorrelationID = false
+    @State private var hoveringCorrelationID = false
+    /// Başlıklar listesinde az önce kopyalanan satır (aynı ad birden çok
+    /// kez gelebildiği için sıra numarası).
+    @State private var copiedHeaderIndex: Int?
     @StateObject private var folding = CodeFoldingController()
     /// Yanıtta tıklanan yer (satır, sütun): alt bilgide (Workbench ile ortak).
     @State private var cursor: (line: Int, column: Int)?
@@ -83,6 +87,23 @@ struct ResponseView: View {
             let response = display.data
             VStack(spacing: 0) {
                 statusBar(display)
+                // Uygulamanın gönderme davranışı hakkında bildirim; sunucu
+                // yanıtına eklenmez. Yanıtla (o gönderimle) birlikte gelir,
+                // başka istek/yanıtta görünmez.
+                if response.requestBodyOmitted {
+                    HStack(spacing: 6) {
+                        MessageIcon(kind: .warning)
+                        Text("GET isteği gövdesiz gönderildi. Gövde içeriği editörde korundu.")
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: 0)
+                    }
+                    .font(.secondaryText)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 5)
+                    .background(MessageKind.warning.background)
+                    .help("macOS'un ağ katmanı gövdeli GET göndermiyor. Gövdeyi göndermek için metodu POST, PUT ya da PATCH yap.")
+                    .accessibilityElement(children: .combine)
+                }
                 if let id = appState.selectedRequestID, let advice = appState.tokenRetryAdvice[id] {
                     TokenRetryBanner(requestID: id, advice: advice)
                         .padding(.horizontal, 12)
@@ -152,15 +173,19 @@ struct ResponseView: View {
                 case .headers:
                     // Aynı başlık birden çok kez gelebilir (Set-Cookie);
                     // id olarak isim kullanmak SwiftUI'da çakışma yaratıyordu.
-                    List(Array(response.headers.enumerated()), id: \.offset) { _, header in
+                    List(Array(response.headers.enumerated()), id: \.offset) { index, header in
                         HStack(alignment: .top) {
                             Text(header.name)
                                 .font(.system(.body, design: .monospaced))
                                 .fontWeight(.semibold)
                                 .frame(width: 220, alignment: .leading)
+                            // Uzun değer sarılır; kopyala düğmesi sabit genişlikte
+                            // sağda kalır, metnin üstüne binmez.
                             Text(header.value)
                                 .font(.system(.body, design: .monospaced))
                                 .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            headerCopyButton(index: index, name: header.name, value: header.value)
                         }
                     }
                     .listStyle(.inset)
@@ -192,6 +217,11 @@ struct ResponseView: View {
                 guard copied else { return }
                 try? await Task.sleep(for: .seconds(1.5))
                 copied = false
+            }
+            .task(id: copiedHeaderIndex) {
+                guard copiedHeaderIndex != nil else { return }
+                try? await Task.sleep(for: .seconds(1.5))
+                copiedHeaderIndex = nil
             }
             .task(id: copiedCorrelationID) {
                 guard copiedCorrelationID else { return }
@@ -292,29 +322,58 @@ struct ResponseView: View {
         .listStyle(.inset)
     }
 
-    /// İzleme kimliği rozeti. Tıklayınca panoya kopyalar — log sistemine
-    /// (Kibana) bu kimlikle gidiliyor, elle seçip kopyalamak zahmetli.
+    /// İzleme kimliği rozeti: başlığın ADI görünür (ör. X-B3-TraceId),
+    /// tıklayınca yalnızca DEĞERİ kopyalanır — log sistemine (Kibana) bu
+    /// değerle gidiliyor (kullanıcı isteği, 2026-10-20; eskiden "# değer").
     /// Pano kuralı bozulmuyor: kopyalama yalnızca kullanıcı tıklayınca olur.
     private func correlationBadge(_ correlation: CorrelationID.Match) -> some View {
         Button {
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(correlation.value, forType: .string)
+            copyToPasteboard(correlation.value)
             copiedCorrelationID = true
         } label: {
             HStack(spacing: 4) {
-                Image(systemName: copiedCorrelationID ? "checkmark" : "number")
-                Text(copiedCorrelationID ? "Kopyalandı" : CorrelationID.shortened(correlation.value))
+                if copiedCorrelationID {
+                    Image(systemName: "checkmark")
+                        .foregroundStyle(Theme.up)
+                } else if hoveringCorrelationID {
+                    Image(systemName: "doc.on.doc")
+                }
+                Text(copiedCorrelationID ? "Kopyalandı" : correlation.headerName)
                     .font(.secondaryMono)
             }
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
-            .background(Color.secondary.opacity(0.15), in: Capsule())
+            .background(Color.secondary.opacity(hoveringCorrelationID ? 0.25 : 0.15), in: Capsule())
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
         .foregroundStyle(.secondary)
-        .help("\(correlation.explanation)\n\n\(correlation.headerName): \(correlation.value)\n\nTıkla, panoya kopyalansın.")
-        .accessibilityLabel("İzleme kimliğini kopyala")
+        .onHover { hoveringCorrelationID = $0 }
+        .help("Değeri kopyala")
+        .accessibilityLabel("\(correlation.headerName) değerini kopyala")
+        .accessibilityHint(correlation.explanation)
+    }
+
+    /// Başlıklar listesinde satırın kopyala düğmesi: `ad: değer`, yalnızca o
+    /// satır. Kopyalanınca kısa süre onay işareti.
+    private func headerCopyButton(index: Int, name: String, value: String) -> some View {
+        let copiedThis = copiedHeaderIndex == index
+        return Button {
+            copyToPasteboard(ResponseHeaderCopy.line(name: name, value: value))
+            copiedHeaderIndex = index
+        } label: {
+            Image(systemName: copiedThis ? "checkmark" : "doc.on.doc")
+                .foregroundStyle(copiedThis ? AnyShapeStyle(Theme.up) : AnyShapeStyle(.secondary))
+                .iconHitTarget(20)
+        }
+        .buttonStyle(.plain)
+        .help(copiedThis ? "Kopyalandı" : "“\(name): …” satırını kopyala")
+        .accessibilityLabel(copiedThis ? "Kopyalandı" : "\(name) başlığını kopyala")
+    }
+
+    private func copyToPasteboard(_ text: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
     }
 
     /// Gösterilecek sekmeler: yönlendirme zinciri yoksa "Yönlendirme",

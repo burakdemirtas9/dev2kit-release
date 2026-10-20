@@ -29,6 +29,10 @@ public struct ResponseData: Sendable {
     /// Yanıt `RequestEngine.maxResponseBytes`'ı aştı: indirme durduruldu,
     /// `body` yalnızca ilk kısım. Arayüz uyarır.
     public let bodyLimitExceeded: Bool
+    /// Bu gönderimde dolu gövde metot (GET) yüzünden isteğe konmadı; gövde
+    /// editörde duruyor. Arayüz yanıtın üstünde bildirir (sunucu yanıtına
+    /// eklenmez). İstek kurulurken belirlenir, gönderilen isteği anlatır.
+    public let requestBodyOmitted: Bool
 
     public init(
         statusCode: Int,
@@ -42,9 +46,11 @@ public struct ResponseData: Sendable {
         timing: ResponseTiming? = nil,
         size: TransferSize? = nil,
         certificateValidationSkipped: Bool = false,
-        bodyLimitExceeded: Bool = false
+        bodyLimitExceeded: Bool = false,
+        requestBodyOmitted: Bool = false
     ) {
         self.bodyLimitExceeded = bodyLimitExceeded
+        self.requestBodyOmitted = requestBodyOmitted
         self.statusCode = statusCode
         self.headers = headers
         self.body = body
@@ -71,8 +77,6 @@ public enum RequestEngineError: Error, LocalizedError {
     case securityBlocked([SecurityFinding])
     /// Onay bekleyen güvenlik uyarıları: istek gönderilmedi.
     case needsApproval([SecurityFinding])
-    /// Metot gövde taşıyamıyor (bkz. `HTTPMethod.allowsBody`).
-    case bodyNotAllowed(HTTPMethod)
     /// TLS doğrulaması başarısız; bağlantı bizim tarafımızdan reddedildi.
     case tlsRejected(host: String, reason: String)
 
@@ -91,15 +95,6 @@ public enum RequestEngineError: Error, LocalizedError {
             Sertifika doğrulaması atlanmaz. Sunucunun zincirini imzalayan kök \
             sertifikayı TLS > Güven Deposu'na ekle; sunucu istemci sertifikası \
             istiyorsa TLS > Host Profilleri'nden tanımla.
-            """
-        case .bodyNotAllowed(let method):
-            // Sistem hatası ("kaynak en fazla büyüklüğü aşıyor") ne olduğunu
-            // anlatmıyor; kullanıcıya ne yapacağını söylemek gerekiyor.
-            return """
-            \(method.rawValue) isteği gövde taşıyamıyor: macOS'un ağ katmanı \
-            (URLSession) gövdeli bir \(method.rawValue) göndermeyi reddediyor, \
-            istek ağa hiç çıkmıyor. Metodu POST yap ya da gövdeyi Query \
-            sekmesine taşı.
             """
         }
     }
@@ -298,7 +293,8 @@ public final class RequestEngine: @unchecked Sendable {
         approvedWarnings: Set<String> = []
     ) async throws -> ResponseData {
         let resolver = VariableResolver(environment: environment, secretStore: secretStore)
-        var urlRequest = try buildURLRequest(model, resolver: resolver)
+        let built = try buildRequest(model, resolver: resolver)
+        var urlRequest = built.request
 
         // Ağa çıkmadan önce: engel varsa hiç gönderilmez, onaylanmamış uyarı
         // varsa kullanıcıya sorulmak üzere durulur.
@@ -391,7 +387,8 @@ public final class RequestEngine: @unchecked Sendable {
             // Düz HTTP'de doğrulanacak sertifika yok; uyarı orada yanıltır.
             certificateValidationSkipped: skipsValidation
                 && [urlRequest.url, http.url].contains { $0?.scheme?.lowercased() == "https" },
-            bodyLimitExceeded: tracker.bodyLimitExceeded
+            bodyLimitExceeded: tracker.bodyLimitExceeded,
+            requestBodyOmitted: built.omittedBody
         )
     }
 
@@ -430,6 +427,12 @@ public final class RequestEngine: @unchecked Sendable {
 
     // İç kurgu ayrı fonksiyonda: URL/header/auth üretimi network'süz test edilebilsin.
     func buildURLRequest(_ model: RequestModel, resolver: VariableResolver) throws -> URLRequest {
+        try buildRequest(model, resolver: resolver).request
+    }
+
+    /// İsteği kurar; dolu gövde metot yüzünden dışarıda bırakıldıysa
+    /// `omittedBody` (yanıttaki bildirim buradan, gönderilen isteğe göre).
+    func buildRequest(_ model: RequestModel, resolver: VariableResolver) throws -> (request: URLRequest, omittedBody: Bool) {
         let resolvedURLString = try resolver.resolve(model.url.trimmingCharacters(in: .whitespaces))
         guard var components = URLComponents(string: resolvedURLString),
               components.scheme != nil, components.host != nil else {
@@ -492,10 +495,10 @@ public final class RequestEngine: @unchecked Sendable {
             }
         }
 
-        try attachBody(to: &request, model: model, resolver: resolver)
+        let omittedBody = try attachBody(to: &request, model: model, resolver: resolver)
         // En sonda: Auth (API key başlığı) dahil hiçbir yol User-Agent'ı ezemez.
         Dev2KitIdentity.stamp(&request)
-        return request
+        return (request, omittedBody)
     }
 
     /// Foundation satır sonu (CR/LF) içeren başlığı SESSİZCE düşürür: istek
@@ -510,36 +513,44 @@ public final class RequestEngine: @unchecked Sendable {
         request.setValue(value, forHTTPHeaderField: name)
     }
 
+    /// Gövdeyi bağlar. Metot gövde taşıyamıyorsa (GET) gövde HİÇ işlenmez:
+    /// değişkenleri çözülmez, doğrulanmaz, isteğe konmaz; model (editördeki
+    /// gövde) değişmez. Dönen değer: dolu bir gövde dışarıda bırakıldı mı.
+    ///
+    /// Eskiden GET + gövde `bodyNotAllowed` hatasıyla istek hiç gönderilmiyordu
+    /// (kullanıcı isteği, 2026-10-20: GET gövdesiz gönderilsin, gövde korunsun).
+    @discardableResult
     private func attachBody(
         to request: inout URLRequest,
         model: RequestModel,
         resolver: VariableResolver
-    ) throws {
+    ) throws -> Bool {
+        guard model.method.allowsBody else {
+            return model.body.hasSendableContent
+        }
         switch model.body {
         case .none:
-            return
+            return false
 
         case .raw(let content, let contentType):
             // Yorumlar yalnızca kullanıcı için; çözümden ÖNCE kalkar (yorumdaki
             // tanımsız {{değişken}} isteği durdurmasın).
             let sendable = RequestBodyComments.sendable(content, contentType: contentType)
             let data = Data(try resolver.resolve(sendable).utf8)
-            guard !data.isEmpty else { return }
-            try setBody(data, contentType: contentType.isEmpty ? nil : contentType,
-                    on: &request, method: model.method)
+            guard !data.isEmpty else { return false }
+            setBody(data, contentType: contentType.isEmpty ? nil : contentType, on: &request)
 
         case .formURLEncoded(let fields):
             var components = URLComponents()
             components.queryItems = try fields
                 .filter { $0.enabled && !$0.key.isEmpty }
                 .map { URLQueryItem(name: try resolver.resolve($0.key), value: try resolver.resolve($0.value)) }
-            guard let query = components.percentEncodedQuery, !query.isEmpty else { return }
-            try setBody(Data(query.utf8), contentType: "application/x-www-form-urlencoded",
-                    on: &request, method: model.method)
+            guard let query = components.percentEncodedQuery, !query.isEmpty else { return false }
+            setBody(Data(query.utf8), contentType: "application/x-www-form-urlencoded", on: &request)
 
         case .multipartForm(let fields):
             let activeFields = fields.filter { $0.enabled && !$0.key.isEmpty }
-            guard !activeFields.isEmpty else { return }
+            guard !activeFields.isEmpty else { return false }
             let boundary = "dev2kit-\(UUID().uuidString)"
             var data = Data()
             for field in activeFields {
@@ -552,9 +563,9 @@ public final class RequestEngine: @unchecked Sendable {
                 data.append(Data("\(try resolver.resolve(field.value))\r\n".utf8))
             }
             data.append(Data("--\(boundary)--\r\n".utf8))
-            try setBody(data, contentType: "multipart/form-data; boundary=\(boundary)",
-                    on: &request, method: model.method)
+            setBody(data, contentType: "multipart/form-data; boundary=\(boundary)", on: &request)
         }
+        return false
     }
 
     /// Host'a uyan profili bulup sertifikalarını yükler.
@@ -605,22 +616,13 @@ public final class RequestEngine: @unchecked Sendable {
         return resolved.isEmpty ? nil : resolved
     }
 
-    /// Gövdeyi isteğe bağlar.
+    /// Gövdeyi isteğe bağlar (GET buraya hiç gelmez, bkz. `attachBody`).
     ///
     /// Eskiden GET/HEAD/OPTIONS için `httpBodyStream` kullanılıyordu ("URLSession
     /// httpBody'yi sessizce düşürür" varsayımıyla). Yerel bir dinleyiciye karşı
     /// ölçüldü (macOS 26 / Darwin 27): HEAD ve OPTIONS düz `httpBody` ile
-    /// gövdeyi telde taşıyor, GET ise her üç yolda da reddediliyor. Yani özel
-    /// durum gereksizdi; GET ise zaten baştan durdurulmalı.
-    private func setBody(
-        _ data: Data,
-        contentType: String?,
-        on request: inout URLRequest,
-        method: HTTPMethod
-    ) throws {
-        guard method.allowsBody else {
-            throw RequestEngineError.bodyNotAllowed(method)
-        }
+    /// gövdeyi telde taşıyor, GET ise her üç yolda da reddediliyor.
+    private func setBody(_ data: Data, contentType: String?, on request: inout URLRequest) {
         request.httpBody = data
         // Headers sekmesinde elle girilen Content-Type her zaman kazanır.
         if request.value(forHTTPHeaderField: "Content-Type") == nil, let contentType {

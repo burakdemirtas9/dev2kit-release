@@ -189,3 +189,21 @@ public extension RequestModel {
         entries.filter { $0.enabled && !$0.key.trimmingCharacters(in: .whitespaces).isEmpty }.count
     }
 }
+
+extension RequestBody {
+    /// Gönderilecek bir içerik var mı: yorum satırları ve boşluk sayılmaz,
+    /// formda açık ve adı dolu bir alan gerekir. GET'te gövde dışarıda
+    /// bırakıldığında bildirimin çıkıp çıkmayacağı buna bağlı (boş gövdede
+    /// bildirim yok).
+    public var hasSendableContent: Bool {
+        switch self {
+        case .none:
+            return false
+        case .raw(let content, let contentType):
+            return !RequestBodyComments.sendable(content, contentType: contentType)
+                .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case .formURLEncoded(let fields), .multipartForm(let fields):
+            return fields.contains { $0.enabled && !$0.key.isEmpty }
+        }
+    }
+}

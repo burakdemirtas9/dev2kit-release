@@ -218,7 +218,9 @@ public enum SecretReferences {
         var texts = [model.url]
         for entry in model.headers where entry.enabled { texts += [entry.key, entry.value] }
         for entry in model.queryParams where entry.enabled { texts += [entry.key, entry.value] }
-        switch model.body {
+        // GET'te gövde gönderilmez (`RequestEngine.attachBody`): içindeki
+        // değişken token almasın, tanımsızsa isteği durdurmasın.
+        switch model.method.allowsBody ? model.body : .none {
         case .none: break
         case .raw(let content, let contentType):
             // Yorumdaki {{değişken}} gönderilmez; token almasın, hata vermesin.

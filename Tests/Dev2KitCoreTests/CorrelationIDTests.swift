@@ -59,3 +59,14 @@ final class CorrelationIDTests: XCTestCase {
         XCTAssertEqual(CorrelationID.shortened("kisa"), "kisa")
     }
 }
+
+final class ResponseHeaderCopyTests: XCTestCase {
+    func testLineIsNameColonValueWithoutNewline() {
+        XCTAssertEqual(ResponseHeaderCopy.line(name: "content-type", value: "application/json"), "content-type: application/json")
+        XCTAssertFalse(ResponseHeaderCopy.line(name: "a", value: "b").hasSuffix("\n"))
+    }
+
+    func testKeepsNameCaseAndValueAsIs() {
+        XCTAssertEqual(ResponseHeaderCopy.line(name: "Set-Cookie", value: "id=1; Path=/"), "Set-Cookie: id=1; Path=/")
+    }
+}

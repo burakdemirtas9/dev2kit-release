@@ -69,3 +69,11 @@ public enum CorrelationID {
         return "\(head)…\(tail)"
     }
 }
+
+/// Yanıt başlığının panoya kopyalanan hali: `ad: değer`. Ad ve değer
+/// yanıttaki gibi kalır; açıklama ya da sondaki satır sonu eklenmez.
+public enum ResponseHeaderCopy {
+    public static func line(name: String, value: String) -> String {
+        "\(name): \(value)"
+    }
+}
