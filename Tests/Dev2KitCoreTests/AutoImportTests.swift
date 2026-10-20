@@ -95,6 +95,23 @@ final class AutoImportTests: XCTestCase {
         XCTAssertEqual(try KibanaImporter.parse(Data(try XCTUnwrap(found.kibanaJSON).utf8)).entries.count, 2)
     }
 
+    /// Prod kaydı ve index'i olmayan `fields` biçimli kayıt da bulunur ve
+    /// Kibana ekranında alınır (ortam reddi yok, 2026-10-20).
+    func testProductionAndIndexlessFieldsRecordsAreFound() throws {
+        let prod = #"{"_index":"prod-incoming-log","_source":{"http_method":"GET","request_path":"/x","service_name":"ornek-service"}}"#
+        let indexless = #"{"fields":{"http_method":["GET"],"request_path":["/y"],"service_name":["ornek-service"]}}"#
+        let found = AutoImport.scan("\(prod)\n\(indexless)")
+        XCTAssertEqual(found.kibanaDocuments.count, 2)
+        let result = try KibanaImporter.parse(Data(try XCTUnwrap(found.kibanaJSON).utf8))
+        XCTAssertEqual(result.entries.map(\.urlTemplate), ["{{prod-ornek-service}}/x", "{{ornek-service}}/y"])
+        XCTAssertTrue(result.rejected.isEmpty)
+    }
+
+    /// Rastgele bir "fields" nesnesi Kibana kaydı sanılmaz.
+    func testUnrelatedFieldsObjectIsNotKibana() {
+        XCTAssertTrue(AutoImport.scan(#"{"fields":{"ad":["x"]}}"#).kibanaDocuments.isEmpty)
+    }
+
     func testNothingFoundExplainsWhy() {
         XCTAssertTrue(AutoImport.scan("sadece düz bir metin").emptyReason?.contains("cURL") == true)
         XCTAssertNotNil(AutoImport.scan("   ").emptyReason)

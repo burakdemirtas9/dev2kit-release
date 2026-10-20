@@ -111,20 +111,68 @@ final class KibanaImporterTests: XCTestCase {
         XCTAssertEqual(KibanaImporter.environment(fromIndex: "uzak-kume:test-incoming-log"), "test")
     }
 
-    // MARK: - Ortam güvenliği
+    // MARK: - Ortam (yalnızca adlandırma; ret sebebi değil, 2026-10-20)
 
-    func testProductionAndUnknownEnvironmentsAreRejected() throws {
-        for index in ["prod-incoming-log-2026", "incoming-log-2026", "live-log"] {
+    func testAllEnvironmentsAreImported() throws {
+        for (index, environment) in [
+            ("test-incoming-log-2026", "test"),
+            ("dev-incoming-log-2026", "dev"),
+            ("staging-incoming-log-2026", "staging"),
+            ("prod-incoming-log-2026", "prod"),
+            ("production-incoming-log-2026", "production"),
+            ("live-log", "live"),
+        ] {
             let result = try parse(document(index: index))
-            XCTAssertTrue(result.entries.isEmpty, index)
-            XCTAssertEqual(result.rejected.count, 1, index)
+            XCTAssertTrue(result.rejected.isEmpty, "\(index): \(result.rejected)")
+            let entry = try XCTUnwrap(result.entries.first, index)
+            XCTAssertEqual(entry.environment, environment)
+            XCTAssertEqual(entry.urlTemplate, "{{\(environment)-ornek-bff-service}}/ornek-service/islem/fiyat")
         }
     }
 
-    func testOnlyProductionRecordsAreDroppedFromAMixedExport() throws {
-        let result = try parse([document(), document(index: "prod-incoming-log")])
+    /// Ortamı anlaşılamayan ya da index'i olmayan kayıt da alınır; değişken
+    /// yalnızca servis adı ("incoming" ortam sanılmaz).
+    func testUnknownOrMissingEnvironmentIsImportedWithServiceVariable() throws {
+        var withoutIndex = document()
+        withoutIndex.removeValue(forKey: "_index")
+        for doc in [document(index: "incoming-log-2026"), document(index: ""), withoutIndex] {
+            let entry = try XCTUnwrap(parse(doc).entries.first)
+            XCTAssertNil(entry.environment)
+            XCTAssertEqual(entry.variableName, "ornek-bff-service")
+            XCTAssertEqual(entry.urlTemplate, "{{ornek-bff-service}}/ornek-service/islem/fiyat")
+        }
+    }
+
+    /// Prod kaydının alanları test kaydıyla aynı eşlemeden geçer; içerik
+    /// değiştirilmez, eksiltilmez.
+    func testProductionRecordKeepsTheSameMapping() throws {
+        let test = try XCTUnwrap(parse(document()).entries.first)
+        let prod = try XCTUnwrap(parse(document(index: "prod-incoming-log-2026")).entries.first)
+        XCTAssertEqual(prod.method, test.method)
+        XCTAssertEqual(prod.path, test.path)
+        XCTAssertEqual(prod.query, test.query)
+        XCTAssertEqual(prod.body, test.body)
+        XCTAssertEqual(prod.headers.map(\.id), test.headers.map(\.id))
+        XCTAssertEqual(prod.headers.map(\.value), test.headers.map(\.value))
+        XCTAssertEqual(prod.loggedStatus, test.loggedStatus)
+    }
+
+    func testMixedExportImportsEveryEnvironment() throws {
+        let result = try parse([document(), document(index: "prod-incoming-log"), document(index: "belirsiz")])
+        XCTAssertEqual(result.entries.count, 3)
+        XCTAssertTrue(result.rejected.isEmpty)
+    }
+
+    /// Bozuk kayıt (zorunlu alan eksik) yine reddedilir; sebep ortam değil,
+    /// eksik alan ve kayıt numarası.
+    func testMalformedRecordsStillRejectedWithTheRealCause() throws {
+        var noPath = document(index: "prod-incoming-log")
+        noPath["_source"] = ["service_name": "ornek-bff-service"]
+        var noService = document(index: "prod-incoming-log")
+        noService["_source"] = ["request_path": "/x"]
+        let result = try parse([document(), noPath, noService])
         XCTAssertEqual(result.entries.count, 1)
-        XCTAssertEqual(result.rejected.count, 1)
+        XCTAssertEqual(result.rejected, ["Kayıt 2: request_path yok.", "Kayıt 3: service_name yok; adres değişkeni türetilemiyor."])
     }
 
     func testNonKibanaJSONIsRejected() {

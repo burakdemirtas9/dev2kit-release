@@ -9,6 +9,13 @@ import Foundation
 /// Host logda anlamlı değildir (cluster içi adres); yerine ortam ve servis
 /// adından türetilen bir environment değişkeni kullanılır:
 /// `{{test-finance-fx-bff-service}}/yol`. Gateway adresi ortama göre elle girilir.
+///
+/// Her ortamın logu aktarılır (test, dev, staging, prod…). Ortam yalnızca
+/// değişken adı içindir; kayıt ortamına göre REDDEDİLMEZ. Eskiden yalnızca
+/// test benzeri ortamlar alınıyordu; uygulama yerel ve özelliği kullananlar
+/// prod loglarına zaten erişebiliyor (kullanıcı kararı, 2026-10-20). Ortam
+/// anlaşılamazsa değişken yalnızca servis adıdır. Veri yalnızca yerelde
+/// işlenir.
 public enum KibanaImporter {
     public struct Entry: Identifiable, Sendable {
         public let id: String
@@ -19,14 +26,16 @@ public enum KibanaImporter {
         public let body: String?
         public let headers: [ClassifiedHeader]
         public let serviceName: String
-        /// Index adından: "test", "prep"…
-        public let environment: String
+        /// Index adından: "test", "prod"…; tanınmazsa `nil` (kayıt yine alınır).
+        public let environment: String?
         public let indexName: String
         public let loggedStatus: String?
         public let loggedAt: String?
         public let warnings: [String]
 
-        public var variableName: String { "\(environment)-\(serviceName)" }
+        public var variableName: String {
+            environment.map { "\($0)-\(serviceName)" } ?? serviceName
+        }
         public var urlTemplate: String { "{{\(variableName)}}\(path)" }
 
         /// Varsayılan seçim: yalnızca normal başlıklar. Hassas ve izleme
@@ -38,7 +47,7 @@ public enum KibanaImporter {
 
     public struct ParseResult: Sendable {
         public let entries: [Entry]
-        /// Alınmayan kayıtlar ve sebebi (prod logu, eksik alan…).
+        /// Alınmayan kayıtlar ve sebebi (eksik zorunlu alan). Ortam sebep değildir.
         public let rejected: [String]
     }
 
@@ -54,10 +63,12 @@ public enum KibanaImporter {
         }
     }
 
-    /// İçe aktarılabilir ortamlar. Bilinmeyen ya da prod ortamı reddedilir:
-    /// prod logunu tekrar oynatmak gerçek bir müşteri adına işlem yapmaktır.
-    static let nonProductionEnvironments: Set<String> = [
+    /// Index adının başında ortam olarak tanınan adlar. Yalnızca değişken
+    /// adını kurmak için: `incoming-log-…` gibi ortamsız bir index'in ilk
+    /// parçası ("incoming") ortam sanılmasın. Listede olmayan kayıt REDDEDİLMEZ.
+    static let knownEnvironments: Set<String> = [
         "test", "dev", "development", "qa", "uat", "sit", "int", "stage", "staging", "stg", "prep", "preprod", "pre",
+        "prod", "prd", "production", "live", "canary", "demo", "sandbox", "perf",
     ]
 
     public static func parse(_ data: Data) throws -> ParseResult {
@@ -103,12 +114,7 @@ public enum KibanaImporter {
         let indexName = document["_index"] as? String ?? ""
         let label = "Kayıt \(position)"
 
-        guard let environment = environment(fromIndex: indexName) else {
-            return .failure(Rejection(message: "\(label): ortam index adından anlaşılamadı (\"\(indexName)\"); yalnızca test/dev/uat/prep logları aktarılır."))
-        }
-        guard nonProductionEnvironments.contains(environment) else {
-            return .failure(Rejection(message: "\(label): \"\(environment)\" ortamının logu aktarılmaz. Prod logunu tekrar oynatmak gerçek bir müşteri adına işlem yapmaktır."))
-        }
+        let environment = environment(fromIndex: indexName)
         guard let rawPath = fields.string("request_path"), !rawPath.isEmpty else {
             return .failure(Rejection(message: "\(label): request_path yok."))
         }
@@ -146,13 +152,14 @@ public enum KibanaImporter {
         ))
     }
 
-    /// `test-incoming-log-2026.09.13-000909` → `test`.
+    /// `test-incoming-log-2026.09.13-000909` → `test`, `prod-…` → `prod`.
     /// Uzak küme öneki (`kume:test-…`) ve veri akışı öneki (`.ds-test-…`) atılır.
+    /// İlk parça bilinen bir ortam değilse (ya da index yoksa) `nil`.
     static func environment(fromIndex index: String) -> String? {
         var name = index.lowercased()
         if let colon = name.lastIndex(of: ":") { name = String(name[name.index(after: colon)...]) }
         if name.hasPrefix(".ds-") { name = String(name.dropFirst(4)) }
-        guard let first = name.split(separator: "-").first, !first.isEmpty else { return nil }
+        guard let first = name.split(separator: "-").first, knownEnvironments.contains(String(first)) else { return nil }
         return String(first)
     }
 

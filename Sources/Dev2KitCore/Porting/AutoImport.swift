@@ -127,8 +127,12 @@ public enum AutoImport {
         return schema.contains("getpostman.com")
     }
 
+    /// `fields` biçiminde `_index` şart değil (ortamsız kayıt da alınır,
+    /// 2026-10-20); o zaman `fields` gerçekten log alanı taşımalı.
     private static func isKibanaDocument(_ object: [String: Any]) -> Bool {
-        object["_source"] is [String: Any] || (object["_index"] is String && object["fields"] is [String: Any])
+        if object["_source"] is [String: Any] { return true }
+        guard let fields = object["fields"] as? [String: Any] else { return false }
+        return object["_index"] is String || fields["request_path"] != nil
     }
 
     // MARK: cURL

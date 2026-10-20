@@ -39,7 +39,7 @@ struct KibanaImportView: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Kibana'dan İstek")
                 .font(.title2).bold()
-            Text("Kibana'da kaydı açıp JSON halini kopyala ya da dışa aktarılan dosyayı seç. Yalnızca test/dev/uat/prep logları aktarılır.")
+            Text("Kibana'da kaydı açıp JSON halini kopyala ya da dışa aktarılan dosyayı seç. Her ortamın logu aktarılır; veri yalnızca bu Mac'te işlenir.")
                 .font(.secondaryText)
                 .foregroundStyle(.secondary)
 
@@ -143,7 +143,7 @@ struct KibanaImportView: View {
                     .font(.secondaryMono)
                     .lineLimit(1)
                 Spacer()
-                Text("\(entry.environment) · \(entry.serviceName)\(entry.loggedStatus.map { " · \($0)" } ?? "")")
+                Text("\(entry.environment ?? "ortam bilinmiyor") · \(entry.serviceName)\(entry.loggedStatus.map { " · \($0)" } ?? "")")
                     .font(.secondaryText)
                     .foregroundStyle(.secondary)
             }
