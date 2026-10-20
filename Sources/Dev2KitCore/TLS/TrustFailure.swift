@@ -66,18 +66,14 @@ public enum TrustFailure {
         guard !checks.isEmpty else { return nil }
         // Sıra sabit: kullanıcı aynı durumda hep aynı metni görsün.
         let known: [(String, String)] = [
-            (hostnameKey, "sertifikadaki adlar bu host ile eşleşmiyor"),
-            (temporalValidityKey, "sertifikanın tarihleri geçerli değil (süresi dolmuş ya da henüz başlamamış)"),
-            (validityPeriodKey, "sunucu sertifikasının geçerlilik süresi Apple'ın izin verdiği üst sınırı "
-                + "aşıyor (kurum CA'larında 825, public CA'larda 398 gün). Kurum kökünün süresi "
-                + "uzun olabilir; sınır yalnızca sunucu sertifikasına uygulanır. Kalıcı çözüm: "
-                + "PKI ekibinden daha kısa ömürlü sertifika. Kurum CA'sı güven deposundaysa "
-                + "TLS > Güven Deposu'ndan ömür sınırı muaf tutulabilir"),
+            (hostnameKey, L10n.t("trust.check.hostname")),
+            (temporalValidityKey, L10n.t("trust.check.dates")),
+            (validityPeriodKey, L10n.t("trust.check.validityPeriod")),
         ]
         var parts = known.filter { checks.contains($0.0) }.map(\.1)
         let others = checks.subtracting(known.map(\.0))
         if !others.isEmpty {
-            parts.append("başka kontroller düştü (\(others.sorted().joined(separator: ", ")))")
+            parts.append(L10n.t("trust.check.others", others.sorted().joined(separator: ", ")))
         }
         return parts.isEmpty ? nil : parts.joined(separator: "; ")
     }

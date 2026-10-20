@@ -8,6 +8,9 @@ import XCTest
 /// satırlık alan MB başına ~1,7 sn). Sınır metin alana GİRMEDEN uygulanmalı.
 @MainActor
 final class InputLimitTests: XCTestCase {
+    /// Beklenen mesajlar Türkçe.
+    override func invokeTest() { withLanguage(.turkish) { super.invokeTest() } }
+
     final class Model: ObservableObject { @Published var text = "" }
 
     private struct Form: View {
@@ -101,14 +104,18 @@ final class InputLimitTests: XCTestCase {
 
     func testBypassPathsUseTheSameCheck() {
         XCTAssertNil(InputLimits.rejection(of: "a\nb", maxBytes: 10, maxLines: 2))
-        XCTAssertEqual(InputLimits.rejection(of: String(repeating: "x", count: 11), maxBytes: 10, maxLines: 5), "Eklenmedi: metin 11 bytes; sınır 10 bytes.")
+        XCTAssertEqual(InputLimits.rejection(of: String(repeating: "x", count: 11), maxBytes: 10, maxLines: 5), "Eklenmedi: metin 11 bayt; sınır 10 bayt.")
         XCTAssertEqual(InputLimits.rejection(of: "a\nb\nc", maxBytes: 100, maxLines: 2), "Eklenmedi: metin 3 satır; sınır 2 satır.")
     }
 
     func testLimitsTable() {
         XCTAssertEqual(InputLimits.Field.headerValue.maxCharacters, 8_192, "JWT sığmalı (1000 karakter bozuyordu)")
         XCTAssertEqual(InputLimits.maxRows, 1_000)
+        let saved = Localizer.shared.language
+        defer { Localizer.shared.language = saved }
+        Localizer.shared.language = .turkish
         XCTAssertEqual(InputLimits.tooLongMessage(.name), "Eklenmedi: bu alan en çok 200 karakter alır.")
-        XCTAssertEqual(InputLimits.tooLongMessage(.search, english: true), "Not added: this field takes at most 256 characters.")
+        Localizer.shared.language = .english
+        XCTAssertEqual(InputLimits.tooLongMessage(.search), "Not added: this field takes at most 256 characters.")
     }
 }

@@ -17,7 +17,7 @@ struct EnvironmentsView: View {
     var body: some View {
         @Bindable var state = appState
         VStack(alignment: .leading, spacing: 12) {
-            Text("Environment'lar")
+            Text(L10n.t("toolbar.environments"))
                 .font(.title2).bold()
 
             if let draft {
@@ -49,7 +49,7 @@ struct EnvironmentsView: View {
                                 if environment.id == appState.workspace.activeEnvironmentID {
                                     Image(systemName: "checkmark.circle.fill")
                                         .foregroundStyle(Theme.up)
-                                        .help("Aktif environment")
+                                        .help(L10n.t("environment.active"))
                                 }
                             }
                             .tag(environment.id)
@@ -87,9 +87,9 @@ struct EnvironmentsView: View {
                     }
                 } else {
                     ContentUnavailableView(
-                        "Environment seç",
+                        L10n.t("environment.select.title"),
                         systemImage: "globe",
-                        description: Text("Soldan seç veya + ile yeni oluştur.")
+                        description: Text(L10n.t("common.selectOrCreate"))
                     )
                     .frame(maxWidth: .infinity)
                 }
@@ -99,7 +99,7 @@ struct EnvironmentsView: View {
 
             HStack {
                 Spacer()
-                Button("Kapat") { dismiss() }
+                Button(L10n.t("common.close")) { dismiss() }
                     .keyboardShortcut(.cancelAction)
             }
         }
@@ -147,7 +147,7 @@ struct EnvironmentsView: View {
         selectedID = environmentID
         focusEntryID = entryID
         notice = isDisabled
-            ? (.warning, "{{\(key)}} bu environment'ta var ama satırı kapalı; işaretleyince kullanılır.")
+            ? (.warning, L10n.t("environment.variable.disabled", key))
             : nil
         return true
     }
@@ -157,12 +157,12 @@ struct EnvironmentsView: View {
             let id = try appState.saveVariable(key: draft.key, value: draft.value, environmentID: draft.environmentID)
             self.draft = nil
             selectedID = id
-            notice = (.success, "{{\(draft.key.trimmingCharacters(in: .whitespaces))}} kaydedildi; istekte artık çözülüyor.")
+            notice = (.success, L10n.t("environment.variable.saved", draft.key.trimmingCharacters(in: .whitespaces)))
             return nil
         } catch VariableDefinition.SaveError.duplicate {
-            return "Bu environment'ta bu adla bir değişken zaten var."
+            return L10n.t("environment.variable.duplicate")
         } catch VariableDefinition.SaveError.emptyKey {
-            return "Değişken adı boş olamaz."
+            return L10n.t("environment.variable.emptyName")
         } catch {
             return error.localizedDescription
         }
@@ -194,18 +194,18 @@ private struct VariableDraftCard: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
                 MessageIcon(kind: .info)
-                Text("Yeni değişken").fontWeight(.semibold)
+                Text(L10n.t("environment.variable.new")).fontWeight(.semibold)
                 Text(subtitle)
                     .font(.secondaryText)
                     .foregroundStyle(.secondary)
             }
             HStack(spacing: 8) {
-                TextField("isim", text: $draft.key)
+                TextField(L10n.t("environment.variable.name"), text: $draft.key)
                     .inputLimit(.key)
                     .textFieldStyle(.input)
                     .font(.system(.body, design: .monospaced))
                     .frame(width: 220)
-                TextField("değer", text: $draft.value)
+                TextField(L10n.t("environment.variable.value"), text: $draft.value)
                     .inputLimit(.secretValue)
                     .textFieldStyle(.input)
                     .font(.system(.body, design: .monospaced))
@@ -222,10 +222,10 @@ private struct VariableDraftCard: View {
                     }
                 )) {
                     if draft.environmentID == nil {
-                        Text("Seç…").tag(UUID?.none)
+                        Text(L10n.t("common.choose")).tag(UUID?.none)
                     }
                     ForEach(environments) { environment in
-                        Text(environment.name.isEmpty ? "adsız" : environment.name).tag(UUID?.some(environment.id))
+                        Text(environment.name.isEmpty ? L10n.t("common.unnamed") : environment.name).tag(UUID?.some(environment.id))
                     }
                 }
                 .frame(maxWidth: 320)
@@ -237,8 +237,8 @@ private struct VariableDraftCard: View {
             }
             HStack {
                 Spacer()
-                Button("Vazgeç", action: onCancel)
-                Button("Kaydet", action: save)
+                Button(L10n.t("common.cancel"), action: onCancel)
+                Button(L10n.t("common.save"), action: save)
                     .buttonStyle(PrimaryActionButtonStyle())
                     .keyboardShortcut(.defaultAction)
                     .disabled(!canSave)
@@ -251,13 +251,13 @@ private struct VariableDraftCard: View {
 
     private var subtitle: String {
         if draft.mustChoose && draft.environmentID == nil {
-            return "Etkin environment yok; hangisine ekleneceğini seç."
+            return L10n.t("environment.variable.chooseTarget")
         }
         if environments.isEmpty {
-            return "Henüz environment yok; kaydedince “Environment” oluşturulup etkin yapılır."
+            return L10n.t("environment.variable.willCreate")
         }
         let name = environments.first { $0.id == draft.environmentID }?.name ?? ""
-        return "“\(name.isEmpty ? "adsız" : name)” environment'ına eklenecek."
+        return L10n.t("environment.variable.target", name.isEmpty ? L10n.t("common.unnamed") : name)
     }
 
     private var canSave: Bool {
@@ -279,30 +279,30 @@ private struct EnvironmentDetail: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                TextField("Environment adı", text: $environment.name)
+                TextField(L10n.t("environment.name.placeholder"), text: $environment.name)
                     .inputLimit(.name)
                     .textFieldStyle(.input)
                     .font(.headline)
                 if isActive {
-                    Label("Aktif", systemImage: "checkmark.circle.fill")
+                    Label(L10n.t("environment.isActive"), systemImage: "checkmark.circle.fill")
                         .foregroundStyle(Theme.up)
                         .font(.secondaryText)
                 } else {
-                    Button("Aktif Yap", action: makeActive)
+                    Button(L10n.t("environment.makeActive"), action: makeActive)
                 }
             }
             .padding(.horizontal, 10)
             .padding(.top, 10)
 
-            Text("Değişkenler — isteklerde {{isim}} olarak kullanılır. Secret değerleri buraya değil Secrets'a yaz.")
+            Text(L10n.t("environment.variables.help"))
                 .font(.secondaryText)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 10)
 
             KeyValueEditor(
                 entries: $environment.variables,
-                keyPlaceholder: "isim (ör: baseUrl)",
-                valuePlaceholder: "değer (ör: https://api.example.com)",
+                keyPlaceholder: L10n.t("environment.key.placeholder"),
+                valuePlaceholder: L10n.t("environment.value.placeholder"),
                 valueLimit: .secretValue,
                 focusEntryID: focusEntryID
             )
@@ -325,10 +325,10 @@ private struct TokenFactoryVariablesNote: View {
         let sources = appState.tokenSources(for: environment)
         let shadowed = Set(TokenFactory.shadowedVariables(in: environment, sources: sources))
         VStack(alignment: .leading, spacing: 6) {
-            Label("Token Factory'den gelen değişkenler", systemImage: "key.viewfinder")
+            Label(L10n.t("environment.tokenVariables"), systemImage: "key.viewfinder")
                 .font(.headline)
             if sources.isEmpty {
-                Text("Bu environment'ta Token Factory değişkeni yok. Sol panelin altındaki Token Factory'den ekleyebilirsin.")
+                Text(L10n.t("environment.tokenVariables.empty"))
                     .font(.secondaryText)
                     .foregroundStyle(.secondary)
             } else {
@@ -340,10 +340,10 @@ private struct TokenFactoryVariablesNote: View {
                             .font(.secondaryText)
                             .foregroundStyle(.secondary)
                         if shadowed.contains(source.variable) {
-                            Label("aynı adlı değişkeni ezer", systemImage: "exclamationmark.triangle.fill")
+                            Label(L10n.t("environment.tokenVariables.shadows"), systemImage: "exclamationmark.triangle.fill")
                                 .font(.secondaryText)
                                 .foregroundStyle(Theme.warning)
-                                .help("Bu environment'ta \(source.variable) adlı bir değişken de var; isteklerde Token Factory'deki token kullanılır.")
+                                .help(L10n.t("environment.tokenVariables.shadows.help", source.variable))
                         }
                     }
                 }

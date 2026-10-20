@@ -9,7 +9,7 @@ struct CurlImportView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var command = ""
-    @State private var name = "cURL İsteği"
+    @State private var name = L10n.t("curl.defaultName")
     @State private var targetCollectionID: UUID?
     @State private var preview: CurlImporter.Result?
     @State private var parseError: String?
@@ -18,9 +18,9 @@ struct CurlImportView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("cURL'den İstek")
+            Text(L10n.t("curl.import.title"))
                 .font(.title2).bold()
-            Text("Tarayıcının \"Copy as cURL\" çıktısını ya da dokümandaki örneği yapıştır.")
+            Text(L10n.t("curl.import.subtitle"))
                 .font(.secondaryText)
                 .foregroundStyle(.secondary)
 
@@ -51,10 +51,10 @@ struct CurlImportView: View {
                         command = pasted
                     }
                 } label: {
-                    Label("Panodan Yapıştır", systemImage: "doc.on.clipboard")
+                    Label(L10n.t("openapi.paste"), systemImage: "doc.on.clipboard")
                 }
                 Spacer()
-                TextField("İstek adı", text: $name)
+                TextField(L10n.t("request.name.placeholder"), text: $name)
                     .inputLimit(.name)
                     .textFieldStyle(.input)
                     .frame(width: 200)
@@ -75,16 +75,16 @@ struct CurlImportView: View {
             Divider()
 
             HStack {
-                Picker("Ekle:", selection: $targetCollectionID) {
+                Picker(L10n.t("import.addTo"), selection: $targetCollectionID) {
                     ForEach(appState.workspace.collections.filter { !$0.isTokenFactory }) { collection in
-                        Text(collection.name).tag(UUID?.some(collection.id))
+                        Text(collection.displayName).tag(UUID?.some(collection.id))
                     }
                 }
                 .frame(maxWidth: 260)
                 Spacer()
-                Button("Vazgeç") { dismiss() }
+                Button(L10n.t("common.cancel")) { dismiss() }
                     .keyboardShortcut(.cancelAction)
-                Button("İçe Aktar") { performImport() }
+                Button(L10n.t("import.menu.title")) { performImport() }
                     .keyboardShortcut(.defaultAction)
                     .disabled(preview == nil || targetCollectionID == nil || findings.contains { $0.severity == .block })
             }
@@ -134,13 +134,13 @@ struct CurlImportView: View {
     }
 
     private func details(_ request: RequestModel) -> String {
-        var parts = ["\(request.headers.count) başlık"]
-        if !request.queryParams.isEmpty { parts.append("\(request.queryParams.count) query") }
+        var parts = [L10n.plural("curl.details.headers", count: request.headers.count)]
+        if !request.queryParams.isEmpty { parts.append(L10n.plural("curl.details.query", count: request.queryParams.count)) }
         switch request.body {
         case .none: break
-        case .raw(_, let contentType): parts.append("raw gövde (\(contentType))")
-        case .formURLEncoded(let fields): parts.append("urlencoded, \(fields.count) alan")
-        case .multipartForm(let fields): parts.append("form-data, \(fields.count) alan")
+        case .raw(_, let contentType): parts.append(L10n.t("curl.details.raw", contentType))
+        case .formURLEncoded(let fields): parts.append(L10n.plural("curl.details.urlencoded", count: fields.count))
+        case .multipartForm(let fields): parts.append(L10n.plural("curl.details.formData", count: fields.count))
         }
         if request.auth != .none { parts.append("auth: \(request.auth.displayName)") }
         return parts.joined(separator: " · ")
@@ -155,7 +155,7 @@ struct CurlImportView: View {
             return
         }
         do {
-            preview = try CurlImporter.parse(trimmed, name: name.isEmpty ? "cURL İsteği" : name)
+            preview = try CurlImporter.parse(trimmed, name: name.isEmpty ? L10n.t("curl.defaultName") : name)
             parseError = nil
             findings = preview.map { ImportReviewer.review($0.request, context: appState.importContext) } ?? []
         } catch {

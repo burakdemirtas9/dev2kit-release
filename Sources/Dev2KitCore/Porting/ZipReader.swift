@@ -34,19 +34,19 @@ public struct ZipReader: Sendable {
     public init(_ data: Data) throws {
         self.data = data
         guard let end = Self.endOfCentralDirectory(in: data) else {
-            throw ZipError(message: "Arşiv okunamadı (ZIP dizini yok).")
+            throw ZipError(message: L10n.t("zip.noDirectory"))
         }
         let count = Int(data.u16(at: end + 10))
         let directoryOffset = Int(data.u32(at: end + 16))
-        guard count <= Self.maxEntries else { throw ZipError(message: "Arşivde çok fazla dosya var (\(count)).") }
-        guard data.u32(at: end + 16) != 0xFFFF_FFFF else { throw ZipError(message: "ZIP64 arşivi desteklenmiyor.") }
+        guard count <= Self.maxEntries else { throw ZipError(message: L10n.t("zip.tooManyFiles", L10n.number(count))) }
+        guard data.u32(at: end + 16) != 0xFFFF_FFFF else { throw ZipError(message: L10n.t("zip.zip64")) }
 
         var entries: [Entry] = []
         var offset = directoryOffset
         var total = 0
         for _ in 0..<count {
             guard offset + 46 <= data.count, data.u32(at: offset) == 0x0201_4B50 else {
-                throw ZipError(message: "Arşiv bozuk (dizin kaydı).")
+                throw ZipError(message: L10n.t("zip.corrupt", L10n.t("zip.part.directory")))
             }
             let flags = data.u16(at: offset + 8)
             let method = data.u16(at: offset + 10)
@@ -57,13 +57,13 @@ public struct ZipReader: Sendable {
             let commentLength = Int(data.u16(at: offset + 32))
             let localOffset = data.u32(at: offset + 42)
             guard compressed != 0xFFFF_FFFF, uncompressed != 0xFFFF_FFFF, localOffset != 0xFFFF_FFFF else {
-                throw ZipError(message: "ZIP64 arşivi desteklenmiyor.")
+                throw ZipError(message: L10n.t("zip.zip64"))
             }
-            guard offset + 46 + nameLength <= data.count else { throw ZipError(message: "Arşiv bozuk (dosya adı).") }
+            guard offset + 46 + nameLength <= data.count else { throw ZipError(message: L10n.t("zip.corrupt", L10n.t("zip.part.fileName"))) }
             let name = String(decoding: data[(data.startIndex + offset + 46)..<(data.startIndex + offset + 46 + nameLength)], as: UTF8.self)
             total += Int(uncompressed)
             guard total <= Self.maxTotalUncompressed else {
-                throw ZipError(message: "Arşiv açılınca \(Self.maxTotalUncompressed / 1_048_576) MB'ı aşıyor; açılmadı (zip bombası olabilir).")
+                throw ZipError(message: L10n.t("zip.tooLarge", L10n.number(Self.maxTotalUncompressed / 1_048_576)))
             }
             entries.append(Entry(
                 name: name, method: method, compressedSize: Int(compressed), uncompressedSize: Int(uncompressed),
@@ -79,15 +79,15 @@ public struct ZipReader: Sendable {
     /// Girdinin açılmış içeriği.
     public func contents(of name: String) throws -> Data {
         guard let entry = entries.first(where: { $0.name == name }) else {
-            throw ZipError(message: "Arşivde \(name) yok.")
+            throw ZipError(message: L10n.t("zip.missing", name))
         }
-        guard !entry.encrypted else { throw ZipError(message: "Şifreli dosya açılamaz.") }
+        guard !entry.encrypted else { throw ZipError(message: L10n.t("zip.encrypted")) }
         let local = entry.localHeaderOffset
         guard local + 30 <= data.count, data.u32(at: local) == 0x0403_4B50 else {
-            throw ZipError(message: "Arşiv bozuk (yerel başlık).")
+            throw ZipError(message: L10n.t("zip.corrupt", L10n.t("zip.part.localHeader")))
         }
         let start = local + 30 + Int(data.u16(at: local + 26)) + Int(data.u16(at: local + 28))
-        guard start + entry.compressedSize <= data.count else { throw ZipError(message: "Arşiv bozuk (kısa veri).") }
+        guard start + entry.compressedSize <= data.count else { throw ZipError(message: L10n.t("zip.corrupt", L10n.t("zip.part.shortData"))) }
         let compressed = data[(data.startIndex + start)..<(data.startIndex + start + entry.compressedSize)]
         switch entry.method {
         case 0:
@@ -104,10 +104,10 @@ public struct ZipReader: Sendable {
                     )
                 }
             }
-            guard written == entry.uncompressedSize else { throw ZipError(message: "Arşiv bozuk (\(name) açılamadı).") }
+            guard written == entry.uncompressedSize else { throw ZipError(message: L10n.t("zip.corrupt", L10n.t("zip.part.inflate", name))) }
             return output
         default:
-            throw ZipError(message: "Desteklenmeyen sıkıştırma (\(entry.method)).")
+            throw ZipError(message: L10n.t("zip.method", String(entry.method)))
         }
     }
 

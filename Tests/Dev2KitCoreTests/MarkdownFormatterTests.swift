@@ -2,6 +2,9 @@ import XCTest
 @testable import Dev2KitCore
 
 final class MarkdownFormatterTests: XCTestCase {
+    /// Beklenen mesajlar Türkçe.
+    override func invokeTest() { withLanguage(.turkish) { super.invokeTest() } }
+
     func testAlignsTablesKeepingAlignment() throws {
         let result = try MarkdownFormatter.beautify("|Ad|Tutar|Not|\n|:--|--:|:-:|\n|Ali|12|x|\n|Ayşegül|1500|yy|")
         XCTAssertEqual(result, """

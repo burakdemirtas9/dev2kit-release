@@ -29,7 +29,7 @@ public enum PropertiesConverter {
             switch document {
             case .object, .array: flatten(document, path: "", into: &lines)
             case .null: break
-            default: throw WorkbenchIssue(message: "Belgenin kökü bir eşleme (`anahtar: değer`) olmalı.")
+            default: throw WorkbenchIssue(message: L10n.t("props.rootMap"))
             }
             blocks.append(lines.joined(separator: "\n"))
         }
@@ -195,7 +195,7 @@ public enum PropertiesConverter {
                 var hex = ""
                 for _ in 0..<4 { if let next = iterator.next() { hex.append(next) } }
                 guard hex.count == 4, let unit = UInt16(hex, radix: 16) else {
-                    throw WorkbenchIssue(message: "Geçersiz \\u kaçışı: \\u\(hex)", line: line)
+                    throw WorkbenchIssue(message: L10n.t("props.badUnicode", "\\u\(hex)"), line: line)
                 }
                 if (0xD800...0xDBFF).contains(unit) { pendingHigh = unit; continue }
                 if (0xDC00...0xDFFF).contains(unit), let high = pendingHigh {
@@ -258,13 +258,13 @@ public enum PropertiesConverter {
             case "[":
                 flush()
                 guard let close = characters.firstIndex(of: "]") else {
-                    throw WorkbenchIssue(message: "`[` kapanmamış: \(key)", line: line)
+                    throw WorkbenchIssue(message: L10n.t("props.unclosedBracket", key), line: line)
                 }
                 let inner = String(characters[..<close])
                 characters = characters[characters.index(after: close)...]
                 if let number = Int(inner), number >= 0, inner.allSatisfy(\.isNumber) {
                     guard number <= maxListIndex else {
-                        throw WorkbenchIssue(message: "Dizi sırası \(maxListIndex)'den büyük: \(key)", line: line)
+                        throw WorkbenchIssue(message: L10n.t("props.indexTooLarge", L10n.number(maxListIndex), key), line: line)
                     }
                     result.append(.index(number))
                 } else {
@@ -275,7 +275,7 @@ public enum PropertiesConverter {
             }
         }
         flush()
-        guard !result.isEmpty else { throw WorkbenchIssue(message: "Boş anahtar.", line: line) }
+        guard !result.isEmpty else { throw WorkbenchIssue(message: L10n.t("props.emptyKey"), line: line) }
         return result
     }
 
@@ -308,7 +308,7 @@ public enum PropertiesConverter {
                         case .unset, .leaf: next.kind = .leaf(entry.value)   // tekrar eden anahtarda son değer geçerli
                         case .map, .list:
                             throw WorkbenchIssue(
-                                message: "`\(entry.key)` hem değer hem alt anahtarları olan bir grup olarak kullanılmış (satır \(next.line)); YAML'da ikisi birden olamaz.",
+                                message: L10n.t("props.valueAndGroup", entry.key, L10n.number(next.line)),
                                 line: entry.line)
                         }
                     }
@@ -328,11 +328,11 @@ public enum PropertiesConverter {
         case (.map, .map), (.list, .list): break
         case (.leaf, _):
             throw WorkbenchIssue(
-                message: "`\(entry.key)`: üst anahtar satır \(node.line)'de bir değer olarak tanımlı; YAML'da hem değer hem grup olamaz.",
+                message: L10n.t("props.parentIsValue", entry.key, L10n.number(node.line)),
                 line: entry.line)
         default:
             throw WorkbenchIssue(
-                message: "`\(entry.key)`: aynı anahtar hem dizi (`[0]`) hem eşleme olarak kullanılmış.",
+                message: L10n.t("props.listAndMap", entry.key),
                 line: entry.line)
         }
     }

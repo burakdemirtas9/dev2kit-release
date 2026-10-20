@@ -271,7 +271,7 @@ private struct VariableChip: View {
             )
             .contentShape(Rectangle())
             .onTapGesture { showing = true }
-            .help(defined ? "Değeri görmek için tıkla" : "Tanımsız değişken: tıkla")
+            .help(defined ? L10n.t("variable.chip.help") : L10n.t("variable.chip.undefined"))
             .popover(isPresented: $showing, arrowEdge: .bottom) {
                 VariablePreviewCard(
                     name: name,
@@ -303,35 +303,35 @@ struct VariablePreviewCard: View {
             switch preview {
             case .environment(let environmentName, let value):
                 valueRow(value)
-                source("Environment: \(environmentName.isEmpty ? "adsız" : environmentName)")
+                source(L10n.t("variable.source.environment", environmentName.isEmpty ? L10n.t("common.unnamed") : environmentName))
             case .token(let requestName):
                 if let token {
                     valueRow(token.value)
-                    source("Token Factory: \(requestName)" + (token.needsRefresh() ? ". Süresi dolmuş, gönderimde yenilenir." : ""))
+                    source(token.needsRefresh() ? L10n.t("variable.source.tokenExpired", requestName) : L10n.t("variable.source.token", requestName))
                 } else {
-                    Text("Henüz alınmadı")
+                    Text(L10n.t("variable.token.notFetched"))
                         .font(.system(.body, design: .monospaced))
                         .foregroundStyle(.secondary)
-                    source("Token Factory: \(requestName). Gönderimde alınır.")
+                    source(L10n.t("variable.source.tokenOnSend", requestName))
                 }
             case .secret(let secret, let exists):
                 if exists {
                     masked
-                    source("Secret (Keychain): \(secret)")
+                    source(L10n.t("variable.source.secret", secret))
                 } else {
-                    missing("Tanımsız secret. Secrets ekranından ekleyebilirsin.")
+                    missing(L10n.t("variable.secret.undefined"))
                 }
             case .undefined(let environmentName):
                 missing(environmentName == nil
-                        ? "Seçili bir environment yok."
-                        : "Bu değişken seçili environment içinde tanımlı değil.")
+                        ? L10n.t("variable.noEnvironment")
+                        : L10n.t("variable.undefined"))
                 if let onDefine {
-                    Button("Environment değişkeni ekle", action: onDefine)
+                    Button(L10n.t("variable.define"), action: onDefine)
                         .buttonStyle(PrimaryActionButtonStyle())
                         // Baloncuk anahtar pencere olunca ⏎ ile de çalışır.
                         .keyboardShortcut(.defaultAction)
                         .padding(.top, 2)
-                        .help(environmentName.map { "“\($0)” environment'ına ekle" } ?? "Hangi environment'a ekleneceğini seç")
+                        .help(environmentName.map { L10n.t("variable.define.help", $0) } ?? L10n.t("variable.define.choose"))
                 }
             }
         }
@@ -341,7 +341,7 @@ struct VariablePreviewCard: View {
     /// Değer + kopyala (kullanıcı isteği, 2026-10-20).
     private func valueRow(_ value: String) -> some View {
         HStack(alignment: .top, spacing: 8) {
-            Text(value.isEmpty ? "(boş)" : value)
+            Text(value.isEmpty ? L10n.t("variable.emptyValue") : value)
                 .font(.system(.body, design: .monospaced))
                 .foregroundStyle(value.isEmpty ? .secondary : .primary)
                 .lineLimit(6)
@@ -358,13 +358,13 @@ struct VariablePreviewCard: View {
                         .frame(width: 14)
                 }
                 .buttonStyle(.borderless)
-                .help(copied ? "Kopyalandı" : "Değeri kopyala")
+                .help(copied ? L10n.t("common.copied") : L10n.t("variable.copyValue"))
             }
         }
     }
 
     private var masked: some View {
-        Text("••••••••  değer gösterilmez")
+        Text(L10n.t("variable.secret.masked"))
             .font(.system(.body, design: .monospaced))
             .foregroundStyle(.secondary)
     }

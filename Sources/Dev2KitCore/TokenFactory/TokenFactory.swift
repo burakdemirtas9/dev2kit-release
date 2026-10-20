@@ -121,7 +121,7 @@ public enum TokenFactory {
         public var errorDescription: String? {
             switch self {
             case .httpStatus(let status, let detail):
-                return "token servisi HTTP \(status) döndü" + (detail.map { ": \($0)" } ?? "")
+                return L10n.t("tokenFactory.httpStatus", String(status)) + (detail.map { ": \($0)" } ?? "")
             case .field(let failure, let status):
                 return "\(failure.localizedDescription) (HTTP \(status))"
             }
@@ -198,13 +198,13 @@ public enum TokenFactory {
         public var description: String {
             switch self {
             case .invalidVariableName(let request, let name):
-                return "\"\(request)\": değişken adı geçersiz (\"\(name)\"). Harf, rakam, _ - . kullan."
+                return L10n.t("tokenFactory.badVariable", request, name)
             case .emptyResponseField(let request):
-                return "\"\(request)\": yanıttaki alan adı boş."
+                return L10n.t("tokenFactory.emptyField", request)
             case .duplicateVariable(let name, let requests):
-                return "{{\(name)}} birden çok istekte tanımlı: \(requests.joined(separator: ", ")). Yalnızca ilki kullanılır."
+                return L10n.t("tokenFactory.duplicate", name, requests.joined(separator: ", "))
             case .usesFactoryVariable(let request, let variable):
-                return "\"\(request)\" kendisi {{\(variable)}} kullanıyor; token istekleri başka bir token'a bağlı olamaz."
+                return L10n.t("tokenFactory.selfReference", request, variable)
             }
         }
     }

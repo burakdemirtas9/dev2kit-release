@@ -96,17 +96,17 @@ public enum ImportResult {
         for item in items {
             let prefix = items.count > 1 ? "“\(item.name)”: " : ""
             if item.isRejected {
-                lines.append(MessageLine(.error, "\(prefix)Aktarılmadı; tüm istekler güvenlik nedeniyle engellendi."))
+                lines.append(MessageLine(.error, prefix + L10n.t("import.result.rejected")))
                 continue
             }
             if items.count > 1 {
-                lines.append(MessageLine(.success, "“\(item.name)” · \(item.importedCount) istek"))
+                lines.append(MessageLine(.success, "“\(item.name)” · " + L10n.plural("import.result.requests", count: item.importedCount)))
             }
             if item.blockedCount > 0 {
-                lines.append(MessageLine(.warning, "\(prefix)\(item.blockedCount) istek güvenlik nedeniyle aktarılmadı."))
+                lines.append(MessageLine(.warning, prefix + L10n.plural("import.result.blocked", count: item.blockedCount)))
             }
             if item.wasRenamed {
-                lines.append(MessageLine(.info, "\(prefix)İsim çakıştığı için “\(item.name)” olarak eklendi."))
+                lines.append(MessageLine(.info, prefix + L10n.t("import.result.renamed", item.name)))
             }
             lines += item.notes.map { note in
                 let line = MessageLine.note(note)
@@ -115,25 +115,25 @@ public enum ImportResult {
         }
 
         guard !accepted.isEmpty else {
-            return ResultMessage(kind: .error, title: "İçe aktarılamadı",
-                                 message: "Tüm istekler güvenlik nedeniyle engellendi; hiçbir şey eklenmedi.",
+            return ResultMessage(kind: .error, title: L10n.t("result.importFailed"),
+                                 message: L10n.t("import.result.allBlocked"),
                                  lines: items.count > 1 ? lines : [])
         }
 
         let requestCount = accepted.reduce(0) { $0 + $1.importedCount }
         let subtitle = accepted.count == 1
-            ? "“\(accepted[0].name)” · \(requestCount) istek"
-            : "\(accepted.count) koleksiyon · \(requestCount) istek"
+            ? "“\(accepted[0].name)” · " + L10n.plural("import.result.requests", count: requestCount)
+            : L10n.plural("import.result.collections", count: accepted.count) + " · " + L10n.plural("import.result.requests", count: requestCount)
         let blocked = items.reduce(0) { $0 + $1.blockedCount }
         let hasProblem = lines.contains { $0.kind == .warning || $0.kind == .error }
 
         let title: String
         if blocked > 0 {
-            title = "İçe aktarıldı, \(blocked) istek dışarıda kaldı"
+            title = L10n.plural("import.result.titleBlocked", count: blocked)
         } else if hasProblem {
-            title = "İçe aktarıldı, kontrol edilecekler var"
+            title = L10n.t("import.result.titleCheck")
         } else {
-            title = "İçe aktarıldı"
+            title = L10n.t("import.result.title")
         }
         return ResultMessage(kind: hasProblem ? .warning : .success, title: title, message: subtitle, lines: lines)
     }

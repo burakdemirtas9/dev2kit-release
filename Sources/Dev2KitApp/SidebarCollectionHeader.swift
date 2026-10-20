@@ -42,13 +42,13 @@ struct SidebarCollectionHeader: View {
                     Image(systemName: "tray")
                         .font(.tinyText)
                         .foregroundStyle(.secondary)
-                    Text(collection.name)
+                    Text(collection.displayName)
                         .foregroundStyle(.secondary)
                 } else {
                     Image(systemName: "line.3.horizontal")
                         .font(.tinyText)
                         .foregroundStyle(.quaternary)
-                    Text(collection.name)
+                    Text(collection.displayName)
                 }
                 // Aramada "eşleşen/toplam", normalde yalnızca toplam.
                 Text(appState.isSearching && match.requests.count != collection.requests.count
@@ -60,7 +60,7 @@ struct SidebarCollectionHeader: View {
                     Image(systemName: "circle.fill")
                         .font(.system(size: 6))
                         .foregroundStyle(Theme.warning)
-                        .help("İçinde son gönderildiğinden farklı istek var")
+                        .help(L10n.t("collection.hasDirty"))
                 }
                 Spacer(minLength: 0)
             }
@@ -75,8 +75,8 @@ struct SidebarCollectionHeader: View {
         // olurdu: basınca hiçbir şey değişmiyormuş gibi görünür.
         .disabled(appState.isSearching)
         .help(appState.isSearching
-              ? "Arama sırasında tüm koleksiyonlar açık"
-              : (appState.isCollectionCollapsed(collection.id) ? "Genişlet" : "Daralt"))
+              ? L10n.t("collection.searchExpanded")
+              : (appState.isCollectionCollapsed(collection.id) ? L10n.t("collection.expand") : L10n.t("collection.collapse")))
         .opacity(isDimmed ? 0.35 : 1)
         .onDrag {
             // Filtreliyken sıralama kapalı: görünen liste gerçek
@@ -100,19 +100,19 @@ struct SidebarCollectionHeader: View {
                 Button {
                     onRename()
                 } label: {
-                    Label("Yeniden Adlandır…", systemImage: "pencil")
+                    Label(L10n.t("collection.renameEllipsis"), systemImage: "pencil")
                 }
                 Divider()
                 Button {
                     appState.exportCollection(collection.id)
                 } label: {
-                    Label("Dışa Aktar…", systemImage: "square.and.arrow.up")
+                    Label(L10n.t("collection.export"), systemImage: "square.and.arrow.up")
                 }
                 Divider()
                 Button(role: .destructive) {
                     onDelete()
                 } label: {
-                    Label("Sil…", systemImage: "trash")
+                    Label(L10n.t("common.deleteEllipsis"), systemImage: "trash")
                 }
             }
         }

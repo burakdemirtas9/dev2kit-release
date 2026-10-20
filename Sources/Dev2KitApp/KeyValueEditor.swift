@@ -51,8 +51,8 @@ struct KeyValueEditor: View {
         HStack {
             // Küçük seçici: seçili olan camlı (istek sekmeleriyle aynı dil).
             HStack(spacing: 2) {
-                modeChip("Alanlar", bulk: false)
-                modeChip("Toplu Düzenle", bulk: true)
+                modeChip(L10n.t("kv.mode.fields"), bulk: false)
+                modeChip(L10n.t("kv.mode.bulk"), bulk: true)
             }
 
             Spacer()
@@ -61,7 +61,7 @@ struct KeyValueEditor: View {
                 validate()
             } label: {
                 Label {
-                    Text(isBulk ? "Doğrula & Biçimlendir" : "Doğrula")
+                    Text(isBulk ? L10n.t("kv.validateFormat") : L10n.t("kv.validate"))
                 } icon: {
                     Image(systemName: isBulk ? "wand.and.stars" : "checkmark.circle")
                         .foregroundStyle(Theme.up)
@@ -70,8 +70,8 @@ struct KeyValueEditor: View {
             }
             .controlSize(.small)
             .help(isBulk
-                  ? "Satırları denetle ve \"anahtar: değer\" biçimine getir"
-                  : "Boş anahtar, tekrar eden anahtar gibi sorunları denetle")
+                  ? L10n.t("kv.validateFormat.help")
+                  : L10n.t("kv.validate.help"))
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
@@ -94,15 +94,15 @@ struct KeyValueEditor: View {
             maxBytes: InputLimits.maxBulkBytes,
             maxLines: InputLimits.maxBulkLines,
             maxLineBytes: InputLimits.Field.key.maxCharacters + valueLimit.maxCharacters + 2,
-            onRejected: { message = Message(text: $0.turkish, isError: true) },
+            onRejected: { message = Message(text: $0.localized, isError: true) },
             onLongLine: { _ in
-                message = Message(text: "Eklenmedi: satır başına en çok \(InputLimits.Field.key.maxCharacters + valueLimit.maxCharacters) karakter.", isError: true)
+                message = Message(text: L10n.t("kv.lineTooLong", L10n.number(InputLimits.Field.key.maxCharacters + valueLimit.maxCharacters)), isError: true)
             }
         ))
             .background(Theme.editorBackground)
             .overlay(alignment: .topLeading) {
                 if bulkText.isEmpty {
-                    Text("Content-Type: application/json\n//X-Devre-Disi: deger")
+                    Text(L10n.t("kv.bulk.placeholder"))
                         .foregroundStyle(.tertiary)
                         .font(.system(.body, design: .monospaced))
                         .padding(.top, 8).padding(.leading, 5)
@@ -178,8 +178,8 @@ struct KeyValueEditor: View {
     private func tableHeader(keyWidth: CGFloat) -> some View {
         HStack(spacing: 0) {
             Color.clear.frame(width: Self.checkWidth)
-            Text("Anahtar").padding(.horizontal, 8).frame(width: keyWidth, alignment: .leading)
-            Text("Değer").padding(.horizontal, 8).frame(maxWidth: .infinity, alignment: .leading)
+            Text(L10n.t("kv.column.key")).padding(.horizontal, 8).frame(width: keyWidth, alignment: .leading)
+            Text(L10n.t("kv.column.value")).padding(.horizontal, 8).frame(maxWidth: .infinity, alignment: .leading)
             Color.clear.frame(width: Self.actionWidth)
         }
         .font(.secondaryText)
@@ -226,7 +226,7 @@ struct KeyValueEditor: View {
                 .frame(width: Self.checkWidth)
                 .opacity(isDraft ? 0 : 1)
                 .disabled(isDraft)
-                .help("Açık satırlar gönderilir")
+                .help(L10n.t("kv.enabled.help"))
             TextField(isDraft ? keyPlaceholder : "", text: binding(row, \.key))
                 .textFieldStyle(.plain)
                 .font(.system(.body, design: .monospaced))
@@ -259,8 +259,8 @@ struct KeyValueEditor: View {
             .frame(width: Self.actionWidth)
             .opacity(isDraft ? 0 : 1)
             .disabled(isDraft)
-            .help("Satırı sil")
-            .accessibilityLabel("Satırı sil")
+            .help(L10n.t("kv.deleteRow"))
+            .accessibilityLabel(L10n.t("kv.deleteRow"))
         }
         .frame(minHeight: Self.rowHeight)
         .opacity(enabled ? 1 : 0.5)
@@ -303,8 +303,8 @@ struct KeyValueEditor: View {
                 let issues = KeyValueBulkCoder.validate(entries: entries)
                 message = Message(
                     text: issues.isEmpty
-                        ? "\(entries.count) alan geçerli."
-                        : "Biçimlendirildi, ama: " + issues.map(\.message).joined(separator: " · "),
+                        ? L10n.plural("kv.validCount", count: entries.count)
+                        : L10n.t("kv.formattedBut", issues.map(\.message).joined(separator: " · ")),
                     isError: false
                 )
             } catch {
@@ -313,9 +313,9 @@ struct KeyValueEditor: View {
         } else {
             let issues = KeyValueBulkCoder.validate(entries: entries)
             message = issues.isEmpty
-                ? Message(text: "\(entries.filter(\.enabled).count) etkin alan, sorun yok.", isError: false)
+                ? Message(text: L10n.plural("kv.enabledOK", count: entries.filter(\.enabled).count), isError: false)
                 : Message(
-                    text: issues.prefix(3).map { "satır \($0.line): \($0.message)" }.joined(separator: " · "),
+                    text: issues.prefix(3).map { L10n.t("kv.issueOnLine", L10n.number($0.line), $0.message) }.joined(separator: " · "),
                     isError: true
                   )
         }

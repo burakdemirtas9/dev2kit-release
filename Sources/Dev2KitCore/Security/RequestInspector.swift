@@ -50,18 +50,18 @@ public enum RequestInspector {
         if scheme != "http" && scheme != "https" {
             findings.append(SecurityFinding(
                 severity: .block,
-                title: "Desteklenmeyen adres türü",
-                detail: "Yalnızca http ve https adreslerine istek gönderilir; \"\(scheme.isEmpty ? "(şema yok)" : scheme)\" kabul edilmez."
+                title: L10n.t("finding.scheme.title"),
+                detail: L10n.t("finding.scheme.detail", scheme.isEmpty ? L10n.t("finding.scheme.none") : scheme)
             ))
         }
         if let violation = policy.violation(for: url) {
-            findings.append(SecurityFinding(severity: .block, title: "Yönetici politikası", detail: violation))
+            findings.append(SecurityFinding(severity: .block, title: L10n.t("finding.policy.title"), detail: violation))
         }
         if containsHiddenCharacters(model.url, allowTab: false) {
             findings.append(SecurityFinding(
                 severity: .block,
-                title: "Adreste görünmez karakter",
-                detail: "Adres, ekranda görünmeyen ya da metnin yönünü değiştiren karakterler içeriyor. Gerçek hedefi gizlemek için kullanılabilir."
+                title: L10n.t("finding.hiddenURL.title"),
+                detail: L10n.t("finding.hiddenURL.detail")
             ))
         }
         if let header = injectedHeader(in: model) {
@@ -78,16 +78,16 @@ public enum RequestInspector {
         if scheme == "http", !isLoopback(host), carriesCredentials(model: model, request: request, secrets: secrets) {
             findings.append(SecurityFinding(
                 severity: .warn,
-                title: "Kimlik bilgisi şifresiz gidiyor",
-                detail: "\(host) adresine http (şifresiz) ile kimlik bilgisi ya da secret gönderilecek. Ağdaki herkes okuyabilir.",
+                title: L10n.t("finding.cleartext.title"),
+                detail: L10n.t("finding.cleartext.detail", host),
                 approvalKey: "cleartext|\(host)"
             ))
         }
         if isMetadataHost(host) {
             findings.append(SecurityFinding(
                 severity: .warn,
-                title: "Bulut metadata adresi",
-                detail: "\(host) bulut sunucularının kimlik bilgisi dağıttığı adres. İçe aktarılmış bir istekte görülmesi beklenmez.",
+                title: L10n.t("finding.metadata.title"),
+                detail: L10n.t("finding.metadata.detail", host),
                 approvalKey: "metadata|\(host)"
             ))
         }
@@ -95,16 +95,16 @@ public enum RequestInspector {
             || !host.unicodeScalars.allSatisfy(\.isASCII) {
             findings.append(SecurityFinding(
                 severity: .warn,
-                title: "Benzer görünen alan adı",
-                detail: "\(host) Latin dışı harfler içeriyor. Tanıdık bir adrese benzeyen sahte alan adları bu yolla yapılır.",
+                title: L10n.t("finding.idn.title"),
+                detail: L10n.t("finding.idn.detail", host),
                 approvalKey: "idn|\(host)"
             ))
         }
         if url?.user != nil {
             findings.append(SecurityFinding(
                 severity: .warn,
-                title: "Adreste kullanıcı bilgisi",
-                detail: "Adres kullanıcı adı/parola içeriyor (kullanici:parola@host). Geçmişe, sunucu ve proxy loglarına yazılır; Auth sekmesini kullan.",
+                title: L10n.t("finding.userinfo.title"),
+                detail: L10n.t("finding.userinfo.detail"),
                 approvalKey: "userinfo|\(host)"
             ))
         }
@@ -112,16 +112,16 @@ public enum RequestInspector {
         if !secretsInURL.isEmpty {
             findings.append(SecurityFinding(
                 severity: .warn,
-                title: "Secret adreste",
-                detail: "\(secretsInURL.sorted().joined(separator: ", ")) adreste ya da query'de gidiyor. Adresler sunucu ve proxy loglarına yazılır; başlıkta göndermek daha güvenli.",
+                title: L10n.t("finding.secretInURL.title"),
+                detail: L10n.t("finding.secretInURL.detail", secretsInURL.sorted().joined(separator: ", ")),
                 approvalKey: "secret-in-url|\(host)|\(secretsInURL.sorted().joined(separator: ","))"
             ))
         }
         for name in secrets.sorted() {
             findings.append(SecurityFinding(
                 severity: .warn,
-                title: "Secret yeni bir host'a gidiyor",
-                detail: "\"\(name)\" ilk kez \(host) adresine gönderilecek. Onaylarsan bu ikili bir daha sorulmaz.",
+                title: L10n.t("finding.secretNewHost.title"),
+                detail: L10n.t("finding.secretNewHost.detail", name, host),
                 approvalKey: "secret-host|\(name)|\(host)"
             ))
         }
@@ -169,8 +169,8 @@ public enum RequestInspector {
         }))
         return SecurityFinding(
             severity: .block,
-            title: "Başlıkta satır sonu ya da görünmez karakter",
-            detail: "\"\(visible)\" başlığı satır sonu (CR/LF) ya da görünmez karakter içeriyor. Bu, isteğe başka başlıklar eklemek için kullanılabilir."
+            title: L10n.t("finding.headerInjection.title"),
+            detail: L10n.t("finding.headerInjection.detail", visible)
         )
     }
 

@@ -20,12 +20,12 @@ struct ImportTextEditor: View {
             if isHiddenFromEditor {
                 HStack(alignment: .top, spacing: 8) {
                     Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Theme.warning)
-                    Text("Metin editörde gösterilmiyor (\(TextStats.size(text.utf8.count)); \(TextStats.size(WorkbenchLimits.maxEditorLineBytes))'tan uzun satır var — sıkıştırılmış veri tek satırdır). İçe aktarmada olduğu gibi kullanılır.")
+                    Text(L10n.t("importText.hidden", TextStats.size(text.utf8.count), TextStats.size(WorkbenchLimits.maxEditorLineBytes)))
                         .font(.secondaryText)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                     Spacer(minLength: 0)
-                    Button("Temizle") { text = "" }.controlSize(.small)
+                    Button(L10n.t("common.clear")) { text = "" }.controlSize(.small)
                 }
                 .padding(10)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -34,7 +34,7 @@ struct ImportTextEditor: View {
                     maxBytes: maxBytes,
                     maxLines: maxLines,
                     maxDisplayBytes: maxBytes,
-                    onRejected: { show($0.turkish) },
+                    onRejected: { show($0.localized) },
                     onLongLine: { text = $0 }
                 ))
             }

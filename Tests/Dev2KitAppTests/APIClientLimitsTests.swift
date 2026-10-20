@@ -37,10 +37,15 @@ final class APIClientLimitsTests: XCTestCase {
         XCTAssertTrue(AppState.makeDisplay(response("", contentType: "text/plain")).fitsEditor)
     }
 
-    func testRejectionMessagesInTurkish() {
-        XCTAssertEqual(WorkbenchLimits.Rejection.tooLarge(bytes: 5_200_000).turkish, "Eklenmedi: metin 5.2 MB olurdu; sınır 4.0 MB.")
-        XCTAssertEqual(WorkbenchLimits.Rejection.tooManyLines(16_001).turkish, "Eklenmedi: metin 16.001 satır olurdu; sınır 16.000 satır.")
-        XCTAssertEqual(WorkbenchLimits.Rejection.atLineLimit.turkish, "Eklenmedi: metin 16.000 satır sınırında. Önce bir şey silin.")
-        XCTAssertEqual(WorkbenchLimits.Rejection.atLineLimit.english, WorkbenchLimits.atLineLimitMessage)
+    /// Mesaj seçili dilde (L10n); sayılar dile göre gruplanır.
+    func testRejectionMessagesFollowTheLanguage() {
+        let saved = Localizer.shared.language
+        defer { Localizer.shared.language = saved }
+        Localizer.shared.language = .turkish
+        XCTAssertEqual(WorkbenchLimits.Rejection.tooManyLines(16_001).localized, "Eklenmedi: sonuç 16.001 satır olurdu. Girdi başına sınır 16.000 satır.")
+        XCTAssertEqual(WorkbenchLimits.Rejection.atLineLimit.localized, "Eklenmedi: girdi 16.000 satır sınırında. Önce bir şey sil.")
+        Localizer.shared.language = .english
+        XCTAssertEqual(WorkbenchLimits.Rejection.tooManyLines(16_001).localized, "Not added: the result would have 16,001 lines. The limit is 16,000 lines per input.")
+        XCTAssertEqual(WorkbenchLimits.Rejection.atLineLimit.localized, WorkbenchLimits.atLineLimitMessage)
     }
 }

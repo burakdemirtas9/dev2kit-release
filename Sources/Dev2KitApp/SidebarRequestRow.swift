@@ -26,7 +26,7 @@ struct SidebarRequestRow: View {
                 Image(systemName: "circle.fill")
                     .font(.system(size: 6))
                     .foregroundStyle(Theme.warning)
-                    .help("Son gönderildiği halden farklı")
+                    .help(L10n.t("request.dirty.short"))
             }
         }
         // Tek tıklama önizler (liste seçimi). Çift tıklama sekmeyi
@@ -45,7 +45,7 @@ struct SidebarRequestRow: View {
                 Button {
                     appState.duplicateRequest(request.id)
                 } label: {
-                    Label("Çoğalt", systemImage: "plus.square.on.square")
+                    Label(L10n.t("request.duplicate"), systemImage: "plus.square.on.square")
                 }
             }
             let targets = appState.workspace.regularCollections.filter { $0.id != collection.id }
@@ -57,21 +57,21 @@ struct SidebarRequestRow: View {
                         }
                     }
                 } label: {
-                    Label(isMultiple ? "\(picked.count) İsteği Şuraya Taşı" : "Şuraya Taşı",
+                    Label(isMultiple ? L10n.plural("request.moveMany", count: picked.count) : L10n.t("request.move"),
                           systemImage: "folder")
                 }
             }
             Button {
                 appState.copyToTokenFactory(picked)
             } label: {
-                Label(isMultiple ? "\(picked.count) İsteği Token Factory'ye Kopyala" : "Token Factory'ye Kopyala",
+                Label(isMultiple ? L10n.plural("request.copyToTokenMany", count: picked.count) : L10n.t("request.copyToToken"),
                       systemImage: "key.viewfinder")
             }
             if !collection.isUngrouped {
                 Button {
                     appState.removeFromCollection(picked)
                 } label: {
-                    Label(isMultiple ? "\(picked.count) İsteği Koleksiyondan Çıkar" : "Koleksiyondan Çıkar",
+                    Label(isMultiple ? L10n.plural("request.removeFromCollectionMany", count: picked.count) : L10n.t("request.removeFromCollection"),
                           systemImage: "tray")
                 }
             }
@@ -79,7 +79,7 @@ struct SidebarRequestRow: View {
             Button(role: .destructive) {
                 onDelete(picked)
             } label: {
-                Label(isMultiple ? "\(picked.count) İsteği Sil…" : "Sil…", systemImage: "trash")
+                Label(isMultiple ? L10n.plural("request.deleteManyEllipsis", count: picked.count) : L10n.t("common.deleteEllipsis"), systemImage: "trash")
             }
         }
     }

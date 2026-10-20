@@ -68,8 +68,8 @@ public enum OutboundScanner {
 
         public var errorDescription: String? {
             switch self {
-            case .notADirectory: return "Seçilen yol bir klasör değil."
-            case .noJavaSources: return "Klasörde Java kaynak dosyası bulunamadı (src/test hariç)."
+            case .notADirectory: return L10n.t("outbound.notDirectory")
+            case .noJavaSources: return L10n.t("outbound.noJava")
             }
         }
     }
@@ -122,8 +122,8 @@ public enum OutboundScanner {
 
         var result = try scan(files: files, projectName: directory.lastPathComponent)
         var notes = result.notes
-        if kotlinCount > 0 { notes.append("\(kotlinCount) Kotlin dosyası taranmadı (şimdilik yalnızca Java).") }
-        if truncated { notes.append("⚠︎ Proje çok büyük; yalnızca ilk \(files.count) dosya tarandı, bazı çağrılar eksik olabilir.") }
+        if kotlinCount > 0 { notes.append(L10n.plural("outbound.kotlin", count: kotlinCount)) }
+        if truncated { notes.append(L10n.t("outbound.truncated", L10n.number(files.count))) }
         result = OutboundScanResult(projectName: result.projectName, calls: result.calls, config: result.config, javaFileCount: result.javaFileCount, notes: notes)
         return result
     }

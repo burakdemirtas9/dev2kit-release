@@ -2,6 +2,9 @@ import XCTest
 @testable import Dev2KitCore
 
 final class CSVConverterTests: XCTestCase {
+    /// Beklenen mesajlar Türkçe.
+    override func invokeTest() { withLanguage(.turkish) { super.invokeTest() } }
+
     private func csv(_ json: String, _ delimiter: CSVDelimiter = .comma) throws -> String {
         try CSVConverter.fromJSON(json, delimiter: delimiter)
     }
@@ -163,6 +166,9 @@ final class YAMLWriterTests: XCTestCase {
 }
 
 final class WorkbenchConvertCatalogTests: XCTestCase {
+    /// Beklenen mesajlar İngilizce.
+    override func invokeTest() { withLanguage(.english) { super.invokeTest() } }
+
     func testConvertersAreSeparateToolsUnderConvert() {
         let ids = WorkbenchCatalog.all.filter { $0.category == .convert }.map(\.id)
         // Kullanıcı kararı (2026-10-20): CSV → JSON ve XML → JSON kalktı, YAML ↔

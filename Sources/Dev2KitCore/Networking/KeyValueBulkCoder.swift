@@ -18,7 +18,7 @@ public enum KeyValueBulkCoder {
         public var errorDescription: String? {
             issues
                 .prefix(3)
-                .map { "satır \($0.line): \($0.message)" }
+                .map { L10n.t("bulk.line", L10n.number($0.line), $0.message) }
                 .joined(separator: " · ")
         }
     }
@@ -55,11 +55,11 @@ public enum KeyValueBulkCoder {
                 body = String(body.dropFirst(disabledPrefix.count))
             }
             guard let separator = body.firstIndex(of: ":") else {
-                issues.append(Issue(line: index + 1, message: "\":\" ayıracı yok"))
+                issues.append(Issue(line: index + 1, message: L10n.t("bulk.noColon")))
                 continue
             }
             if body[body.startIndex..<separator].trimmingCharacters(in: .whitespaces).isEmpty {
-                issues.append(Issue(line: index + 1, message: "anahtar boş"))
+                issues.append(Issue(line: index + 1, message: L10n.t("bulk.emptyKey")))
             }
         }
         return issues
@@ -74,16 +74,16 @@ public enum KeyValueBulkCoder {
             let key = entry.key.trimmingCharacters(in: .whitespaces)
             if key.isEmpty {
                 if !entry.value.isEmpty {
-                    issues.append(Issue(line: line, message: "değer var ama anahtar boş"))
+                    issues.append(Issue(line: line, message: L10n.t("bulk.valueWithoutKey")))
                 }
                 continue
             }
             if key.rangeOfCharacter(from: .whitespaces) != nil {
-                issues.append(Issue(line: line, message: "anahtar boşluk içeriyor (\"\(key)\")"))
+                issues.append(Issue(line: line, message: L10n.t("bulk.keySpace", key)))
             }
             let lowered = key.lowercased()
             if let first = seen[lowered] {
-                issues.append(Issue(line: line, message: "\"\(key)\" \(first). satırda da var"))
+                issues.append(Issue(line: line, message: L10n.t("bulk.duplicate", key, L10n.number(first))))
             } else {
                 seen[lowered] = line
             }

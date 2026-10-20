@@ -103,10 +103,10 @@ public enum JSONDocument {
     public static func parse(_ text: String) throws -> JSONValue {
         var parser = Parser(bytes: Array(text.utf8))
         parser.skipSpace()
-        guard !parser.atEnd else { throw parser.issue("içerik boş", at: 0) }
+        guard !parser.atEnd else { throw parser.issue(L10n.t("beautify.empty"), at: 0) }
         let value = try parser.value(depth: 0)
         parser.skipSpace()
-        guard parser.atEnd else { throw parser.issue("değerden sonra beklenmeyen içerik", at: parser.index) }
+        guard parser.atEnd else { throw parser.issue(L10n.t("json.trailing"), at: parser.index) }
         return value
     }
 
@@ -120,7 +120,7 @@ public enum JSONDocument {
         var current: UInt8 { bytes[index] }
 
         func issue(_ message: String, at offset: Int) -> WorkbenchIssue {
-            WorkbenchIssue.at(offset: offset, in: bytes, message: "Geçersiz JSON: \(message)")
+            WorkbenchIssue.at(offset: offset, in: bytes, message: L10n.t("json.invalid", message))
         }
 
         mutating func skipSpace() {
@@ -142,10 +142,10 @@ public enum JSONDocument {
 
         mutating func value(depth: Int) throws -> JSONValue {
             guard depth < JSONDocument.maxDepth else {
-                throw issue("iç içe geçme \(JSONDocument.maxDepth) seviyeyi aşıyor", at: index)
+                throw issue(L10n.t("json.tooDeep", L10n.number(JSONDocument.maxDepth)), at: index)
             }
-            if let commentError { throw issue("/* yorumu */ ile kapatılmamış", at: commentError) }
-            guard !atEnd else { throw issue("içerik beklenmeden bitti", at: index) }
+            if let commentError { throw issue(L10n.t("beautify.unclosedComment"), at: commentError) }
+            guard !atEnd else { throw issue(L10n.t("json.unexpectedEnd"), at: index) }
             switch current {
             case UInt8(ascii: "{"): return try object(depth: depth)
             case UInt8(ascii: "["): return try array(depth: depth)
@@ -154,7 +154,7 @@ public enum JSONDocument {
             case UInt8(ascii: "f"): try literal("false"); return .bool(false)
             case UInt8(ascii: "n"): try literal("null"); return .null
             case UInt8(ascii: "-"), UInt8(ascii: "0")...UInt8(ascii: "9"): return .number(try number())
-            default: throw issue("beklenmeyen karakter '\(character(at: index))'", at: index)
+            default: throw issue(L10n.t("json.unexpectedChar", String(character(at: index))), at: index)
             }
         }
 
@@ -170,24 +170,24 @@ public enum JSONDocument {
             while true {
                 skipSpace()
                 guard !atEnd, current == UInt8(ascii: "\"") else {
-                    throw issue("anahtar bekleniyordu (çift tırnaklı)", at: index)
+                    throw issue(L10n.t("json.expectedKey"), at: index)
                 }
                 let key = try string()
                 skipSpace()
-                guard !atEnd, current == UInt8(ascii: ":") else { throw issue("':' bekleniyordu", at: index) }
+                guard !atEnd, current == UInt8(ascii: ":") else { throw issue(L10n.t("json.expectedColon"), at: index) }
                 index += 1
                 skipSpace()
                 members.append((key, try value(depth: depth + 1)))
                 skipSpace()
-                guard !atEnd else { throw issue("nesne '}' ile kapatılmamış", at: index) }
+                guard !atEnd else { throw issue(L10n.t("json.unclosedObject"), at: index) }
                 if current == UInt8(ascii: ",") {
                     index += 1
                     skipSpace()
-                    if !atEnd && current == UInt8(ascii: "}") { throw issue("son elemandan sonra virgül", at: index) }
+                    if !atEnd && current == UInt8(ascii: "}") { throw issue(L10n.t("json.trailingComma"), at: index) }
                     continue
                 }
                 if current == UInt8(ascii: "}") { index += 1; return .object(members) }
-                throw issue("',' ya da '}' bekleniyordu", at: index)
+                throw issue(L10n.t("json.expectedCommaBrace"), at: index)
             }
         }
 
@@ -200,15 +200,15 @@ public enum JSONDocument {
                 skipSpace()
                 items.append(try value(depth: depth + 1))
                 skipSpace()
-                guard !atEnd else { throw issue("dizi ']' ile kapatılmamış", at: index) }
+                guard !atEnd else { throw issue(L10n.t("json.unclosedArray"), at: index) }
                 if current == UInt8(ascii: ",") {
                     index += 1
                     skipSpace()
-                    if !atEnd && current == UInt8(ascii: "]") { throw issue("son elemandan sonra virgül", at: index) }
+                    if !atEnd && current == UInt8(ascii: "]") { throw issue(L10n.t("json.trailingComma"), at: index) }
                     continue
                 }
                 if current == UInt8(ascii: "]") { index += 1; return .array(items) }
-                throw issue("',' ya da ']' bekleniyordu", at: index)
+                throw issue(L10n.t("json.expectedCommaBracket"), at: index)
             }
         }
 
@@ -216,7 +216,7 @@ public enum JSONDocument {
             let expected = Array(word.utf8)
             guard index + expected.count <= bytes.count,
                   Array(bytes[index..<index + expected.count]) == expected else {
-                throw issue("beklenmeyen değer (true, false ya da null mı?)", at: index)
+                throw issue(L10n.t("json.unexpectedValue"), at: index)
             }
             index += expected.count
         }
@@ -229,20 +229,20 @@ public enum JSONDocument {
                 return index - from
             }
             if current == UInt8(ascii: "-") { index += 1 }
-            guard !atEnd else { throw issue("sayı eksik", at: start) }
+            guard !atEnd else { throw issue(L10n.t("json.missingNumber"), at: start) }
             if current == UInt8(ascii: "0") {
                 index += 1
             } else if digits() == 0 {
-                throw issue("sayı eksik", at: start)
+                throw issue(L10n.t("json.missingNumber"), at: start)
             }
             if !atEnd, current == UInt8(ascii: ".") {
                 index += 1
-                guard digits() > 0 else { throw issue("ondalık kısım eksik", at: index) }
+                guard digits() > 0 else { throw issue(L10n.t("json.missingFraction"), at: index) }
             }
             if !atEnd, current == UInt8(ascii: "e") || current == UInt8(ascii: "E") {
                 index += 1
                 if !atEnd, current == UInt8(ascii: "+") || current == UInt8(ascii: "-") { index += 1 }
-                guard digits() > 0 else { throw issue("üs kısmı eksik", at: index) }
+                guard digits() > 0 else { throw issue(L10n.t("json.missingExponent"), at: index) }
             }
             return String(decoding: bytes[start..<index], as: UTF8.self)
         }
@@ -258,7 +258,7 @@ public enum JSONDocument {
                 }
             }
             while true {
-                guard !atEnd else { throw issue("metin kapatılmamış", at: start) }
+                guard !atEnd else { throw issue(L10n.t("json.unclosedString"), at: start) }
                 let byte = current
                 if byte == UInt8(ascii: "\"") {
                     flushRun()
@@ -266,12 +266,12 @@ public enum JSONDocument {
                     return String(scalars)
                 }
                 if byte < 0x20 {
-                    throw issue("metin içinde kaçışlanmamış kontrol karakteri (satır sonu?)", at: index)
+                    throw issue(L10n.t("json.controlChar"), at: index)
                 }
                 if byte == UInt8(ascii: "\\") {
                     flushRun()
                     index += 1
-                    guard !atEnd else { throw issue("metin kapatılmamış", at: start) }
+                    guard !atEnd else { throw issue(L10n.t("json.unclosedString"), at: start) }
                     switch current {
                     case UInt8(ascii: "\""): scalars.append("\"")
                     case UInt8(ascii: "\\"): scalars.append("\\")
@@ -288,17 +288,17 @@ public enum JSONDocument {
                             // Vekil çifti: ikinci yarı `\uDC00…\uDFFF` olmalı.
                             guard index + 2 < bytes.count, bytes[index + 1] == UInt8(ascii: "\\"),
                                   bytes[index + 2] == UInt8(ascii: "u") else {
-                                throw issue("eksik Unicode vekil çifti", at: escapeStart)
+                                throw issue(L10n.t("json.missingSurrogate"), at: escapeStart)
                             }
                             index += 2
                             let low = try hex4()
-                            guard (0xDC00...0xDFFF).contains(low) else { throw issue("geçersiz Unicode vekil çifti", at: escapeStart) }
+                            guard (0xDC00...0xDFFF).contains(low) else { throw issue(L10n.t("json.invalidSurrogate"), at: escapeStart) }
                             code = 0x10000 + ((code - 0xD800) << 10) + (low - 0xDC00)
                         }
-                        guard let scalar = Unicode.Scalar(code) else { throw issue("geçersiz Unicode kaçışı", at: escapeStart) }
+                        guard let scalar = Unicode.Scalar(code) else { throw issue(L10n.t("json.invalidUnicode"), at: escapeStart) }
                         scalars.append(scalar)
                     default:
-                        throw issue("geçersiz kaçış '\\\(character(at: index))'", at: index - 1)
+                        throw issue(L10n.t("json.invalidEscape", "\\" + String(character(at: index))), at: index - 1)
                     }
                     index += 1
                     runStart = index
@@ -310,11 +310,11 @@ public enum JSONDocument {
 
         /// `\u` sonrasındaki dört hane; `index` son hanede kalır.
         mutating func hex4() throws -> UInt32 {
-            guard index + 4 < bytes.count else { throw issue("eksik Unicode kaçışı", at: index - 1) }
+            guard index + 4 < bytes.count else { throw issue(L10n.t("json.missingUnicode"), at: index - 1) }
             var value: UInt32 = 0
             for offset in 1...4 {
                 guard let digit = UInt32(String(UnicodeScalar(bytes[index + offset])), radix: 16) else {
-                    throw issue("geçersiz Unicode kaçışı", at: index - 1)
+                    throw issue(L10n.t("json.invalidUnicode"), at: index - 1)
                 }
                 value = value * 16 + digit
             }

@@ -2,6 +2,9 @@ import XCTest
 @testable import Dev2KitCore
 
 final class WorkbenchLimitsTests: XCTestCase {
+    /// Beklenen mesajlar İngilizce.
+    override func invokeTest() { withLanguage(.english) { super.invokeTest() } }
+
     func testDecidedLimits() {
         // Kullanıcı kararı (2026-10-18).
         XCTAssertEqual(TextStats.size(WorkbenchLimits.maxInputBytes), "4.0 MB")

@@ -314,11 +314,11 @@ final class AppState {
                 let backup = try store.backUpUnreadableFile()
                 self.startupMessage = ResultMessage(
                     kind: .warning,
-                    title: "Workspace okunamadı, boş açıldı",
-                    message: "Eski dosya silinmedi; yedeği aşağıda.",
+                    title: L10n.t("startup.unreadable.title"),
+                    message: L10n.t("startup.unreadable.message"),
                     lines: [
-                        MessageLine(.info, "Yedek: \(backup.path)"),
-                        MessageLine(.info, "Neden: \(error.localizedDescription)"),
+                        MessageLine(.info, L10n.t("startup.unreadable.backup", backup.path)),
+                        MessageLine(.info, L10n.t("startup.unreadable.reason", error.localizedDescription)),
                     ],
                     revealURL: backup
                 )
@@ -326,16 +326,14 @@ final class AppState {
                 self.persistenceBlocked = true
                 self.startupMessage = ResultMessage(
                     kind: .error,
-                    title: "Bu oturumda değişiklikler kaydedilmeyecek",
-                    message: "Workspace okunamadı (\(error.localizedDescription)) ve yedeklenemedi "
-                        + "(\(backupError.localizedDescription)); dosyanın üzerine yazılmasın diye kayıt kapalı.\n\n"
-                        + "Dosyayı düzeltip ya da kenara alıp uygulamayı yeniden aç:\n\(store.fileURL.path)",
+                    title: L10n.t("startup.blocked.title"),
+                    message: L10n.t("startup.blocked.message", error.localizedDescription, backupError.localizedDescription, store.fileURL.path),
                     revealURL: store.fileURL
                 )
             }
         }
         if workspace.collections.isEmpty {
-            workspace.collections = [CollectionModel(name: "İlk Koleksiyon", requests: [RequestModel()])]
+            workspace.collections = [CollectionModel(name: L10n.t("collection.first"), requests: [RequestModel(name: L10n.t("request.newName"))])]
             persist()
         }
         // Eski environment "token değişkenleri" Token Factory'ye taşınır; bir
@@ -400,7 +398,9 @@ final class AppState {
     let oauthService = OAuth2Service()
     /// Yetkilendirme sürerken arayüzün beklemesi için.
     var authorizingConfigID: UUID?
-    var authMessage: String?
+    /// OAuth2 durum mesajı. Başarı ayrı bayrakla: renk metne bakılarak
+    /// seçiliyordu ("tamamlandı" içeriyor mu), dil değişince bozulurdu.
+    var authMessage: (text: String, isSuccess: Bool)?
 
     // MARK: - TLS durumu (davranış: AppState+TLS)
 
@@ -421,8 +421,8 @@ final class AppState {
         if let saveError {
             return ResultMessage(
                 kind: .error,
-                title: "Değişiklikler kaydedilemedi",
-                message: "\(saveError)\n\nDüzenlemelerin bellekte duruyor; bir sonraki değişiklikte yeniden denenir. Disk alanını ve klasör izinlerini kontrol et."
+                title: L10n.t("save.failed.title"),
+                message: L10n.t("save.failed.message", saveError)
             )
         }
         return portingMessage

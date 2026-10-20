@@ -51,9 +51,8 @@ public enum JSONPathTool {
 
     public static func summary(count: Int) -> String {
         switch count {
-        case 0: return "No matches"
-        case 1: return "1 match"
-        default: return "\(count.formatted()) matches"
+        case 0: return L10n.t("jsonpath.noMatches")
+        default: return L10n.plural("jsonpath.matches", count: count)
         }
     }
 }

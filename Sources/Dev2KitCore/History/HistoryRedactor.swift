@@ -121,6 +121,6 @@ public enum HistoryRedactor {
     public static func redactResponse(_ text: String, limit: Int) -> String {
         let masked = redactStructuredText(text)
         guard masked.count > limit else { return masked }
-        return String(masked.prefix(limit)) + "\n… (\(masked.count - limit) karakter kırpıldı)"
+        return String(masked.prefix(limit)) + "\n" + L10n.plural("history.charsTrimmed", count: masked.count - limit)
     }
 }

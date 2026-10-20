@@ -101,7 +101,7 @@ public struct RequestModel: Codable, Identifiable, Hashable, Sendable {
 
     public init(
         id: UUID = UUID(),
-        name: String = "Yeni İstek",
+        name: String = L10n.t("request.newName"),
         method: HTTPMethod = .get,
         url: String = "",
         headers: [KeyValueEntry] = [],

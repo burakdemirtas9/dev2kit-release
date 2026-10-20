@@ -84,10 +84,10 @@ public enum RequestEngineError: Error, LocalizedError {
         switch self {
         case .securityBlocked(let findings), .needsApproval(let findings):
             return findings.map { "\($0.title): \($0.detail)" }.joined(separator: "\n")
-        case .invalidURL(let url): return "Geçersiz URL: \(url)"
-        case .notHTTPResponse: return "Sunucudan HTTP yanıtı alınamadı."
+        case .invalidURL(let url): return L10n.t("engine.invalidURL", url)
+        case .notHTTPResponse: return L10n.t("engine.notHTTP")
         case .notAuthorized(let name):
-            return "\"\(name)\" için henüz token yok. Auth sekmesinden \"Yetkilendir\" ile giriş yap."
+            return L10n.t("engine.noToken", name)
         case .tlsRejected(let host, let reason):
             return """
             \(host) için TLS doğrulaması başarısız, bağlantı kurulmadı: \(reason)
@@ -356,8 +356,7 @@ public final class RequestEngine: @unchecked Sendable {
             }
             throw RequestEngineError.tlsRejected(
                 host: host,
-                reason: "\(error.localizedDescription) Sunucunun GÖNDERDİĞİ sertifika şu adlar "
-                    + "için geçerli: \(names)"
+                reason: error.localizedDescription + L10n.t("trust.presentedNames", names)
             )
         }
         let elapsed = start.duration(to: .now)

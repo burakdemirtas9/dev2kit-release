@@ -1,4 +1,5 @@
 import SwiftUI
+import Dev2KitCore
 
 /// "Tümünü kapat / tümünü aç" düğmeleri.
 ///
@@ -9,8 +10,6 @@ import SwiftUI
 /// kullanıcıda "geçiş" hangi yöne gideceği belirsiz olurdu.
 struct FoldButtons: View {
     @ObservedObject var folding: CodeFoldingController
-    /// Workbench arayüzü İngilizce (docs/V2.md).
-    var english = false
 
     var body: some View {
         if folding.isAvailable {
@@ -21,8 +20,8 @@ struct FoldButtons: View {
                     Image(systemName: "arrow.down.right.and.arrow.up.left")
                         .iconHitTarget(20)
                 }
-                .help(english ? "Collapse all" : "Tüm blokları kapat")
-                .accessibilityLabel(english ? "Collapse all" : "Tüm blokları kapat")
+                .help(L10n.t("fold.collapseAll"))
+                .accessibilityLabel(L10n.t("fold.collapseAll"))
 
                 Button {
                     folding.expandAll()
@@ -30,8 +29,8 @@ struct FoldButtons: View {
                     Image(systemName: "arrow.up.left.and.arrow.down.right")
                         .iconHitTarget(20)
                 }
-                .help(english ? "Expand all" : "Tüm blokları aç")
-                .accessibilityLabel(english ? "Expand all" : "Tüm blokları aç")
+                .help(L10n.t("fold.expandAll"))
+                .accessibilityLabel(L10n.t("fold.expandAll"))
                 .disabled(!folding.hasFolded)
             }
             .buttonStyle(.plain)

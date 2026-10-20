@@ -19,16 +19,17 @@ public struct WorkbenchTool: Identifiable, Sendable {
         /// buraya; başlık bir kez tanımlı, tekrar açılmaz.
         case others
 
-        /// Workbench arayüzü İngilizce (kullanıcı kararı, 2026-10-18).
+        /// Seçili dilde (2026-10-20). Araç ve eylem adları (JSON, Base64,
+        /// Format, Minify…) yerleşik teknik terim; iki dilde de İngilizce.
         public var title: String {
             switch self {
-            case .format: return "Format"
+            case .format: return L10n.t("wb.category.format")
             case .encode: return "Encode / Decode"
-            case .convert: return "Convert"
-            case .objects: return "Object Converter"
-            case .compare: return "Compare"
-            case .preview: return "Preview"
-            case .others: return "Others"
+            case .convert: return L10n.t("wb.category.convert")
+            case .objects: return L10n.t("wb.category.objects")
+            case .compare: return L10n.t("wb.category.compare")
+            case .preview: return L10n.t("wb.category.preview")
+            case .others: return L10n.t("wb.category.others")
             }
         }
     }
@@ -318,7 +319,7 @@ public struct WorkbenchIssue: Error, Equatable, Sendable, LocalizedError {
 
     public var errorDescription: String? {
         guard let line, let column else { return message }
-        return "\(message) (satır \(line), sütun \(column))"
+        return L10n.t("wb.issue.location", message, L10n.number(line), L10n.number(column))
     }
 
     /// Karakter dizisindeki konumdan satır/sütun ve editör konumu (UTF-16).

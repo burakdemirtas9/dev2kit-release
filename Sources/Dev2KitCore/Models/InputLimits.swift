@@ -70,21 +70,20 @@ public enum InputLimits {
     public static func rejection(of text: String, maxBytes: Int, maxLines: Int) -> String? {
         let bytes = text.utf8.count
         if bytes > maxBytes {
-            return "Eklenmedi: metin \(TextStats.size(bytes)); sınır \(TextStats.size(maxBytes))."
+            return L10n.t("limits.textTooLarge", TextStats.size(bytes), TextStats.size(maxBytes))
         }
         let lines = TextStats.lineCount(text)
         if lines > maxLines {
-            return "Eklenmedi: metin \(WorkbenchLimits.groupedTR(lines)) satır; sınır \(WorkbenchLimits.groupedTR(maxLines)) satır."
+            return L10n.t("limits.textTooManyLines", L10n.number(lines), L10n.number(maxLines))
         }
         return nil
     }
 
-    public static func tooLongMessage(_ field: Field, english: Bool = false) -> String {
-        english
-            ? "Not added: this field takes at most \(WorkbenchLimits.grouped(field.maxCharacters)) characters."
-            : "Eklenmedi: bu alan en çok \(WorkbenchLimits.groupedTR(field.maxCharacters)) karakter alır."
+    public static func tooLongMessage(_ field: Field) -> String {
+        L10n.t("limits.fieldTooLong", L10n.number(field.maxCharacters))
     }
 
-    public static let tooManyRowsMessage =
-        "En çok \(WorkbenchLimits.groupedTR(maxRows)) satır eklenebilir."
+    public static var tooManyRowsMessage: String {
+        L10n.t("limits.tooManyRows", L10n.number(maxRows))
+    }
 }

@@ -1,4 +1,5 @@
 import SwiftUI
+import Dev2KitCore
 
 /// İstek düzenleyicinin sekme seçicisi (Headers / Body / Auth / Query / Token).
 ///
@@ -49,9 +50,9 @@ struct EditorTabPicker: View {
                     .contentShape(RoundedRectangle(cornerRadius: 6))
                 }
                 .buttonStyle(.plain)
-                .help(count > 0 ? "\(tab.rawValue) — \(count) etkin" : isMarked ? "\(tab.rawValue) — has content" : tab.rawValue)
+                .help(count > 0 ? L10n.plural("tabs.activeCount", count: count, tab.rawValue) : isMarked ? L10n.t("tabs.hasContent", tab.rawValue) : tab.rawValue)
                 .accessibilityLabel(tab.rawValue)
-                .accessibilityValue(count > 0 ? "\(count) etkin" : isMarked ? "içerik var" : "")
+                .accessibilityValue(count > 0 ? L10n.plural("tabs.activeCount.short", count: count) : isMarked ? L10n.t("tabs.hasContent.short") : "")
                 .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
             }
         }

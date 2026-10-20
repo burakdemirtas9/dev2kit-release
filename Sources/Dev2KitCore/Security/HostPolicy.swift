@@ -51,11 +51,11 @@ public enum HostPolicyState: Equatable, Sendable {
         case .notConfigured:
             return nil
         case .invalid(let reason):
-            return "Yönetici politika dosyası okunamadı, tüm gönderimler durduruldu: \(reason)"
+            return L10n.t("policy.invalid", reason)
         case .active(let policy):
             let host = url?.host ?? ""
             guard policy.allows(host: host) else {
-                return "\"\(host.isEmpty ? "(host yok)" : host)\" yöneticinin izin verdiği host'lar arasında değil."
+                return L10n.t("policy.notAllowed", host.isEmpty ? L10n.t("policy.noHost") : host)
             }
             return nil
         }
@@ -78,7 +78,7 @@ public enum HostPolicyLoader {
             return .invalid(reason: problem)
         }
         guard let data = try? Data(contentsOf: url) else {
-            return .invalid(reason: "dosya okunamadı (\(url.path))")
+            return .invalid(reason: L10n.t("policy.unreadable", url.path))
         }
         return parse(data)
     }
@@ -88,13 +88,13 @@ public enum HostPolicyLoader {
         // Anahtar adındaki bir yazım hatası da (allowedHost) hata sayılır:
         // kısıt kazara devre dışı kalmasın.
         guard let file = try? JSONDecoder().decode(File.self, from: data) else {
-            return .invalid(reason: "geçerli bir JSON değil ya da \"allowedHosts\" listesi yok")
+            return .invalid(reason: L10n.t("policy.badJSON"))
         }
         var patterns: [String] = []
         for raw in file.allowedHosts {
             let pattern = HostPolicy.normalize(raw)
             guard isValidPattern(pattern) else {
-                return .invalid(reason: "geçersiz host kalıbı: \"\(raw)\"")
+                return .invalid(reason: L10n.t("policy.badPattern", raw))
             }
             patterns.append(pattern)
         }
@@ -117,14 +117,14 @@ public enum HostPolicyLoader {
     ) -> String? {
         for path in [url.path, url.deletingLastPathComponent().path] {
             guard let attributes = try? fileManager.attributesOfItem(atPath: path) else {
-                return "izinleri okunamadı (\(path))"
+                return L10n.t("policy.permissionsUnreadable", path)
             }
             if requireRootOwnership, (attributes[.ownerAccountID] as? Int) != 0 {
-                return "\(path) root'a ait olmalı"
+                return L10n.t("policy.mustBeRoot", path)
             }
             let permissions = attributes[.posixPermissions] as? Int ?? 0
             if permissions & 0o022 != 0 {
-                return "\(path) grup ya da diğer kullanıcılar tarafından yazılabilir olmamalı"
+                return L10n.t("policy.notWritable", path)
             }
         }
         return nil

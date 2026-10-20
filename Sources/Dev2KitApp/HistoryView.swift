@@ -17,6 +17,14 @@ struct HistoryView: View {
         case all = "Hepsi"
         case success = "Başarılı"
         case failure = "Hatalı"
+
+        var title: String {
+            switch self {
+            case .all: return L10n.t("history.filter.all")
+            case .success: return L10n.t("history.filter.success")
+            case .failure: return L10n.t("history.filter.failure")
+            }
+        }
     }
 
     private var filtered: [HistoryEntry] {
@@ -69,38 +77,38 @@ struct HistoryView: View {
 
     private var header: some View {
         HStack {
-            Text("Geçmiş")
+            Text(L10n.t("toolbar.history"))
                 .font(.title2).bold()
-            Text("\(appState.history.count) kayıt · \(ByteCountFormatter.string(fromByteCount: Int64(appState.historyFileSize), countStyle: .file))")
+            Text(L10n.plural("history.summary", count: appState.history.count, ByteCountFormatter.string(fromByteCount: Int64(appState.historyFileSize), countStyle: .file)))
                 .font(.secondaryText)
                 .foregroundStyle(.secondary)
             Spacer()
             if !appState.historySettings.isEnabled {
-                Label("Kayıt kapalı", systemImage: "pause.circle")
+                Label(L10n.t("history.recordingOff"), systemImage: "pause.circle")
                     .font(.secondaryText)
                     .foregroundStyle(Theme.warning)
             }
             Button {
                 showingSettings = true
             } label: {
-                Label("Ayarlar", systemImage: "gearshape")
+                Label(L10n.t("history.settings"), systemImage: "gearshape")
             }
         }
     }
 
     private var filters: some View {
         HStack {
-            TextField("Ara: istek adı veya adres", text: $searchText)
+            TextField(L10n.t("history.search.placeholder"), text: $searchText)
                 .inputLimit(.search)
                 .textFieldStyle(.input)
                 .frame(maxWidth: 280)
             Picker("", selection: $statusFilter) {
-                ForEach(StatusFilter.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                ForEach(StatusFilter.allCases, id: \.self) { Text($0.title).tag($0) }
             }
             .pickerStyle(.segmented)
             .labelsHidden()
             .fixedSize()
-            Toggle("Sadece seçili istek", isOn: $onlySelectedRequest)
+            Toggle(L10n.t("history.onlySelected"), isOn: $onlySelectedRequest)
                 .toggleStyle(.checkbox)
                 .disabled(appState.selectedRequestID == nil)
             Spacer()
@@ -111,11 +119,11 @@ struct HistoryView: View {
         Group {
             if filtered.isEmpty {
                 ContentUnavailableView(
-                    appState.history.isEmpty ? "Henüz kayıt yok" : "Eşleşen kayıt yok",
+                    appState.history.isEmpty ? L10n.t("history.empty.title") : L10n.t("history.noMatch.title"),
                     systemImage: "clock.arrow.circlepath",
                     description: Text(appState.history.isEmpty
-                        ? "Gönderdiğin istekler burada birikir."
-                        : "Filtreleri gevşetmeyi dene.")
+                        ? L10n.t("history.empty.message")
+                        : L10n.t("history.noMatch.message"))
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
@@ -125,7 +133,7 @@ struct HistoryView: View {
                             Button(role: .destructive) {
                                 appState.deleteHistoryEntry(entry.id)
                             } label: {
-                                Label("Bu Kaydı Sil", systemImage: "trash")
+                                Label(L10n.t("history.deleteEntry"), systemImage: "trash")
                             }
                         }
                 }
@@ -183,7 +191,7 @@ struct HistoryView: View {
                     snapshotSummary(entry.snapshot)
                     if let preview = entry.responsePreview {
                         Divider()
-                        Text("Yanıt önizlemesi").font(.subheadline).bold()
+                        Text(L10n.t("history.responsePreview")).font(.subheadline).bold()
                         Text(preview)
                             .font(.secondaryMono)
                             .textSelection(.enabled)
@@ -197,9 +205,9 @@ struct HistoryView: View {
             }
         } else {
             ContentUnavailableView(
-                "Kayıt seç",
+                L10n.t("history.select.title"),
                 systemImage: "sidebar.right",
-                description: Text("Soldan bir kayda tıkla.")
+                description: Text(L10n.t("history.select.message"))
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -207,24 +215,24 @@ struct HistoryView: View {
 
     private func metadata(_ entry: HistoryEntry) -> some View {
         VStack(alignment: .leading, spacing: 3) {
-            label("Zaman", entry.date.formatted(date: .abbreviated, time: .standard))
-            if let collection = entry.collectionName { label("Koleksiyon", collection) }
-            label("Environment", entry.environmentName ?? "yok")
+            label(L10n.t("history.field.time"), entry.date.formatted(Date.FormatStyle(date: .abbreviated, time: .standard).locale(L10n.language.locale)))
+            if let collection = entry.collectionName { label(L10n.t("history.field.collection"), collection) }
+            label("Environment", entry.environmentName ?? L10n.t("history.field.none"))
             switch entry.outcome {
             case .completed(let status, let duration, let bytes, let redirects):
-                label("Durum", "\(status)")
-                label("Süre", String(format: "%.0f ms", duration * 1000))
-                label("Boyut", ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .binary))
-                if redirects > 0 { label("Yönlendirme", "\(redirects) adım") }
+                label(L10n.t("history.field.status"), "\(status)")
+                label(L10n.t("history.field.duration"), String(format: "%.0f ms", duration * 1000))
+                label(L10n.t("history.field.size"), ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .binary))
+                if redirects > 0 { label(L10n.t("response.tab.redirects"), L10n.plural("history.field.steps", count: redirects)) }
             case .failed(let message):
-                label("Hata", message)
+                label(L10n.t("message.kind.error"), message)
             }
         }
     }
 
     private func snapshotSummary(_ snapshot: RequestModel) -> some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text("İstek").font(.subheadline).bold()
+            Text("Request").font(.subheadline).bold()
             Text("\(snapshot.method.rawValue) \(snapshot.url)")
                 .font(.secondaryMono)
                 .textSelection(.enabled)
@@ -239,7 +247,7 @@ struct HistoryView: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(8)
             }
-            Label("Kimlik bilgileri \(HistoryRedactor.mask) ile maskelenir; geri yüklemede mevcut değerler korunur.",
+            Label(L10n.t("history.masked", HistoryRedactor.mask),
                   systemImage: "lock.shield")
                 .font(.tinyText)
                 .foregroundStyle(.tertiary)
@@ -251,24 +259,24 @@ struct HistoryView: View {
         HStack {
             Button {
                 if appState.restore(entry) {
-                    notice = "İstek bu kayda geri yüklendi."
+                    notice = L10n.t("history.restored")
                 } else {
-                    notice = "Özgün istek silinmiş; \"Yeni istek olarak ekle\" kullanılabilir."
+                    notice = L10n.t("history.originalDeleted")
                 }
             } label: {
-                Label("Bu Hale Geri Yükle", systemImage: "arrow.uturn.backward")
+                Label(L10n.t("history.restore"), systemImage: "arrow.uturn.backward")
             }
             .disabled(entry.requestID == nil)
 
             Menu {
                 ForEach(appState.workspace.collections.filter { !$0.isTokenFactory }) { collection in
-                    Button(collection.name) {
+                    Button(collection.displayName) {
                         appState.restoreAsNewRequest(entry, to: collection.id)
-                        notice = "\"\(collection.name)\" içine yeni istek eklendi."
+                        notice = L10n.t("history.addedTo", collection.displayName)
                     }
                 }
             } label: {
-                Label("Yeni İstek Olarak Ekle", systemImage: "plus.square.on.square")
+                Label(L10n.t("history.addAsNew"), systemImage: "plus.square.on.square")
             }
             .fixedSize()
         }
@@ -289,25 +297,25 @@ struct HistoryView: View {
     private var footer: some View {
         HStack {
             Menu {
-                Button("Tüm Geçmişi Sil", role: .destructive) {
+                Button(L10n.t("history.deleteAll"), role: .destructive) {
                     appState.clearHistory()
                     selectedEntryID = nil
-                    notice = "Geçmiş temizlendi."
+                    notice = L10n.t("history.cleared")
                 }
                 if let environment = appState.activeEnvironment?.name {
-                    Button("Sadece \"\(environment)\" Kayıtlarını Sil", role: .destructive) {
+                    Button(L10n.t("history.deleteEnvironment", environment), role: .destructive) {
                         appState.clearHistory(environmentName: environment)
-                        notice = "\"\(environment)\" kayıtları silindi."
+                        notice = L10n.t("history.environmentDeleted", environment)
                     }
                 }
             } label: {
-                Label("Temizle", systemImage: "trash")
+                Label(L10n.t("common.clear"), systemImage: "trash")
             }
             .fixedSize()
             .disabled(appState.history.isEmpty)
 
             Spacer()
-            Button("Kapat") { dismiss() }
+            Button(L10n.t("common.close")) { dismiss() }
                 .keyboardShortcut(.cancelAction)
         }
     }
@@ -323,48 +331,48 @@ struct HistorySettingsView: View {
         VStack(alignment: .leading, spacing: 0) {
             Form {
                 Section {
-                    Toggle("Geçmişi tut", isOn: $state.historySettings.isEnabled)
+                    Toggle(L10n.t("history.keep"), isOn: $state.historySettings.isEnabled)
                 } footer: {
-                    Text("Kapalıyken hiçbir gönderim kaydedilmez. Mevcut kayıtlar silinmez.")
+                    Text(L10n.t("history.keep.help"))
                         .font(.secondaryText).foregroundStyle(.secondary)
                 }
 
                 Section {
                     Stepper(
-                        "En fazla \(appState.historySettings.retentionCount) kayıt",
+                        L10n.t("history.retention.count", L10n.number(appState.historySettings.retentionCount)),
                         value: $state.historySettings.retentionCount,
                         in: 10...2000,
                         step: 10
                     )
                     Stepper(
-                        "\(appState.historySettings.retentionDays) günden eskisini sil",
+                        L10n.t("history.retention.days", L10n.number(appState.historySettings.retentionDays)),
                         value: $state.historySettings.retentionDays,
                         in: 1...365
                     )
                     Stepper(
-                        "Dosya en fazla \(appState.historySettings.maxTotalBytes / 1_048_576) MB",
+                        L10n.t("history.retention.fileSize", L10n.number(appState.historySettings.maxTotalBytes / 1_048_576)),
                         value: $state.historySettings.maxTotalBytes,
                         in: 1_048_576...(512 * 1_048_576),
                         step: 1_048_576
                     )
                     Stepper(
-                        "İstek gövdesi en fazla \(appState.historySettings.maxSnapshotBodyBytes / 1024) KB",
+                        L10n.t("history.retention.bodySize", L10n.number(appState.historySettings.maxSnapshotBodyBytes / 1024)),
                         value: $state.historySettings.maxSnapshotBodyBytes,
                         in: 1024...1_048_576,
                         step: 8192
                     )
                 } header: {
-                    Text("Saklama")
+                    Text(L10n.t("history.retention"))
                 } footer: {
-                    Text("Üç sınır birlikte çalışır; hangisi önce dolarsa en eski kayıtlar düşer. Gövde sınırı tek bir büyük isteğin dosyayı şişirmesini engeller — kırpılan gövdenin başı saklanır.")
+                    Text(L10n.t("history.retention.help"))
                         .font(.secondaryText).foregroundStyle(.secondary)
                 }
 
                 Section {
-                    Toggle("Yanıt gövdelerini sakla", isOn: $state.historySettings.storeResponseBodies)
+                    Toggle(L10n.t("history.storeResponses"), isOn: $state.historySettings.storeResponseBodies)
                 } footer: {
                     Label(
-                        "Yanıtlar token ve kişisel veri içerebilir. Saklanırsa bilinen kimlik alanları maskelenir ve boyut sınırlanır, ama yine de riski artırır.",
+                        L10n.t("history.storeResponses.warning"),
                         systemImage: "exclamationmark.triangle"
                     )
                     .font(.secondaryText)
@@ -373,7 +381,7 @@ struct HistorySettingsView: View {
 
                 Section {
                     Label(
-                        "Kayıtlar AES-GCM ile şifrelenmiş dosyada tutulur; isteğin şablon hali saklanır, çözülmüş secret değerleri asla yazılmaz.",
+                        L10n.t("history.encryptionNote"),
                         systemImage: "lock.shield"
                     )
                     .font(.secondaryText)
@@ -384,7 +392,7 @@ struct HistorySettingsView: View {
 
             HStack {
                 Spacer()
-                Button("Kapat") { dismiss() }
+                Button(L10n.t("common.close")) { dismiss() }
                     .keyboardShortcut(.defaultAction)
             }
             .padding(12)

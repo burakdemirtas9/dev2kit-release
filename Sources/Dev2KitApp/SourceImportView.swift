@@ -23,9 +23,9 @@ struct SourceImportView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Kaynak Koddan Giden İstekler")
+            Text(L10n.t("source.title"))
                 .font(.title2).bold()
-            Text("Spring Boot projesinin klasörünü seç. Servisin dışarıya attığı istekler (Feign, HTTP Interface, RestTemplate, WebClient, RestClient) koleksiyona çevrilir. Kod yalnızca okunur: derlenmez, çalıştırılmaz, internete çıkılmaz. src/test, target ve build atlanır.")
+            Text(L10n.t("source.subtitle"))
                 .font(.secondaryText)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -34,12 +34,12 @@ struct SourceImportView: View {
                 Button {
                     showingFolderPicker = true
                 } label: {
-                    Label("Proje Klasörü Seç…", systemImage: "folder")
+                    Label(L10n.t("source.chooseFolder"), systemImage: "folder")
                 }
                 .disabled(scanning)
                 if scanning {
                     ProgressView().controlSize(.small)
-                    Text("Taranıyor…").font(.secondaryText).foregroundStyle(.secondary)
+                    Text(L10n.t("source.scanning")).font(.secondaryText).foregroundStyle(.secondary)
                 }
             }
 
@@ -58,9 +58,9 @@ struct SourceImportView: View {
             Divider()
             HStack {
                 Spacer()
-                Button("Vazgeç") { dismiss() }
+                Button(L10n.t("common.cancel")) { dismiss() }
                     .keyboardShortcut(.cancelAction)
-                Button("Devam") { prepare() }
+                Button(L10n.t("common.continue")) { prepare() }
                     .keyboardShortcut(.defaultAction)
                     .disabled(result?.calls.isEmpty ?? true)
             }
@@ -84,37 +84,37 @@ struct SourceImportView: View {
     private func summary(_ result: OutboundScanResult) -> some View {
         let counts = OutboundCall.Source.allCases.compactMap { source -> String? in
             let count = result.calls.filter { $0.source == source }.count
-            return count > 0 ? "\(count) \(source.rawValue)" : nil
+            return count > 0 ? "\(L10n.number(count)) \(source.rawValue)" : nil
         }
         let incomplete = result.calls.filter { !$0.isComplete }.count
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text(result.projectName).font(.headline)
-                Text("\(result.javaFileCount) Java dosyası").font(.secondaryText).foregroundStyle(.secondary)
+                Text(L10n.plural("source.javaFiles", count: result.javaFileCount)).font(.secondaryText).foregroundStyle(.secondary)
                 Spacer()
-                Text(counts.isEmpty ? "giden istek bulunamadı" : counts.joined(separator: " · "))
+                Text(counts.isEmpty ? L10n.t("source.noneFound.short") : counts.joined(separator: " · "))
                     .font(.secondaryText)
                     .foregroundStyle(.secondary)
             }
             if incomplete > 0 {
-                Label("\(incomplete) isteğin adresi tam çözülemedi; \"(eksik)\" işaretli gelir, yerleri inceleme ekranında listelenir.",
+                Label(L10n.plural("source.incomplete", count: incomplete),
                       systemImage: "exclamationmark.triangle")
                     .font(.secondaryText)
                     .foregroundStyle(Theme.warning)
             }
 
             HStack {
-                Picker("Profil:", selection: $profile) {
-                    Text("Varsayılan").tag("")
+                Picker(L10n.t("source.profile"), selection: $profile) {
+                    Text(L10n.t("source.profile.default")).tag("")
                     ForEach(result.config.profiles, id: \.self) { Text($0).tag($0) }
                 }
                 .frame(maxWidth: 240)
-                Text("Adresler bu profilin ayarlarından doldurulur.")
+                Text(L10n.t("source.profile.help"))
                     .font(.secondaryText)
                     .foregroundStyle(.secondary)
             }
 
-            GroupBox("Dış servis adresleri") {
+            GroupBox(L10n.t("source.externalURLs")) {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 6) {
                         ForEach(variables) { variable in
@@ -127,16 +127,16 @@ struct SourceImportView: View {
             }
 
             if let environment = appState.activeEnvironment {
-                Toggle("Değeri bulunan adresleri \"\(environment.name)\" environment'ına ekle (var olanlar değişmez)", isOn: $addVariables)
+                Toggle(L10n.t("source.addVariables", environment.name), isOn: $addVariables)
                     .toggleStyle(.checkbox)
                     .font(.secondaryText)
             } else {
-                Label("Aktif environment yok; adres değişkenlerini bir environment'a elle ekle.", systemImage: "exclamationmark.triangle")
+                Label(L10n.t("source.noEnvironment"), systemImage: "exclamationmark.triangle")
                     .font(.secondaryText)
                     .foregroundStyle(Theme.warning)
             }
 
-            GroupBox("İstekler (\(result.calls.count))") {
+            GroupBox(L10n.t("source.requests", L10n.number(result.calls.count))) {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 3) {
                         ForEach(result.calls) { call in
@@ -148,7 +148,7 @@ struct SourceImportView: View {
                                 Text(OutboundCollectionBuilder.requestName(for: call))
                                     .lineLimit(1)
                                 if !call.isComplete {
-                                    Text("eksik").font(.tinyText.bold()).foregroundStyle(Theme.warning)
+                                    Text(L10n.t("source.incompleteBadge")).font(.tinyText.bold()).foregroundStyle(Theme.warning)
                                 }
                                 Spacer()
                                 Text(call.location)
@@ -175,11 +175,11 @@ struct SourceImportView: View {
             case .value(let value):
                 Text(value).font(.secondaryMono).textSelection(.enabled)
             case .sensitive:
-                Label("kimlik bilgisi içeriyor, kopyalanmadı", systemImage: "lock.fill")
+                Label(L10n.t("source.sensitive"), systemImage: "lock.fill")
                     .font(.secondaryText)
                     .foregroundStyle(Theme.warning)
             case .missing(let reason):
-                Text("boş — \(reason)").font(.secondaryText).foregroundStyle(.secondary)
+                Text(L10n.t("source.emptyReason", reason)).font(.secondaryText).foregroundStyle(.secondary)
             }
             Spacer()
             Text(variable.origin).font(.tinyText).foregroundStyle(.tertiary)
@@ -198,7 +198,7 @@ struct SourceImportView: View {
                 result = scanned
                 profile = ""
                 if scanned.calls.isEmpty {
-                    errorMessage = "Projede dışarıya giden istek bulunamadı."
+                    errorMessage = L10n.t("source.noneFound")
                 }
             } catch {
                 errorMessage = error.localizedDescription

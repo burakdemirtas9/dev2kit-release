@@ -31,7 +31,7 @@ public enum CSSFormatter {
             }
             if ch == "\"" || ch == "'" {
                 guard let quoted = scanner.readQuoted(multiline: false) else {
-                    throw BeautifyError.invalid(language, "\(ch) ile açılan metin kapatılmamış.")
+                    throw BeautifyError.invalid(language, L10n.t("beautify.unclosedText", String(ch)))
                 }
                 writer.append(quoted)
                 continue
@@ -44,7 +44,7 @@ public enum CSSFormatter {
                 writer.level = depth
                 writer.newline()
             case "}":
-                guard depth > 0 else { throw BeautifyError.invalid(language, "eşleşmeyen } karakteri.") }
+                guard depth > 0 else { throw BeautifyError.invalid(language, L10n.t("beautify.unmatched", "}")) }
                 depth -= 1
                 writer.level = depth
                 writer.newline()
@@ -74,7 +74,7 @@ public enum CSSFormatter {
             }
             scanner.index += 1
         }
-        guard depth == 0 else { throw BeautifyError.invalid(language, "{ kapatılmamış.") }
+        guard depth == 0 else { throw BeautifyError.invalid(language, L10n.t("beautify.unclosed", "{")) }
         writer.trimTrailing()
         return writer.text
     }
@@ -98,7 +98,7 @@ public enum CSSFormatter {
             if try readComment(&scanner) != nil { continue }
             if ch == "\"" || ch == "'" {
                 guard let quoted = scanner.readQuoted(multiline: false) else {
-                    throw BeautifyError.invalid(language, "\(ch) ile açılan metin kapatılmamış.")
+                    throw BeautifyError.invalid(language, L10n.t("beautify.unclosedText", String(ch)))
                 }
                 if pendingSpace && !lastIsTight() && out.last != ":" { out.append(" ") }
                 pendingSpace = false

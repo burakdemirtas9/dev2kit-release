@@ -35,7 +35,7 @@ struct ContentView: View {
         @Bindable var state = appState
         return ModeSegmentedControl(selection: $state.mode)
             .fixedSize()
-            .help("API Client ile Workbench arasında geç")
+            .help(L10n.t("toolbar.mode.help"))
     }
 
     var body: some View {
@@ -93,9 +93,9 @@ struct ContentView: View {
                     Button {
                         showingEnvironments = true
                     } label: {
-                        Label("Environment'lar", systemImage: "globe")
+                        Label(L10n.t("toolbar.environments"), systemImage: "globe")
                     }
-                    .help("Environment oluştur ve düzenle")
+                    .help(L10n.t("toolbar.environments.help"))
                 }
                 toolbarGroupBreak
             }
@@ -108,14 +108,17 @@ struct ContentView: View {
                         Label(mode.label, systemImage: mode.icon).tag(mode)
                     }
                 } label: {
-                    Label("Görünüm", systemImage: appState.appearanceMode.icon)
+                    Label(L10n.t("toolbar.appearance"), systemImage: appState.appearanceMode.icon)
                 }
                 .pickerStyle(.menu)
                 // Diğer araç çubuğu düğmeleri gibi dar kalsın: seçenekler
                 // zaten tıklayınca açılan listede.
                 .menuIndicator(.hidden)
                 .frame(width: 36)
-                .help("Açık/koyu görünüm")
+                .help(L10n.t("toolbar.appearance.help"))
+            }
+            ToolbarItem(placement: .automatic) {
+                LanguagePicker()
             }
             APIClientOnly(isVisible: toolbarShowsAPIClient ?? appState.isAPIClient) {
                 toolbarGroupBreak
@@ -123,9 +126,9 @@ struct ContentView: View {
                     Button {
                         showingHistory = true
                     } label: {
-                        Label("Geçmiş", systemImage: "clock.arrow.circlepath")
+                        Label(L10n.t("toolbar.history"), systemImage: "clock.arrow.circlepath")
                     }
-                    .help("Gönderilen isteklerin kaydı (⌘Y)")
+                    .help(L10n.t("toolbar.history.help"))
                     .keyboardShortcut("y", modifiers: .command)
                 }
                 ToolbarItem(placement: .automatic) {
@@ -133,12 +136,12 @@ struct ContentView: View {
                         showingCookies = true
                     } label: {
                         Label {
-                            Text("Çerezler")
+                            Text(L10n.t("toolbar.cookies"))
                         } icon: {
                             CookieIcon().frame(width: 15, height: 15)
                         }
                     }
-                    .help("Oturum çerezlerini görüntüle ve temizle")
+                    .help(L10n.t("toolbar.cookies.help"))
                 }
             }
             // Güvenlik durumu her modda görünür (docs/TASARIM.md §1): Workbench'e
@@ -155,11 +158,11 @@ struct ContentView: View {
                     } label: {
                         // Arıza değil, açık bir risk: uyarı üçgeni. Renk bilerek
                         // kırmızı (güvenlik gevşemesi her an göze çarpmalı).
-                        Label("Doğrulama kapalı", systemImage: "exclamationmark.triangle.fill")
+                        Label(L10n.t("toolbar.validationOff"), systemImage: "exclamationmark.triangle.fill")
                             .labelStyle(.titleAndIcon)
                     }
                     .foregroundStyle(Theme.down)
-                    .help("TLS ayarlarını aç")
+                    .help(L10n.t("toolbar.validationOff.help"))
                 }
             }
             APIClientOnly(isVisible: toolbarShowsAPIClient ?? appState.isAPIClient) {
@@ -167,17 +170,17 @@ struct ContentView: View {
                     Button {
                         showingTLS = true
                     } label: {
-                        Label("TLS", systemImage: "lock.shield")
+                        Label(L10n.t("toolbar.tls"), systemImage: "lock.shield")
                     }
-                    .help("Kurum CA'sı ve istemci sertifikası profilleri")
+                    .help(L10n.t("toolbar.tls.help"))
                 }
                 ToolbarItem(placement: .automatic) {
                     Button {
                         showingSecrets = true
                     } label: {
-                        Label("Secrets", systemImage: "key.fill")
+                        Label(L10n.t("toolbar.secrets"), systemImage: "key.fill")
                     }
-                    .help("Keychain'deki secret'ları yönet")
+                    .help(L10n.t("toolbar.secrets.help"))
                 }
             }
         }
@@ -215,12 +218,12 @@ struct ContentView: View {
             isPresented: .constant(state.presentedMessage?.kind == .error)
         ) {
             if let url = state.presentedMessage?.revealURL {
-                Button("Finder'da Göster") {
+                Button(L10n.t("common.revealInFinder")) {
                     NSWorkspace.shared.activateFileViewerSelecting([url])
                     state.dismissPresentedMessage()
                 }
             }
-            Button("Tamam") { state.dismissPresentedMessage() }
+            Button(L10n.t("common.ok")) { state.dismissPresentedMessage() }
         } message: {
             if let message = state.presentedMessage {
                 Text(([message.message].compactMap { $0 } + message.lines.map(\.text)).joined(separator: "\n"))
@@ -234,6 +237,10 @@ struct ContentView: View {
         )) { message in
             ResultSheet(message: message) { state.dismissMessage(message.id) }
         }
+        // Büyük harfe çevirme ve SwiftUI biçimleri seçili dile göre olsun
+        // (Türkçede "BİÇİMLENDİRME", İngilizce ayarlı sistemde bile). Yalnızca
+        // dil değişince güncellenir.
+        .environment(\.locale, L10n.language.locale)
     }
 
 }

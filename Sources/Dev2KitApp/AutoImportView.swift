@@ -37,8 +37,8 @@ struct AutoImportView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Otomatik İçe Aktar").font(.title2).bold()
-            Text("Ne yapıştırırsan ya da hangi dosyayı verirsen içeriğinden tanınır: cURL komutları, Postman ya da dev2kit koleksiyonu, Kibana kaydı, OpenAPI JSON'u. Word, Excel ve PDF belgelerinin içindekiler de bulunur.")
+            Text(L10n.t("auto.title")).font(.title2).bold()
+            Text(L10n.t("auto.subtitle"))
                 .font(.secondaryText)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -51,7 +51,7 @@ struct AutoImportView: View {
                 .overlay(alignment: .topLeading) {
                     if text.isEmpty {
                         // verbatim: yoksa SwiftUI adresi tıklanabilir bağlantıya çeviriyor.
-                        Text(verbatim: "curl -X POST 'https://api.example.com/v1/orders' \\\n  -H 'Content-Type: application/json'\n\nya da Postman / dev2kit koleksiyonu, OpenAPI JSON'u")
+                        Text(verbatim: L10n.t("auto.placeholder"))
                             .font(.system(.body, design: .monospaced))
                             .foregroundStyle(.tertiary)
                             .padding(8)
@@ -84,12 +84,12 @@ struct AutoImportView: View {
                 .font(.title2)
                 .foregroundStyle(isTargeted ? Theme.accent : .secondary)
             HStack(spacing: 4) {
-                Text("Dosyayı buraya bırak ya da")
-                Button("Dosya Seç…") { showingFilePicker = true }
+                Text(L10n.t("auto.dropHere"))
+                Button(L10n.t("auto.chooseFile")) { showingFilePicker = true }
                     .buttonStyle(.link)
             }
             .font(.callout)
-            Text("PDF, Word (.docx), Excel (.xlsx), JSON ya da metin · en çok \(ImportFile.maxSizeText)")
+            Text(L10n.t("auto.fileTypes", ImportFile.maxSizeText))
                 .font(.secondaryText)
                 .foregroundStyle(.tertiary)
         }
@@ -118,11 +118,11 @@ struct AutoImportView: View {
         // Boyut OKUMADAN önce: 20 MB'tan büyük dosya belleğe hiç alınmaz.
         let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
         guard size <= ImportFile.maxBytes else {
-            error = "\(url.lastPathComponent): dosya çok büyük (\(TextStats.size(size))); en fazla \(ImportFile.maxSizeText)."
+            error = L10n.t("auto.fileTooLarge", url.lastPathComponent, TextStats.size(size), ImportFile.maxSizeText)
             return
         }
         guard let data = try? Data(contentsOf: url) else {
-            error = "\(url.lastPathComponent) okunamadı."
+            error = L10n.t("auto.fileUnreadable", url.lastPathComponent)
             return
         }
         let name = url.lastPathComponent
@@ -160,10 +160,10 @@ struct AutoImportView: View {
 
     nonisolated static func pdfText(_ data: Data) throws -> String {
         guard let document = PDFDocument(data: data) else {
-            throw ImportFile.Rejection(message: "PDF okunamadı.")
+            throw ImportFile.Rejection(message: L10n.t("auto.pdfUnreadable"))
         }
         guard !document.isLocked else {
-            throw ImportFile.Rejection(message: "Parola korumalı PDF açılmaz.")
+            throw ImportFile.Rejection(message: L10n.t("auto.pdfLocked"))
         }
         return document.string ?? ""
     }
@@ -216,16 +216,16 @@ struct AutoImportView: View {
                 if !findings.curl.isEmpty { curlList(findings.curl) }
                 if !findings.collections.isEmpty { collectionList(findings.collections) }
                 if findings.recoveredFromDamagedText {
-                    warning("Kibana kaydı bozuk metinden alan alan kurtarıldı (ör. resimden OCR ile çıkarılmış). Değerlerde okuma hatası olabilir (0/O, l/1): özellikle token ve gövdeyi kontrol et.")
+                    warning(L10n.t("auto.recovered"))
                 }
                 if !findings.truncatedFields.isEmpty {
-                    warning("Belgede kesik satırlar var; şu değerler eksik olabilir: \(findings.truncatedFields.joined(separator: ", ")).")
+                    warning(L10n.t("auto.truncated", findings.truncatedFields.joined(separator: ", ")))
                 }
                 if !findings.kibanaDocuments.isEmpty {
-                    found("\(findings.kibanaDocuments.count) Kibana kaydı bulundu: ortam denetimi ve başlık seçimi Kibana ekranında yapılır.")
+                    found(L10n.plural("auto.foundKibana", count: findings.kibanaDocuments.count))
                 }
                 if findings.openAPI != nil {
-                    found("OpenAPI dokümanı bulundu: sunucu adresi ve grup seçimi OpenAPI ekranında yapılır.")
+                    found(L10n.t("auto.foundOpenAPI"))
                 }
             }
         }
@@ -247,9 +247,9 @@ struct AutoImportView: View {
     private func curlList(_ findings: [AutoImport.CurlFinding]) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                found("\(findings.count) cURL komutu bulundu" + (findings.count == AutoImport.maxCurlCommands ? " (ilk \(AutoImport.maxCurlCommands))" : "") + ".")
+                found(findings.count == AutoImport.maxCurlCommands ? L10n.t("auto.foundCurl.capped", L10n.number(findings.count)) : L10n.plural("auto.foundCurl", count: findings.count))
                 Spacer()
-                Button(selectedCurl.count == findings.count ? "Hiçbirini Seçme" : "Tümünü Seç") {
+                Button(selectedCurl.count == findings.count ? L10n.t("auto.selectNone") : L10n.t("auto.selectAll")) {
                     selectedCurl = selectedCurl.count == findings.count ? [] : Set(findings.map(\.id))
                 }
                 .buttonStyle(.link)
@@ -284,7 +284,7 @@ struct AutoImportView: View {
 
     private func collectionList(_ collections: [AutoImport.CollectionFinding]) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            found("\(collections.count) koleksiyon bulundu.")
+            found(L10n.plural("auto.foundCollections", count: collections.count))
             ForEach(collections) { collection in
                 Toggle(isOn: Binding(
                     get: { selectedCollections.contains(collection.id) },
@@ -293,7 +293,7 @@ struct AutoImportView: View {
                     HStack(spacing: 6) {
                         Image(systemName: "folder").foregroundStyle(Theme.purple)
                         Text(collection.name).lineLimit(1)
-                        Text(collection.kind == .postman ? "Postman · script'ler aktarılmaz" : "dev2kit")
+                        Text(collection.kind == .postman ? L10n.t("auto.postmanNote") : "dev2kit")
                             .font(.secondaryText)
                             .foregroundStyle(.secondary)
                     }
@@ -307,19 +307,19 @@ struct AutoImportView: View {
     private var footer: some View {
         HStack {
             if let json = findings?.kibanaJSON {
-                Button("Kibana Ekranında Aç") {
+                Button(L10n.t("auto.openKibana")) {
                     dismiss()
                     onOpenKibana(json)
                 }
             }
             if let json = findings?.openAPI {
-                Button("OpenAPI Ekranında Aç") {
+                Button(L10n.t("auto.openOpenAPI")) {
                     dismiss()
                     onOpenOpenAPI(json)
                 }
             }
             Spacer()
-            Button("Vazgeç") { dismiss() }
+            Button(L10n.t("common.cancel")) { dismiss() }
                 .keyboardShortcut(.cancelAction)
             Button(importTitle) { performImport() }
                 .keyboardShortcut(.defaultAction)
@@ -330,11 +330,11 @@ struct AutoImportView: View {
     private var importCount: Int { selectedCurl.count + selectedCollections.count }
 
     private var importTitle: String {
-        guard importCount > 0 else { return "İçe Aktar" }
+        guard importCount > 0 else { return L10n.t("import.menu.title") }
         var parts: [String] = []
-        if !selectedCurl.isEmpty { parts.append("\(selectedCurl.count) istek") }
-        if !selectedCollections.isEmpty { parts.append("\(selectedCollections.count) koleksiyon") }
-        return "İçe Aktar (\(parts.joined(separator: ", ")))"
+        if !selectedCurl.isEmpty { parts.append(L10n.plural("review.requestCount", count: selectedCurl.count)) }
+        if !selectedCollections.isEmpty { parts.append(L10n.plural("auto.collectionCount", count: selectedCollections.count)) }
+        return L10n.t("auto.importWithCounts", parts.joined(separator: ", "))
     }
 
     /// Seçilen cURL istekleri tek koleksiyon, seçilen koleksiyonlar ayrı ayrı;
@@ -345,7 +345,7 @@ struct AutoImportView: View {
         let chosenCurl = findings.curl.filter { selectedCurl.contains($0.id) }
         if !chosenCurl.isEmpty {
             let warnings = chosenCurl.flatMap { finding in finding.warnings.map { "\(finding.request.name): \($0)" } }
-            let base = file.map { ($0.name as NSString).deletingPathExtension } ?? "Otomatik İçe Aktarma"
+            let base = file.map { ($0.name as NSString).deletingPathExtension } ?? L10n.t("auto.defaultCollection")
             prepared.append(appState.prepareCollectionImport(name: base, requests: chosenCurl.map(\.request), notes: warnings))
         }
         for collection in findings.collections where selectedCollections.contains(collection.id) {
@@ -366,7 +366,7 @@ struct AutoImportView: View {
         case .pdf: return "PDF"
         case .word: return "Word"
         case .excel: return "Excel"
-        case .text: return "Metin"
+        case .text: return L10n.t("body.kind.text")
         }
     }
 }

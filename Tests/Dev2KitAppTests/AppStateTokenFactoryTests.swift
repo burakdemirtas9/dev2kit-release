@@ -6,6 +6,9 @@ import XCTest
 /// kısıtları ve açılışta eski token değişkenlerinin taşınması.
 @MainActor
 final class AppStateTokenFactoryTests: XCTestCase {
+    /// Beklenen mesajlar Türkçe.
+    override func invokeTest() { withLanguage(.turkish) { super.invokeTest() } }
+
     private var harness: AppStateHarness!
     private var state: AppState { harness.state }
 
@@ -116,11 +119,11 @@ final class AppStateTokenFactoryTests: XCTestCase {
 
     func testCopiesGetTheirOwnVariableAndName() throws {
         state.addTokenFactoryRequest()
-        let first = harness.addRequest(named: "Token İsteği")
+        let first = harness.addRequest(named: "Token Request")
         let second = harness.addRequest(named: "login")
         state.copyToTokenFactory([first.id, second.id])
 
-        XCTAssertEqual(factory?.requests.map(\.name), ["Token İsteği", "Token İsteği kopya", "login"])
+        XCTAssertEqual(factory?.requests.map(\.name), ["Token Request", "Token Request kopya", "login"])
         XCTAssertEqual(factory?.requests.compactMap(\.tokenOutput?.variableName), ["token", "token2", "token3"])
         XCTAssertTrue(TokenFactory.problems(in: factory?.requests ?? [], environment: nil).isEmpty)
     }

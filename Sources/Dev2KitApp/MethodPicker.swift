@@ -28,12 +28,13 @@ struct MethodPicker: NSViewRepresentable {
         }
         button.target = context.coordinator
         button.action = #selector(Coordinator.changed(_:))
-        button.setAccessibilityLabel("Metot")
+        button.setAccessibilityLabel(L10n.t("request.method"))
         return button
     }
 
     func updateNSView(_ button: NSPopUpButton, context: Context) {
         context.coordinator.selection = $selection
+        button.setAccessibilityLabel(L10n.t("request.method"))
         if let index = HTTPMethod.allCases.firstIndex(of: selection), button.indexOfSelectedItem != index {
             button.selectItem(at: index)
         }

@@ -11,7 +11,7 @@ struct AuthEditor: View {
     /// Görünen ad; tür ve "boş hali" kuralı Core'da (`AuthKind`).
     private static func label(_ kind: AuthKind) -> String {
         switch kind {
-        case .none: return "Yok"
+        case .none: return L10n.t("auth.kind.none")
         case .basic: return "Basic"
         case .bearer: return "Bearer"
         case .apiKey: return "API Key"
@@ -27,7 +27,7 @@ struct AuthEditor: View {
         HStack(alignment: .top, spacing: 0) {
             // Sol sütun: auth türü dropdown'ı (Postman yerleşimi)
             VStack(alignment: .leading, spacing: 6) {
-                Text("Auth Türü")
+                Text(L10n.t("auth.type"))
                     .font(.secondaryText)
                     .foregroundStyle(.secondary)
                 Picker("", selection: kind) {
@@ -45,33 +45,33 @@ struct AuthEditor: View {
             VStack(alignment: .leading, spacing: 10) {
                 switch auth {
                 case .none:
-                    Text("Bu istek kimlik doğrulama kullanmıyor.")
+                    Text(L10n.t("auth.none.message"))
                         .foregroundStyle(.secondary)
                 case .basic(let username, let password):
-                    authField("Kullanıcı Adı", placeholder: "kullanıcı adı", limit: .credential, text: Binding(
+                    authField(L10n.t("auth.username"), placeholder: L10n.t("auth.username.placeholder"), limit: .credential, text: Binding(
                         get: { username },
                         set: { auth = .basic(username: $0, password: password) }
                     ))
-                    authField("Şifre", placeholder: "{{secret:isim}}", limit: .credential, text: Binding(
+                    authField(L10n.t("auth.password"), placeholder: L10n.t("auth.secret.placeholder"), limit: .credential, text: Binding(
                         get: { password },
                         set: { auth = .basic(username: username, password: $0) }
                     ))
                 case .bearer(let token):
-                    authField("Token", placeholder: "{{secret:isim}}", limit: .token, text: Binding(
+                    authField("Token", placeholder: L10n.t("auth.secret.placeholder"), limit: .token, text: Binding(
                         get: { token },
                         set: { auth = .bearer(token: $0) }
                     ))
                 case .apiKey(let key, let value, let location):
-                    authField("Key", placeholder: "X-Api-Key", limit: .key, text: Binding(
+                    authField(L10n.t("kv.column.key"), placeholder: "X-Api-Key", limit: .key, text: Binding(
                         get: { key },
                         set: { auth = .apiKey(key: $0, value: value, location: location) }
                     ))
-                    authField("Değer", placeholder: "{{secret:isim}}", limit: .token, text: Binding(
+                    authField(L10n.t("auth.value"), placeholder: L10n.t("auth.secret.placeholder"), limit: .token, text: Binding(
                         get: { value },
                         set: { auth = .apiKey(key: key, value: $0, location: location) }
                     ))
                     HStack {
-                        fieldLabel("Konum")
+                        fieldLabel(L10n.t("auth.location"))
                         Picker("", selection: Binding(
                             get: { location },
                             set: { auth = .apiKey(key: key, value: value, location: $0) }
@@ -91,7 +91,7 @@ struct AuthEditor: View {
 
                 if kind.wrappedValue != .none, kind.wrappedValue != .oauth2 {
                     Label(
-                        "Düz metin secret yazma: değeri Secrets'a ekleyip {{secret:isim}} olarak referans ver — {{ yazınca öneriler açılır.",
+                        L10n.t("auth.secretTip"),
                         systemImage: "lock.shield"
                     )
                     .font(.secondaryText)

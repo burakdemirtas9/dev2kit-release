@@ -4,6 +4,9 @@ import XCTest
 /// Uydurma verilerle: gerçek log kişisel veri ve geçerli token içerdiği için
 /// test verisi olarak kullanılmaz.
 final class KibanaImporterTests: XCTestCase {
+    /// Beklenen mesajlar Türkçe.
+    override func invokeTest() { withLanguage(.turkish) { super.invokeTest() } }
+
     private static let futureJWT = jwt(exp: Date().addingTimeInterval(86_400))
     private static let expiredJWT = jwt(exp: Date().addingTimeInterval(-3_600))
 
@@ -172,7 +175,7 @@ final class KibanaImporterTests: XCTestCase {
         noService["_source"] = ["request_path": "/x"]
         let result = try parse([document(), noPath, noService])
         XCTAssertEqual(result.entries.count, 1)
-        XCTAssertEqual(result.rejected, ["Kayıt 2: request_path yok.", "Kayıt 3: service_name yok; adres değişkeni türetilemiyor."])
+        XCTAssertEqual(result.rejected, ["Kayıt 2: request_path yok.", "Kayıt 3: service_name yok; URL değişkeni türetilemiyor."])
     }
 
     func testNonKibanaJSONIsRejected() {

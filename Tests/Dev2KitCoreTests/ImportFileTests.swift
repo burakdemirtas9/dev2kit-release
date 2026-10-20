@@ -2,6 +2,9 @@ import XCTest
 @testable import Dev2KitCore
 
 final class ImportFileTests: XCTestCase {
+    /// Beklenen mesajlar Türkçe.
+    override func invokeTest() { withLanguage(.turkish) { super.invokeTest() } }
+
     /// Sıkıştırmasız (stored) küçük ZIP: test için. CRC okuyucuda denetlenmiyor.
     private func zip(_ files: [(String, Data)], declaredSize: ((String) -> UInt32?)? = nil) -> Data {
         var out = Data()
@@ -52,7 +55,7 @@ final class ImportFileTests: XCTestCase {
         }
         XCTAssertEqual(rejection([0xCF, 0xFA, 0xED, 0xFE, 7, 0, 0, 1]), "Çalıştırılabilir dosya; içe aktarılmaz.")
         XCTAssertEqual(rejection([0x4D, 0x5A, 0x90, 0]), "Çalıştırılabilir dosya; içe aktarılmaz.")
-        XCTAssertEqual(rejection([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A]), "Resim dosyası; içinden istek çıkarılamaz.")
+        XCTAssertEqual(rejection([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A]), "Resim dosyası; içinden request çıkarılamaz.")
         XCTAssertTrue(rejection([0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1])?.contains(".docx") == true)
         XCTAssertNotNil(rejection([0x00, 0x01, 0x02, 0xFF]), "ikili veri metin sayılmaz")
         XCTAssertNotNil(rejection([]))

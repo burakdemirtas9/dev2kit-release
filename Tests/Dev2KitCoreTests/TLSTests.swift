@@ -178,6 +178,9 @@ final class CertificateLoaderTests: XCTestCase {
 }
 
 final class TrustStoreTests: XCTestCase {
+    /// Beklenen mesajlar Türkçe.
+    override func invokeTest() { withLanguage(.turkish) { super.invokeTest() } }
+
     private var directory: URL!
 
     override func setUpWithError() throws {
@@ -325,6 +328,9 @@ final class TLSRejectionErrorTests: XCTestCase {
 /// Ölçüldü: aynı kurum köküyle imzalı 300 günlük sertifika geçiyor,
 /// 10 yıllık `-67901` ile düşüyor.
 final class TLSRejectionReasonTests: XCTestCase {
+    /// Beklenen mesajlar Türkçe.
+    override func invokeTest() { withLanguage(.turkish) { super.invokeTest() } }
+
     private func osStatusError(_ code: OSStatus) -> CFError {
         CFErrorCreate(nil, NSOSStatusErrorDomain as CFString, CFIndex(code), nil)
     }

@@ -58,19 +58,19 @@ public enum JWTDecoder {
         var token = input.trimmingCharacters(in: .whitespacesAndNewlines.union(CharacterSet(charactersIn: "\"'")))
         if token.lowercased().hasPrefix("bearer ") { token = String(token.dropFirst(7)).trimmingCharacters(in: .whitespaces) }
         let parts = token.split(separator: ".", omittingEmptySubsequences: false).map(String.init)
-        if parts.count == 5 { throw WorkbenchIssue(message: "JWE (5 parça) şifreli bir token; anahtar olmadan çözülemez") }
+        if parts.count == 5 { throw WorkbenchIssue(message: L10n.t("jwt.jwe")) }
         guard parts.count == 3 else {
-            throw WorkbenchIssue(message: "JWT üç parça olmalı (başlık.yük.imza); \(parts.count) parça var")
+            throw WorkbenchIssue(message: L10n.t("jwt.parts", L10n.number(parts.count)))
         }
         return parts
     }
 
     private static func json(_ segment: String, name: String) throws -> (text: String, object: [String: Any]) {
         guard let data = Base64Codec.decode(segment) else {
-            throw WorkbenchIssue(message: "JWT \(name) Base64URL olarak çözülemedi")
+            throw WorkbenchIssue(message: L10n.t("jwt.base64", name))
         }
         guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            throw WorkbenchIssue(message: "JWT \(name) bir JSON nesnesi değil")
+            throw WorkbenchIssue(message: L10n.t("jwt.notObject", name))
         }
         return (String(decoding: data, as: UTF8.self), object)
     }

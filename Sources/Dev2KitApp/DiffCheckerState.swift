@@ -36,7 +36,7 @@ final class DiffCheckerState {
     enum ResultMode: String, CaseIterable, Identifiable {
         case changes, lines
         var id: String { rawValue }
-        var title: String { self == .changes ? "Changes" : "Lines" }
+        var title: String { self == .changes ? L10n.t("diff.mode.changes") : L10n.t("diff.mode.lines") }
     }
 
     private(set) var document = DiffDocument()
@@ -123,6 +123,13 @@ final class DiffCheckerState {
 
     func runNow() {
         schedule(debounced: false, force: true)
+    }
+
+    /// Arayüz dili değişti: uyarılar yeni dilde yeniden üretilsin. Büyük
+    /// girdi kendiliğinden çalışmaz, ona dokunulmaz.
+    func languageChanged() {
+        guard !isLarge, result != nil else { return }
+        schedule(debounced: false)
     }
 
     // MARK: - Fark gezintisi

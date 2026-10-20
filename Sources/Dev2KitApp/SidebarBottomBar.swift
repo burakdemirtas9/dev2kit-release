@@ -34,46 +34,52 @@ struct SidebarBottomBar: View {
                 Button {
                     appState.addCollection()
                 } label: {
-                    Label("Yeni Koleksiyon", systemImage: "folder.badge.plus")
+                    // Varsayılan kenar çubuğu genişliğinde iki dilde de sığsın:
+                    // Türkçede kısa etiket ("İçe Aktar" daha geniş, "Yeni
+                    // Koleksiyon" kırpılıyordu); tam metin ipucunda.
+                    Label(L10n.t("sidebar.newCollection.short"), systemImage: "folder.badge.plus")
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
                         .frame(maxWidth: .infinity)
                 }
+                .help(L10n.t("menu.newCollection"))
                 Menu {
-                    Button("Otomatik İçe Aktar…") {
+                    Button(L10n.t("import.menu.auto")) {
                         showingAutoImport = true
                     }
                     Divider()
-                    Button("dev2kit Koleksiyonu…") {
+                    Button(L10n.t("import.menu.dev2kit")) {
                         pendingImportSource = .dev2kit
                         showingImporter = true
                     }
                     Divider()
-                    Button("Postman'den Otomatik Al…") {
+                    Button(L10n.t("import.menu.postmanAccount")) {
                         showingPostmanImport = true
                     }
-                    Button("Postman Dosyası…") {
+                    Button(L10n.t("import.menu.postmanFile")) {
                         pendingImportSource = .postman
                         showingImporter = true
                     }
                     Divider()
-                    Button("cURL'den İstek…") {
+                    Button(L10n.t("import.menu.curl")) {
                         showingCurlImport = true
                     }
-                    Button("Kibana Logundan İstek…") {
+                    Button(L10n.t("import.menu.kibana")) {
                         kibanaSheet = ImportPrefill(json: nil)
                     }
                     Divider()
-                    Button("Swagger / OpenAPI Adresinden…") {
+                    Button(L10n.t("import.menu.openapi")) {
                         openAPISheet = ImportPrefill(json: nil)
                     }
-                    Button("Kaynak Koddan Giden İstekler…") {
+                    Button(L10n.t("import.menu.source")) {
                         showingSourceImport = true
                     }
                 } label: {
-                    Label("İçe Aktar", systemImage: "square.and.arrow.down")
+                    Label(L10n.t("import.menu.title"), systemImage: "square.and.arrow.down")
                 }
                 .menuStyle(.borderlessButton)
                 .fixedSize()
-                .help("Koleksiyon ya da istek içe aktar: otomatik (metin, PDF, Word, Excel), dev2kit, Postman, cURL, Kibana, OpenAPI")
+                .help(L10n.t("import.menu.help"))
             }
             .padding(8)
         }

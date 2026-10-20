@@ -133,16 +133,16 @@ struct RequestDetailView: View {
             controlsRow
         }
         .confirmationDialog(
-            "Son gönderilen hale dönülsün mü?",
+            L10n.t("request.revert.title"),
             isPresented: $showingRevertConfirm,
             titleVisibility: .visible
         ) {
-            Button("Düzenlemeleri Sil", role: .destructive) {
+            Button(L10n.t("request.revert.confirm"), role: .destructive) {
                 appState.revertToLastSent(request.id)
             }
-            Button("Vazgeç", role: .cancel) {}
+            Button(L10n.t("common.cancel"), role: .cancel) {}
         } message: {
-            Text("Son gönderimden sonraki düzenlemelerin silinir. Geri alınamaz.")
+            Text(L10n.t("request.revert.message"))
         }
     }
 
@@ -165,16 +165,16 @@ struct RequestDetailView: View {
                 Button {
                     appState.cancelSend(request.id)
                 } label: {
-                    Label("Durdur", systemImage: "stop.fill")
+                    Label(L10n.t("request.stop"), systemImage: "stop.fill")
                 }
                 // Workbench açıkken (API Client gizli ama canlı) ⌘. / ⌘↩ buraya gitmesin.
                 .keyboardShortcut(KeyboardShortcut(".", modifiers: .command), onlyIn: .apiClient)
-                .help("İsteği iptal et (⌘.)")
+                .help(L10n.t("request.stop.help"))
             } else {
                 Button {
                     appState.send(request)
                 } label: {
-                    Label("Gönder", systemImage: "paperplane.fill")
+                    Label(L10n.t("request.send"), systemImage: "paperplane.fill")
                         .padding(.horizontal, 6)
                         .frame(height: 28)
                 }
@@ -189,7 +189,7 @@ struct RequestDetailView: View {
                 Image(systemName: "gearshape")
                     .frame(width: 16, height: 22)
             }
-            .help("İstek ayarları: zaman aşımı, yönlendirme, çerez")
+            .help(L10n.t("request.options.help"))
             .popover(isPresented: $showingOptions, arrowEdge: .bottom) {
                 RequestOptionsPopover(options: $request.options)
             }
@@ -200,7 +200,7 @@ struct RequestDetailView: View {
                 Image(systemName: "terminal")
                     .frame(width: 16, height: 22)
             }
-            .help("cURL komutu olarak al")
+            .help(L10n.t("request.curl.help"))
             .disabled(request.url.isEmpty)
             .popover(isPresented: $showingCurl, arrowEdge: .bottom) {
                 CurlPopover(request: request)
@@ -219,7 +219,7 @@ struct RequestDetailView: View {
             // ölçüsü sayıp uzun adlı istek seçildiğinde pencereyi büyütüyor
             // ve kaydırıyordu (900 -> 1288 punto ölçüldü). Sekme değişimi
             // bu yüzden de sıçramalı görünüyordu.
-            TextField("İstek adı", text: $request.name)
+            TextField(L10n.t("request.name.placeholder"), text: $request.name)
                 .inputLimit(.name)
                 .textFieldStyle(.plain)
                 .font(.system(size: 14, weight: .semibold))
@@ -230,14 +230,14 @@ struct RequestDetailView: View {
                 Button {
                     showingRevertConfirm = true
                 } label: {
-                    Label("son gönderilenden farklı", systemImage: "circle.fill")
+                    Label(L10n.t("request.dirty"), systemImage: "circle.fill")
                         .font(.secondaryText)
                         .labelStyle(DirtyLabelStyle())
                         .frame(minHeight: 20)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .help("Bu istek en son gönderildiği halden farklı — tıklayıp o hale dönebilirsin")
+                .help(L10n.t("request.dirty.help"))
             }
 
             Spacer()
@@ -255,11 +255,11 @@ struct RequestDetailView: View {
         case .idle:
             EmptyView()
         case .pending:
-            Label("Kaydediliyor…", systemImage: "arrow.triangle.2.circlepath")
+            Label(L10n.t("request.saving"), systemImage: "arrow.triangle.2.circlepath")
                 .font(.tinyText)
                 .foregroundStyle(.tertiary)
         case .saved(let date):
-            Label("Kaydedildi \(date.formatted(date: .omitted, time: .shortened))", systemImage: "checkmark.circle")
+            Label(L10n.t("request.saved", L10n.time(date)), systemImage: "checkmark.circle")
                 .font(.tinyText)
                 .foregroundStyle(.tertiary)
         case .failed(let message):
@@ -293,11 +293,11 @@ struct RequestDetailView: View {
             case .headers:
                 KeyValueEditor(
                     entries: $request.headers,
-                    keyPlaceholder: "Header-Adi",
-                    valuePlaceholder: "değer veya {{secret:isim}}",
+                    keyPlaceholder: L10n.t("headers.key.placeholder"),
+                    valuePlaceholder: L10n.t("headers.value.placeholder"),
                     keyNote: { key in
                         Dev2KitIdentity.isUserAgent(key)
-                            ? "Yok sayılır: dev2kit her istekte kendi User-Agent'ını (\(Dev2KitIdentity.userAgent)) gönderir, değiştirilemez. Sunucu loglarında test trafiği ayırt edilsin diye."
+                            ? L10n.t("headers.userAgent.note", Dev2KitIdentity.userAgent)
                             : nil
                     }
                 )
@@ -306,7 +306,7 @@ struct RequestDetailView: View {
             case .auth:
                 AuthEditor(auth: $request.auth)
             case .params:
-                KeyValueEditor(entries: paramsBinding, keyPlaceholder: "param", valuePlaceholder: "değer veya {{degisken}}")
+                KeyValueEditor(entries: paramsBinding, keyPlaceholder: L10n.t("query.key.placeholder"), valuePlaceholder: L10n.t("query.value.placeholder"))
             case .token:
                 TokenOutputEditor(request: $request)
             }

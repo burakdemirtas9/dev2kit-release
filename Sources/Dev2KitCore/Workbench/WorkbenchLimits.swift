@@ -71,18 +71,17 @@ public enum WorkbenchLimits {
     public static func displayed(line: String) -> String {
         guard line.utf16.count > maxDisplayedLineCharacters else { return line }
         let prefix = String(line.prefix(maxDisplayedLineCharacters))
-        return prefix + " … (\(TextStats.size(line.utf8.count)) line, truncated)"
+        return prefix + L10n.t("limits.lineTruncated", TextStats.size(line.utf8.count))
     }
 
-    /// Editör kapısının reddetme nedeni. Mesajı ekran kendi dilinde yazar:
-    /// Workbench İngilizce, API Client Türkçe.
+    /// Editör kapısının reddetme nedeni; mesaj seçili dilde (`L10n`).
     public enum Rejection: Equatable, Sendable {
         case tooLarge(bytes: Int)
         case tooManyLines(Int)
         case atLineLimit
         case longLineEdit
 
-        public var english: String {
+        public var localized: String {
             switch self {
             case .tooLarge(let bytes): return WorkbenchLimits.tooLargeMessage(bytes: bytes)
             case .tooManyLines(let lines): return WorkbenchLimits.tooManyLinesMessage(lines: lines)
@@ -90,39 +89,20 @@ public enum WorkbenchLimits {
             case .longLineEdit: return WorkbenchLimits.longLineEditMessage
             }
         }
-
-        public var turkish: String {
-            switch self {
-            case .tooLarge(let bytes):
-                return "Eklenmedi: metin \(TextStats.size(bytes)) olurdu; sınır \(TextStats.size(maxInputBytes))."
-            case .tooManyLines(let lines):
-                return "Eklenmedi: metin \(groupedTR(lines)) satır olurdu; sınır \(groupedTR(maxInputLines)) satır."
-            case .atLineLimit:
-                return "Eklenmedi: metin \(groupedTR(maxInputLines)) satır sınırında. Önce bir şey silin."
-            case .longLineEdit:
-                return "Eklenmedi: \(TextStats.size(maxEditorLineBytes))'tan uzun satır editörde düzenlenemez."
-            }
-        }
     }
 
-    static func groupedTR(_ value: Int) -> String {
-        let number = NumberFormatter()
-        number.numberStyle = .decimal
-        number.locale = Locale(identifier: "tr_TR")
-        return number.string(from: NSNumber(value: value)) ?? "\(value)"
-    }
-
-    // MARK: Mesajlar (Workbench arayüzü İngilizce)
+    // MARK: Mesajlar
 
     public static func tooLargeMessage(bytes: Int) -> String {
-        "Not added: the result would be \(TextStats.size(bytes)). The limit is \(TextStats.size(maxInputBytes)) per input."
+        L10n.t("limits.tooLarge", TextStats.size(bytes), TextStats.size(maxInputBytes))
     }
 
-    public static let atLineLimitMessage =
-        "Not added: the input is at the \(grouped(maxInputLines))-line limit. Delete something first."
+    public static var atLineLimitMessage: String {
+        L10n.t("limits.atLineLimit", L10n.number(maxInputLines))
+    }
 
     public static func tooManyLinesMessage(lines: Int) -> String {
-        "Not added: the result would have \(grouped(lines)) lines. The limit is \(grouped(maxInputLines)) lines per input."
+        L10n.t("limits.tooManyLines", L10n.number(lines), L10n.number(maxInputLines))
     }
 
     /// Çıktı girdi sınırlarını (boyut ya da satır) aşıyorsa açıklama; aşmıyorsa `nil`.
@@ -130,16 +110,10 @@ public enum WorkbenchLimits {
         let bytes = output.utf8.count
         let lines = TextStats.lineCount(output)
         guard bytes > maxInputBytes || lines > maxInputLines else { return nil }
-        return "Output is \(TextStats.size(bytes)), \(grouped(lines)) lines: it can be copied, but editing it or using it as input is limited to \(TextStats.size(maxInputBytes)) and \(grouped(maxInputLines)) lines (edits flow into the input)."
+        return L10n.t("limits.outputEdit", TextStats.size(bytes), L10n.number(lines), TextStats.size(maxInputBytes), L10n.number(maxInputLines))
     }
 
-    static func grouped(_ value: Int) -> String {
-        let number = NumberFormatter()
-        number.numberStyle = .decimal
-        number.locale = Locale(identifier: "en_US")
-        return number.string(from: NSNumber(value: value)) ?? "\(value)"
+    public static var longLineEditMessage: String {
+        L10n.t("limits.longLineEdit", TextStats.size(maxEditorLineBytes))
     }
-
-    public static let longLineEditMessage =
-        "Not added: lines longer than \(TextStats.size(maxEditorLineBytes)) cannot be edited in the editor."
 }

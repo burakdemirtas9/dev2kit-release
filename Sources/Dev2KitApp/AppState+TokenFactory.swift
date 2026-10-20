@@ -27,7 +27,7 @@ extension AppState {
         let factoryID = workspace.ensureTokenFactoryCollection()
         guard let index = workspace.collections.firstIndex(id: factoryID) else { return }
         let request = RequestModel(
-            name: "Token İsteği",
+            name: L10n.t("token.defaultName"),
             method: .post,
             tokenOutput: TokenOutput(variableName: uniqueTokenVariableName(base: TokenOutput.defaultVariableName))
         )
@@ -55,7 +55,7 @@ extension AppState {
             request.id = UUID()
             request.name = CollectionPorting.uniqueName(
                 request.name,
-                suffix: "kopya",
+                suffix: L10n.t("name.copySuffix"),
                 existingNames: workspace.collections[index].requests.map(\.name)
             )
             request.tokenOutput = TokenOutput(variableName: uniqueTokenVariableName(base: TokenOutput.defaultVariableName))
@@ -148,8 +148,7 @@ extension AppState {
                 // Onay ekranı token alırken gösterilemez; kullanıcı token
                 // isteğini bir kez kendisi gönderip onaylamalı.
                 throw TokenFetchError(
-                    message: "token isteği \"\(request.name)\" güvenlik onayı bekliyor. "
-                        + "Token Factory'de isteği açıp bir kez gönder ve onayla."
+                    message: L10n.t("token.needsApproval", request.name)
                 )
             }
             return try TokenFactory.issue(statusCode: response.statusCode, body: response.body, output: output)
@@ -219,7 +218,7 @@ extension AppState {
         } catch {
             tokenCache[key] = nil
             tokenStates[key] = isLive(key) ? .failed(error.localizedDescription) : nil
-            showTokenAlert("Token güncellenemedi", "{{\(source.variable)}}: \(error.localizedDescription)", for: request.id)
+            showTokenAlert(L10n.t("token.alert.updateFailed"), "{{\(source.variable)}}: \(error.localizedDescription)", for: request.id)
         }
     }
 
@@ -296,7 +295,7 @@ extension AppState {
     struct TokenError: LocalizedError {
         let variable: String
         let reason: String
-        var errorDescription: String? { "{{\(variable)}} için token alınamadı; istek gönderilmedi. \(reason)" }
+        var errorDescription: String? { L10n.t("token.error", variable, reason) }
     }
 
     /// Alttan çıkıp kendiliğinden kaybolan uyarı. Yalnızca ait olduğu istek

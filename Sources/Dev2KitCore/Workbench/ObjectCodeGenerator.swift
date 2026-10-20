@@ -36,11 +36,11 @@ public enum ObjectCodeGenerator {
         public var errorDescription: String? {
             switch self {
             case .rootNotObject:
-                return "Kök bir nesne ya da nesne dizisi olmalı: sınıf yalnızca nesneden üretilir."
+                return L10n.t("objects.rootObject")
             case .tooDeep(let limit):
-                return "İç içe derinlik \(limit)'yi aşıyor. Daha derin yapılardan sınıf üretilmez."
+                return L10n.t("objects.tooDeep", L10n.number(limit))
             case .tooManyTypes(let limit):
-                return "\(limit)'den fazla farklı nesne yapısı var; çıktı okunamaz hale gelir. Daha küçük bir örnek dene."
+                return L10n.t("objects.tooManyTypes", L10n.number(limit))
             }
         }
     }

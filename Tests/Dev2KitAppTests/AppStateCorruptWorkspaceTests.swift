@@ -5,6 +5,9 @@ import XCTest
 /// Okunamayan workspace.json: uyarı gösterilirken veri ezilmiş olmamalı.
 @MainActor
 final class AppStateCorruptWorkspaceTests: XCTestCase {
+    /// Beklenen mesajlar Türkçe.
+    override func invokeTest() { withLanguage(.turkish) { super.invokeTest() } }
+
     private var directory: URL!
     private var store: WorkspaceStore!
     private let corrupt = Data(#"{"collections": [ { "name": "Önemli" "#.utf8)

@@ -11,12 +11,12 @@ struct NoRequestSelectedView: View {
 
     var body: some View {
         ContentUnavailableView {
-            Label("İstek Seç", systemImage: "paperplane")
+            Label(L10n.t("empty.noRequest.title"), systemImage: "paperplane")
         } description: {
             HStack(spacing: 0) {
-                Text("Soldan bir istek seç veya ")
-                InlineActionLink("yeni bir istek oluştur") { appState.createUngroupedRequest() }
-                Text(".")
+                Text(L10n.t("empty.noRequest.prefix"))
+                InlineActionLink(L10n.t("empty.noRequest.create")) { appState.createUngroupedRequest() }
+                Text(L10n.t("empty.noRequest.suffix"))
             }
         }
     }

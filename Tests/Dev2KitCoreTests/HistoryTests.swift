@@ -2,6 +2,9 @@ import XCTest
 @testable import Dev2KitCore
 
 final class HistoryRedactorTests: XCTestCase {
+    /// Beklenen mesajlar Türkçe.
+    override func invokeTest() { withLanguage(.turkish) { super.invokeTest() } }
+
     private let mask = HistoryRedactor.mask
 
     // MARK: - Referans korunur, ham değer maskelenir
@@ -368,6 +371,9 @@ final class WorkspaceBaselineTests: XCTestCase {
 }
 
 final class HistoryTrimmerTests: XCTestCase {
+    /// Beklenen mesajlar Türkçe.
+    override func invokeTest() { withLanguage(.turkish) { super.invokeTest() } }
+
     func testShortBodyUntouched() {
         var model = RequestModel()
         model.body = .raw(content: "kısa", contentType: "text/plain")

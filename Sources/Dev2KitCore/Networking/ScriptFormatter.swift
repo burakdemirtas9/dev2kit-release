@@ -52,7 +52,7 @@ public enum ScriptFormatter {
             // String ve template literal
             if ch == "\"" || ch == "'" || ch == "`" {
                 guard let quoted = scanner.readQuoted(multiline: ch == "`") else {
-                    throw BeautifyError.invalid(language, "\(ch) ile açılan metin kapatılmamış.")
+                    throw BeautifyError.invalid(language, L10n.t("beautify.unclosedText", String(ch)))
                 }
                 writer.append(quoted)
                 continue
@@ -87,7 +87,7 @@ public enum ScriptFormatter {
             case "}":
                 while stack.last == "<" { stack.removeLast() }
                 guard stack.last == "{" else {
-                    throw BeautifyError.invalid(language, "eşleşmeyen } karakteri.")
+                    throw BeautifyError.invalid(language, L10n.t("beautify.unmatched", "}"))
                 }
                 stack.removeLast()
                 writer.level = max(0, writer.level - 1)
@@ -120,7 +120,7 @@ public enum ScriptFormatter {
                 while stack.last == "<" { stack.removeLast() }
                 let expected: Character = ch == ")" ? "(" : "["
                 guard stack.last == expected else {
-                    throw BeautifyError.invalid(language, "eşleşmeyen \(ch) karakteri.")
+                    throw BeautifyError.invalid(language, L10n.t("beautify.unmatched", String(ch)))
                 }
                 stack.removeLast()
                 writer.trimTrailing()
@@ -151,7 +151,7 @@ public enum ScriptFormatter {
 
         while stack.last == "<" { stack.removeLast() }
         if let unclosed = stack.last {
-            throw BeautifyError.invalid(language, "\(unclosed) kapatılmamış.")
+            throw BeautifyError.invalid(language, L10n.t("beautify.unclosed", String(unclosed)))
         }
         writer.trimTrailing()
         return writer.text

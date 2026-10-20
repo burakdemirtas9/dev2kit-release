@@ -18,6 +18,8 @@ struct WorkbenchView: View {
         }
         // API Client'tan Workbench'e geçince imleç girdide olsun.
         .onAppear { workbench.requestInputFocus() }
+        // Hesaplanmış mesajlar (doğrulama, özet) seçili dilde kalsın.
+        .onChange(of: Localizer.shared.language) { workbench.languageChanged() }
     }
 }
 
@@ -34,8 +36,8 @@ struct WorkbenchSidebar: View {
                 Image(systemName: "magnifyingglass")
                     .font(.secondaryText)
                     .foregroundStyle(.secondary)
-                TextField("Search tools", text: $state.searchQuery)
-                    .inputLimit(.search, english: true)
+                TextField(L10n.t("wb.searchTools"), text: $state.searchQuery)
+                    .inputLimit(.search)
                     .textFieldStyle(.plain)
                     .focused($searchFocused)
                 // ⌘K ipucu: arama kutusuna kısayolla gidilir.
@@ -66,7 +68,7 @@ struct WorkbenchSidebar: View {
                 set: { if let id = $0 { workbench.select(toolID: id) } }
             )) {
                 if tools.isEmpty, !WorkbenchCatalog.diffCheckerMatches(workbench.searchQuery) {
-                    Text("No tools match \"\(workbench.searchQuery)\"")
+                    Text(L10n.t("wb.noToolsMatch", workbench.searchQuery))
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
@@ -104,7 +106,7 @@ struct WorkbenchSidebar: View {
     /// girdi yalnızca bellekte. ("Offline Mode" değil: API Client ağa çıkıyor.)
     private var localBadge: some View {
         HStack(spacing: 6) {
-            Text("Local only")
+            Text(L10n.t("wb.localOnly"))
                 .font(.secondaryMono)
                 .foregroundStyle(.secondary)
             Spacer(minLength: 0)
@@ -112,7 +114,7 @@ struct WorkbenchSidebar: View {
         }
         .padding(.horizontal, 12)
         .frame(height: 30)
-        .help("Workbench tools run on this Mac only: no network requests; inputs stay in memory and are never written to disk or history.")
+        .help(L10n.t("wb.localOnly.help"))
         .accessibilityElement(children: .combine)
     }
 }

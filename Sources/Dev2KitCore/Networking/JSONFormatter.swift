@@ -17,7 +17,7 @@ public enum JSONFormatter {
         let trimmed = try BeautifyError.requireContent(text, language: language)
         let withoutComments = CodeScanner.strippingComments(trimmed)
         guard !withoutComments.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            throw BeautifyError.invalid(language, "yorumlardan başka içerik yok")
+            throw BeautifyError.invalid(language, L10n.t("beautify.onlyComments"))
         }
         do {
             _ = try JSONSerialization.jsonObject(with: Data(withoutComments.utf8), options: [.fragmentsAllowed])
@@ -72,7 +72,7 @@ public enum JSONFormatter {
             case "\"":
                 // Doğrulamadan geçti: string kapalı. Yine de savunmacı.
                 guard let quoted = scanner.readQuoted(multiline: false) else {
-                    throw BeautifyError.invalid(language, "string kapatılmamış")
+                    throw BeautifyError.invalid(language, L10n.t("beautify.unclosedString"))
                 }
                 writer.append(quoted)
                 continue

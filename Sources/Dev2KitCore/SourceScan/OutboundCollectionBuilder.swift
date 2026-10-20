@@ -40,19 +40,19 @@ public enum OutboundCollectionBuilder {
             let (key, fallback) = SpringConfig.splitPlaceholder(placeholder)
             // Spring gibi: anahtar ayarlarda yoksa @Value/${…:varsayılan} değeri.
             guard let raw = config.value(for: key, profile: profile) ?? fallback.map({ config.resolve($0, profile: profile) }) else {
-                return Variable(name: call.baseVariable, status: .missing(reason: "ayarlarda yok"), origin: key)
+                return Variable(name: call.baseVariable, status: .missing(reason: L10n.t("outbound.reason.notInConfig")), origin: key)
             }
             if raw.contains("${") {
-                return Variable(name: call.baseVariable, status: .missing(reason: "çalışma anında geliyor (ortam değişkeni ya da Config Server)"), origin: key)
+                return Variable(name: call.baseVariable, status: .missing(reason: L10n.t("outbound.reason.runtime")), origin: key)
             }
             if isSensitive(key: key, value: raw) {
                 return Variable(name: call.baseVariable, status: .sensitive, origin: key)
             }
             return Variable(name: call.baseVariable, status: .value(trimSlash(raw)), origin: key)
         case .literal(let address):
-            return Variable(name: call.baseVariable, status: .value(trimSlash(address)), origin: "kodda")
+            return Variable(name: call.baseVariable, status: .value(trimSlash(address)), origin: L10n.t("outbound.origin.code"))
         case .unknown:
-            return Variable(name: call.baseVariable, status: .missing(reason: "servis keşfi ya da çalışma anında kurulan istemci"), origin: "bilinmiyor")
+            return Variable(name: call.baseVariable, status: .missing(reason: L10n.t("outbound.reason.discovery")), origin: L10n.t("outbound.origin.unknown"))
         }
     }
 
@@ -81,7 +81,7 @@ public enum OutboundCollectionBuilder {
         var usedNames = Set<String>()
         let requests = result.calls.map { call -> RequestModel in
             var name = requestName(for: call)
-            if !call.isComplete { name += " (eksik)" }
+            if !call.isComplete { name += L10n.t("outbound.incompleteSuffix") }
             var unique = name
             var counter = 2
             while !usedNames.insert(unique).inserted {
@@ -102,7 +102,7 @@ public enum OutboundCollectionBuilder {
             return request
         }
         let (name, renamed) = try CollectionPorting.resolveName(
-            "\(result.projectName) — Giden İstekler",
+            L10n.t("outbound.collectionName", result.projectName),
             suffix: "2",
             existingNames: existingNames
         )
@@ -132,23 +132,23 @@ public enum OutboundCollectionBuilder {
             let count = result.calls.filter { $0.source == source }.count
             return count > 0 ? "\(count) \(source.rawValue)" : nil
         }
-        notes.append("\(result.javaFileCount) Java dosyası okundu (derlenmedi, çalıştırılmadı): \(counts.joined(separator: ", ")) çağrısı bulundu.")
+        notes.append(L10n.t("outbound.note.scanned", L10n.plural("outbound.javaFiles", count: result.javaFileCount), counts.joined(separator: ", ")))
         for variable in variables {
             switch variable.status {
             case .value:
                 break
             case .sensitive:
-                notes.append("{{\(variable.name)}}: \(variable.origin) değeri kimlik bilgisi içeriyor, kopyalanmadı; adresi elle gir.")
+                notes.append(L10n.t("outbound.note.credential", variable.name, variable.origin))
             case .missing(let reason):
-                notes.append("{{\(variable.name)}}: adres bulunamadı (\(reason)); değeri environment'a elle gir.")
+                notes.append(L10n.t("outbound.note.missing", variable.name, reason))
             }
         }
         let incomplete = result.calls.filter { !$0.isComplete && $0.baseOrigin != .unknown }
         for call in incomplete.prefix(25) {
-            notes.append("Eksik: \(call.location) — \(requestName(for: call)); adres çalışma anında kuruluyor, {{…}} yerlerini doldur.")
+            notes.append(L10n.t("outbound.note.incomplete", call.location, requestName(for: call)))
         }
         if incomplete.count > 25 {
-            notes.append("… ve \(incomplete.count - 25) eksik istek daha.")
+            notes.append(L10n.plural("outbound.note.more", count: incomplete.count - 25))
         }
         return notes + result.notes
     }

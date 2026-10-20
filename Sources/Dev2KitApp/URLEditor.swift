@@ -69,7 +69,7 @@ struct URLEditor: NSViewRepresentable {
         textView.isVerticallyResizable = true
         textView.minSize = NSSize(width: 0, height: Self.lineHeight)
         textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
-        textView.setAccessibilityLabel("Adres")
+        textView.setAccessibilityLabel(L10n.t("request.url.accessibility"))
         textView.string = text
 
         scrollView.documentView = textView

@@ -3,6 +3,9 @@ import XCTest
 
 /// Workbench JSONPath aracı: çıktı, özet, hata ayrımı ve katalogdaki yeri.
 final class JSONPathToolTests: XCTestCase {
+    /// Beklenen mesajlar İngilizce.
+    override func invokeTest() { withLanguage(.english) { super.invokeTest() } }
+
     private let tool = WorkbenchTools.jsonPath
 
     private func run(_ input: String, query: String) throws -> WorkbenchRunResult {

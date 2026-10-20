@@ -44,14 +44,14 @@ public enum HexCodec {
         let cleaned = text.replacingOccurrences(of: "0x", with: "").replacingOccurrences(of: "0X", with: "")
             .filter { !$0.isWhitespace && $0 != ":" && $0 != "-" }
         guard cleaned.count % 2 == 0 else {
-            throw WorkbenchIssue(message: "Hex çift sayıda karakter olmalı (\(cleaned.count) karakter var)")
+            throw WorkbenchIssue(message: L10n.t("hex.odd", L10n.number(cleaned.count)))
         }
         var data = Data(capacity: cleaned.count / 2)
         var index = cleaned.startIndex
         while index < cleaned.endIndex {
             let next = cleaned.index(index, offsetBy: 2)
             guard let byte = UInt8(cleaned[index..<next], radix: 16) else {
-                throw WorkbenchIssue(message: "Geçersiz hex: \"\(cleaned[index..<next])\"")
+                throw WorkbenchIssue(message: L10n.t("hex.invalid", String(cleaned[index..<next])))
             }
             data.append(byte)
             index = next
@@ -74,7 +74,7 @@ public enum URLCodec {
     public static func decode(_ text: String, form: Bool) throws -> String {
         let source = form ? text.replacingOccurrences(of: "+", with: " ") : text
         guard let decoded = source.removingPercentEncoding else {
-            throw WorkbenchIssue(message: "Geçersiz yüzde kodlaması: % ardından iki hex basamak olmalı (ör. %20)")
+            throw WorkbenchIssue(message: L10n.t("url.badPercent"))
         }
         return decoded
     }

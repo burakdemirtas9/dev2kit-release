@@ -15,19 +15,19 @@ struct NetworkPopover: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label("Bağlantı", systemImage: "network")
+            Label(L10n.t("network.title"), systemImage: "network")
                 .font(.headline)
 
             section([
-                ("HTTP Sürümü", info.httpVersion),
-                ("Yerel Adres", info.localAddress),
-                ("Uzak Adres", info.remoteAddress),
+                (L10n.t("network.httpVersion"), info.httpVersion),
+                (L10n.t("network.localAddress"), info.localAddress),
+                (L10n.t("network.remoteAddress"), info.remoteAddress),
             ])
 
             let tls = section([
-                ("TLS Protokolü", info.tlsProtocol),
-                ("Şifre Takımı", info.cipherName),
-                ("Bağlantı", connectionNote),
+                (L10n.t("network.tlsProtocol"), info.tlsProtocol),
+                (L10n.t("network.cipher"), info.cipherName),
+                (L10n.t("network.connection"), connectionNote),
             ])
             if hasAny([info.tlsProtocol, info.cipherName, connectionNote]) {
                 Divider()
@@ -37,13 +37,13 @@ struct NetworkPopover: View {
             if let certificate = info.certificate {
                 Divider()
                 section([
-                    ("Sertifika CN", certificate.commonName),
-                    ("Sağlayıcı CN", certificate.issuerCommonName),
+                    (L10n.t("network.certificateCN"), certificate.commonName),
+                    (L10n.t("network.issuerCN"), certificate.issuerCommonName),
                 ])
                 if let validUntil = certificate.validUntil {
                     row(
-                        "Geçerlilik Sonu",
-                        validUntil.formatted(date: .abbreviated, time: .shortened),
+                        L10n.t("network.validUntil"),
+                        L10n.date(validUntil),
                         warning: certificate.isExpired()
                     )
                 }
@@ -57,8 +57,8 @@ struct NetworkPopover: View {
     /// açıklar; proxy bilgisi kurumsal ağda beklenen ama doğrulanması gereken şey.
     private var connectionNote: String? {
         var parts: [String] = []
-        if info.isReusedConnection == true { parts.append("yeniden kullanıldı") }
-        if info.isProxyConnection == true { parts.append("proxy üzerinden") }
+        if info.isReusedConnection == true { parts.append(L10n.t("network.reused")) }
+        if info.isProxyConnection == true { parts.append(L10n.t("network.viaProxy")) }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 

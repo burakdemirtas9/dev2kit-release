@@ -7,7 +7,8 @@ import Foundation
 /// olursa dosya yüzlerce megabayta çıkar. Üstelik dosya her gönderimde
 /// tamamen yeniden yazıldığı için bu, her istekte ödenen bir maliyet olur.
 public enum HistoryTrimmer {
-    public static let truncationNotice = "\n… (kayıt için kırpıldı)"
+    /// Kayda yazıldığı anki dilde kalır (geçmiş bir anlık görüntüdür).
+    public static var truncationNotice: String { "\n" + L10n.t("history.truncated") }
 
     /// Anlık görüntüdeki gövdeyi bayt sınırına indirir.
     /// Neyi gönderdiğini anlamak için gövdenin başı yeterlidir.

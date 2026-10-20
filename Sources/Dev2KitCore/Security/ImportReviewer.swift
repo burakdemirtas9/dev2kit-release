@@ -97,12 +97,12 @@ public enum ImportReviewer {
         if let scheme = target.scheme, scheme != "http", scheme != "https" {
             findings.append(ImportFinding(
                 severity: .block,
-                title: "Desteklenmeyen adres türü",
-                detail: "\"\(scheme)://\" adreslerine istek gönderilmez; bu istek aktarılmaz."
+                title: L10n.t("finding.scheme.title"),
+                detail: L10n.t("review.scheme.detail", scheme)
             ))
         }
         if let host = target.host, let violation = context.policy.violation(for: URL(string: "https://\(host)")) {
-            findings.append(ImportFinding(severity: .block, title: "Yönetici politikası", detail: violation))
+            findings.append(ImportFinding(severity: .block, title: L10n.t("finding.policy.title"), detail: violation))
         }
         if RequestInspector.containsHiddenCharacters(request.url, allowTab: false)
             || request.headers.contains(where: {
@@ -111,8 +111,8 @@ public enum ImportReviewer {
             }) {
             findings.append(ImportFinding(
                 severity: .block,
-                title: "Görünmez karakter",
-                detail: "Adres ya da bir başlık görünmeyen, satır sonu ya da yön değiştiren karakter içeriyor. Gerçek hedefi ya da ek başlıkları gizlemek için kullanılabilir."
+                title: L10n.t("review.hidden.title"),
+                detail: L10n.t("review.hidden.detail")
             ))
         }
 
@@ -121,11 +121,11 @@ public enum ImportReviewer {
         let secrets = SecretReferences.names(in: request, environment: nil)
         let vaultSecrets = secrets.intersection(context.vaultSecretNames)
         if !vaultSecrets.isEmpty {
-            let destination = target.host.map { "\($0) adresine" } ?? "değişkenle belirlenen bir adrese"
+            let names = vaultSecrets.sorted().joined(separator: ", ")
             findings.append(ImportFinding(
                 severity: .warn,
-                title: "Vault'undaki secret'ı kullanıyor",
-                detail: "\(vaultSecrets.sorted().joined(separator: ", ")) \(destination) gönderilecek. Dışarıdan gelen bir koleksiyonsa hedefin güvenilir olduğundan emin ol."
+                title: L10n.t("review.vaultSecret.title"),
+                detail: target.host.map { L10n.t("review.vaultSecret.detail", names, $0) } ?? L10n.t("review.vaultSecret.detailVariable", names)
             ))
         }
 
@@ -133,8 +133,8 @@ public enum ImportReviewer {
         if !plaintext.isEmpty {
             findings.append(ImportFinding(
                 severity: .warn,
-                title: "Düz metin kimlik bilgisi",
-                detail: "\(plaintext.joined(separator: ", ")) düz metin olarak koleksiyona yazılacak. Secrets'a ekleyip {{secret:isim}} ile referans vermen önerilir."
+                title: L10n.t("review.plaintext.title"),
+                detail: L10n.t("review.plaintext.detail", plaintext.joined(separator: ", "))
             ))
         }
 
@@ -143,30 +143,30 @@ public enum ImportReviewer {
             if target.scheme == "http", !RequestInspector.isLoopback(host), carriesCredentials {
                 findings.append(ImportFinding(
                     severity: .warn,
-                    title: "Kimlik bilgisi şifresiz gidecek",
-                    detail: "\(host) adresine http (şifresiz) ile kimlik bilgisi gönderiyor."
+                    title: L10n.t("review.cleartext.title"),
+                    detail: L10n.t("review.cleartext.detail", host)
                 ))
             }
             if RequestInspector.isMetadataHost(host) {
                 findings.append(ImportFinding(
                     severity: .warn,
-                    title: "Bulut metadata adresi",
-                    detail: "\(host) bulut sunucularının kimlik bilgisi dağıttığı adres; paylaşılan bir koleksiyonda beklenmez."
+                    title: L10n.t("finding.metadata.title"),
+                    detail: L10n.t("review.metadata.detail", host)
                 ))
             }
             if host.split(separator: ".").contains(where: { $0.hasPrefix("xn--") }) || !host.unicodeScalars.allSatisfy(\.isASCII) {
                 findings.append(ImportFinding(
                     severity: .warn,
-                    title: "Benzer görünen alan adı",
-                    detail: "\(host) Latin dışı harfler içeriyor; tanıdık bir adrese benzeyen sahte alan adı olabilir."
+                    title: L10n.t("finding.idn.title"),
+                    detail: L10n.t("review.idn.detail", host)
                 ))
             }
         }
         if target.hasUserInfo {
             findings.append(ImportFinding(
                 severity: .warn,
-                title: "Adreste kullanıcı bilgisi",
-                detail: "Adres kullanıcı adı/parola içeriyor (kullanici:parola@host)."
+                title: L10n.t("finding.userinfo.title"),
+                detail: L10n.t("review.userinfo.detail")
             ))
         }
 
@@ -179,8 +179,8 @@ public enum ImportReviewer {
         if !personal.isEmpty {
             findings.append(ImportFinding(
                 severity: .info,
-                title: "Kişisel veri",
-                detail: "\(personal.map(\.key).joined(separator: ", ")) başlıkları kişisel veri içeriyor olabilir (KVKK); koleksiyona ve dışa aktarımlara düz metin yazılır."
+                title: L10n.t("review.personal.title"),
+                detail: L10n.t("review.personal.detail", personal.map(\.key).joined(separator: ", "))
             ))
         }
         return findings.sorted { $0.severity < $1.severity }
@@ -195,25 +195,25 @@ public enum ImportReviewer {
             !value.trimmingCharacters(in: .whitespaces).isEmpty && !value.contains("{{")
         }
         switch request.auth {
-        case .basic(_, let password) where isLiteral(password): places.append("Basic auth parolası")
+        case .basic(_, let password) where isLiteral(password): places.append(L10n.t("review.place.basic"))
         case .bearer(let token) where isLiteral(token): places.append("Bearer token")
-        case .apiKey(let key, let value, _) where isLiteral(value): places.append("API key (\(key))")
+        case .apiKey(let key, let value, _) where isLiteral(value): places.append(L10n.t("review.place.apiKey", key))
         default: break
         }
         for entry in request.headers where entry.enabled && isLiteral(entry.value) {
             if HeaderClassifier.classify(name: entry.key, value: entry.value).sensitiveKind == .credential {
-                places.append("\"\(entry.key)\" başlığı")
+                places.append(L10n.t("review.place.header", entry.key))
             }
         }
         for entry in request.queryParams where entry.enabled && isLiteral(entry.value) {
-            if looksLikeSecretField(entry.key, value: entry.value) { places.append("\"\(entry.key)\" query parametresi") }
+            if looksLikeSecretField(entry.key, value: entry.value) { places.append(L10n.t("review.place.query", entry.key)) }
         }
         switch request.body {
         case .raw(let content, _):
-            if containsTokenPattern(content) { places.append("gövde") }
+            if containsTokenPattern(content) { places.append(L10n.t("review.place.body")) }
         case .formURLEncoded(let fields), .multipartForm(let fields):
             for field in fields where field.enabled && isLiteral(field.value) && looksLikeSecretField(field.key, value: field.value) {
-                places.append("\"\(field.key)\" form alanı")
+                places.append(L10n.t("review.place.form", field.key))
             }
         case .none:
             break

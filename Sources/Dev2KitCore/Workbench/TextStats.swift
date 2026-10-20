@@ -74,36 +74,21 @@ public struct TextStats: Equatable, Sendable {
         return lines
     }
 
-    /// Boyut, Finder gibi 1000 tabanlı. `ByteCountFormatter` sistem diline
-    /// göre yazıyordu ("bayt"); Workbench arayüzü İngilizce.
+    /// Boyut, Finder gibi 1000 tabanlı; birim ve ondalık ayracı seçili dilde
+    /// ("1,2 MB" / "1.2 MB"). `ByteCountFormatter` sistem diline göre yazıyordu.
     public static func size(_ bytes: Int) -> String {
-        if bytes < 1_000 { return "\(bytes) \(bytes == 1 ? "byte" : "bytes")" }
+        if bytes < 1_000 { return L10n.plural("stats.bytes", count: bytes) }
         let units = ["KB", "MB", "GB"]
         var value = Double(bytes) / 1_000
         var unit = 0
         while value >= 1_000, unit < units.count - 1 { value /= 1_000; unit += 1 }
-        return String(format: value < 10 ? "%.1f %@" : "%.0f %@", locale: Locale(identifier: "en_US"), value, units[unit])
+        return "\(L10n.number(value, fractionDigits: value < 10 ? 1 : 0)) \(units[unit])"
     }
 
-    /// API Client (Türkçe arayüz): "1.2 KB · 34 satır · 1.234 karakter".
-    public var summaryTR: String {
-        guard bytes > 0 else { return "" }
-        let number = NumberFormatter()
-        number.numberStyle = .decimal
-        number.locale = Locale(identifier: "tr_TR")
-        func format(_ value: Int) -> String { number.string(from: NSNumber(value: value)) ?? "\(value)" }
-        let size = bytes < 1_000 ? "\(bytes) bayt" : Self.size(bytes)
-        return "\(size) · \(format(lines)) satır · \(format(characters)) karakter"
-    }
-
-    /// "1.2 KB · 34 lines · 1,234 chars"
+    /// "1.2 KB · 34 lines · 1,234 chars" / "1,2 KB · 34 satır · 1.234 karakter"
     public var summary: String {
         guard bytes > 0 else { return "" }
-        let size = Self.size(bytes)
-        let number = NumberFormatter()
-        number.numberStyle = .decimal
-        number.locale = Locale(identifier: "en_US")
-        func format(_ value: Int) -> String { number.string(from: NSNumber(value: value)) ?? "\(value)" }
-        return "\(size) · \(format(lines)) \(lines == 1 ? "line" : "lines") · \(format(characters)) chars"
+        return [Self.size(bytes), L10n.plural("stats.lines", count: lines), L10n.plural("stats.chars", count: characters)]
+            .joined(separator: " · ")
     }
 }

@@ -44,11 +44,11 @@ struct OpenAPIImportView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Swagger / OpenAPI'den Koleksiyon")
+            Text(L10n.t("openapi.title"))
                 .font(.title2).bold()
             Picker("", selection: $source) {
-                Text("Adresten").tag(Source.address)
-                Text("JSON'dan").tag(Source.json)
+                Text(L10n.t("openapi.fromURL")).tag(Source.address)
+                Text(L10n.t("openapi.fromJSON")).tag(Source.json)
             }
             .pickerStyle(.segmented)
             .frame(maxWidth: 260)
@@ -68,13 +68,13 @@ struct OpenAPIImportView: View {
 
             if !groups.isEmpty {
                 HStack {
-                    Picker("Grup:", selection: $selectedGroup) {
+                    Picker(L10n.t("openapi.group"), selection: $selectedGroup) {
                         ForEach(groups) { group in
                             Text(group.name).tag(OpenAPIDiscovery.Group?.some(group))
                         }
                     }
                     .frame(maxWidth: 320)
-                    Button("Bu Grubu Getir") {
+                    Button(L10n.t("openapi.fetchGroup")) {
                         if let selectedGroup { load(selectedGroup.url.absoluteString) }
                     }
                     .disabled(selectedGroup == nil || loading)
@@ -89,9 +89,9 @@ struct OpenAPIImportView: View {
             Divider()
             HStack {
                 Spacer()
-                Button("Vazgeç") { dismiss() }
+                Button(L10n.t("common.cancel")) { dismiss() }
                     .keyboardShortcut(.cancelAction)
-                Button("Devam") { prepare() }
+                Button(L10n.t("common.continue")) { prepare() }
                     .keyboardShortcut(.defaultAction)
                     .disabled(document == nil || variableName.trimmingCharacters(in: .whitespaces).isEmpty)
             }
@@ -114,7 +114,7 @@ struct OpenAPIImportView: View {
 
     private var addressInput: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Doküman ya da Swagger UI adresi (ör. http://localhost:8080/v3/api-docs veya …/swagger-ui/index.html). OpenAPI 3 ve Swagger 2, JSON biçiminde.")
+            Text(L10n.t("openapi.url.help"))
                 .font(.secondaryText)
                 .foregroundStyle(.secondary)
             HStack {
@@ -123,7 +123,7 @@ struct OpenAPIImportView: View {
                     .textFieldStyle(.input)
                     .onSubmit(fetch)
                 Button(action: fetch) {
-                    if loading { ProgressView().controlSize(.small) } else { Text("Getir") }
+                    if loading { ProgressView().controlSize(.small) } else { Text(L10n.t("openapi.fetch")) }
                 }
                 .disabled(address.trimmingCharacters(in: .whitespaces).isEmpty || loading)
             }
@@ -132,7 +132,7 @@ struct OpenAPIImportView: View {
 
     private var jsonInput: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("/v3/api-docs yanıtını yapıştır ya da kayıtlı JSON dosyasını seç. OpenAPI 3 ve Swagger 2.")
+            Text(L10n.t("openapi.json.help"))
                 .font(.secondaryText)
                 .foregroundStyle(.secondary)
             ImportTextEditor(text: $json, language: .json)
@@ -150,16 +150,16 @@ struct OpenAPIImportView: View {
                         parseJSON()
                     }
                 } label: {
-                    Label("Panodan Yapıştır", systemImage: "doc.on.clipboard")
+                    Label(L10n.t("openapi.paste"), systemImage: "doc.on.clipboard")
                 }
                 Button {
                     showingFilePicker = true
                 } label: {
-                    Label("Dosya Seç…", systemImage: "folder")
+                    Label(L10n.t("auto.chooseFile"), systemImage: "folder")
                 }
                 Spacer()
                 // Büyük dokümanı her tuşta yeniden çözümlememek için elle tetiklenir.
-                Button("Oku", action: parseJSON)
+                Button(L10n.t("openapi.read"), action: parseJSON)
                     .disabled(json.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
@@ -176,31 +176,31 @@ struct OpenAPIImportView: View {
                     .font(.secondaryText)
                     .foregroundStyle(.secondary)
                 Spacer()
-                Text("\(document.operationCount) işlem")
+                Text(L10n.plural("openapi.operations", count: document.operationCount))
                     .font(.secondaryText)
                     .foregroundStyle(.secondary)
             }
-            LabeledContent("Sunucu") {
+            LabeledContent(L10n.t("openapi.server")) {
                 VStack(alignment: .leading, spacing: 2) {
-                    TextField("https://gateway.ornek.com/servis", text: $serverAddress)
+                    TextField(L10n.t("openapi.server.placeholder"), text: $serverAddress)
                         .inputLimit(.url)
                         .textFieldStyle(.input)
                         .font(.system(.callout, design: .monospaced))
                     if document.serverURL == nil {
-                        Text("Dokümanda mutlak sunucu adresi yok; isteklerin gideceği adresi gir.")
+                        Text(L10n.t("openapi.server.missing"))
                             .font(.secondaryText)
                             .foregroundStyle(Theme.warning)
                     }
                 }
             }
-            LabeledContent("Adres değişkeni") {
+            LabeledContent(L10n.t("openapi.variable")) {
                 HStack(spacing: 4) {
                     Text("{{").foregroundStyle(.secondary)
-                    TextField("değişken", text: $variableName)
+                    TextField(L10n.t("openapi.variable.placeholder"), text: $variableName)
                         .inputLimit(.short)
                         .textFieldStyle(.input)
                         .frame(width: 220)
-                    Text("}}/yol").foregroundStyle(.secondary)
+                    Text(L10n.t("openapi.variable.suffix")).foregroundStyle(.secondary)
                 }
             }
             environmentOption(document)
@@ -215,16 +215,16 @@ struct OpenAPIImportView: View {
         let server = serverAddress.trimmingCharacters(in: .whitespaces)
         if let environment = appState.activeEnvironment, !server.isEmpty {
             if environment.variables.contains(where: { $0.key == name }) {
-                Label("{{\(name)}} \"\(environment.name)\" environment'ında zaten tanımlı; değeri değiştirilmez.", systemImage: "checkmark.circle")
+                Label(L10n.t("openapi.variable.exists", name, environment.name), systemImage: "checkmark.circle")
                     .font(.secondaryText)
                     .foregroundStyle(Theme.up)
             } else {
-                Toggle("{{\(name)}} = \(server) olarak \"\(environment.name)\" environment'ına ekle", isOn: $addServerToEnvironment)
+                Toggle(L10n.t("openapi.variable.add", name, server, environment.name), isOn: $addServerToEnvironment)
                     .toggleStyle(.checkbox)
                     .font(.secondaryText)
             }
         } else if appState.activeEnvironment == nil {
-            Label("Aktif environment yok; {{\(name)}} değişkenini bir environment'a elle ekle.", systemImage: "exclamationmark.triangle")
+            Label(L10n.t("openapi.variable.noEnvironment", name), systemImage: "exclamationmark.triangle")
                 .font(.secondaryText)
                 .foregroundStyle(Theme.warning)
         }
@@ -272,7 +272,7 @@ struct OpenAPIImportView: View {
     private func parseJSON() {
         let data = Data(json.utf8)
         guard data.count <= ImportReviewer.maxImportBytes else {
-            errorMessage = "Doküman çok büyük; en fazla \(ImportReviewer.maxImportBytes / 1_048_576) MB."
+            errorMessage = L10n.t("openapi.documentTooLarge", L10n.number(ImportReviewer.maxImportBytes / 1_048_576))
             return
         }
         do {
@@ -289,11 +289,11 @@ struct OpenAPIImportView: View {
         defer { if accessing { url.stopAccessingSecurityScopedResource() } }
         let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
         guard size <= ImportReviewer.maxImportBytes else {
-            errorMessage = "Dosya çok büyük; en fazla \(ImportReviewer.maxImportBytes / 1_048_576) MB."
+            errorMessage = L10n.t("openapi.fileTooLarge", L10n.number(ImportReviewer.maxImportBytes / 1_048_576))
             return
         }
         guard let data = try? Data(contentsOf: url) else {
-            errorMessage = "Dosya okunamadı."
+            errorMessage = L10n.t("openapi.fileUnreadable")
             return
         }
         json = String(decoding: data, as: UTF8.self)

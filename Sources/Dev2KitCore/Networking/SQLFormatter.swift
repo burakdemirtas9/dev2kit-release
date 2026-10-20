@@ -199,7 +199,7 @@ public enum SQLFormatter {
             }
             index += 1
         }
-        guard parens.isEmpty else { throw BeautifyError.invalid(language, "( kapatılmamış.") }
+        guard parens.isEmpty else { throw BeautifyError.invalid(language, L10n.t("beautify.unclosed", "(")) }
         writer.trimTrailing()
         return writer.text
     }
@@ -267,7 +267,7 @@ public enum SQLFormatter {
                     backslashEscapes: false,
                     doubledQuotes: ch != "["
                 ) else {
-                    throw BeautifyError.invalid(language, "\(ch) ile açılan metin kapatılmamış.")
+                    throw BeautifyError.invalid(language, L10n.t("beautify.unclosedText", String(ch)))
                 }
                 tokens.append(.quoted(quoted))
                 continue

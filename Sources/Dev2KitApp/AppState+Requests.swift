@@ -192,7 +192,7 @@ extension AppState {
         copy.id = UUID()
         copy.name = CollectionPorting.uniqueName(
             copy.name,
-            suffix: "kopya",
+            suffix: L10n.t("name.copySuffix"),
             existingNames: workspace.collections[location.collection].requests.map(\.name)
         )
         // Token Factory'de kopya aynı değişkeni yazmaya kalkmasın: çakışma
@@ -232,7 +232,7 @@ extension AppState {
         guard !moved.isEmpty else { return }
         for var request in moved {
             let existing = workspace.collections[target].requests.map(\.name)
-            request.name = CollectionPorting.uniqueName(request.name, suffix: "taşınan", existingNames: existing)
+            request.name = CollectionPorting.uniqueName(request.name, suffix: L10n.t("name.movedSuffix"), existingNames: existing)
             workspace.collections[target].requests.append(request)
         }
         // Taşınanlar seçili kalsın: kullanıcı nereye gittiklerini görsün.

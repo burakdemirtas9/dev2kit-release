@@ -58,14 +58,14 @@ public enum AutoImport {
         var findings = Findings()
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            findings.emptyReason = "İçe aktarılacak metin yok."
+            findings.emptyReason = L10n.t("auto.reason.empty")
             return findings
         }
         if let first = trimmed.first, first == "{" || first == "[",
            let json = try? JSONSerialization.jsonObject(with: Data(trimmed.utf8)) {
             add(json, text: trimmed, to: &findings, allowArrays: true)
             if findings.isEmpty {
-                findings.emptyReason = "JSON tanınmadı: koleksiyon, OpenAPI ya da Kibana kaydı değil."
+                findings.emptyReason = L10n.t("auto.reason.json")
             }
             return findings
         }
@@ -86,7 +86,7 @@ public enum AutoImport {
             }
         }
         if findings.isEmpty {
-            findings.emptyReason = "Tanınan bir içerik yok: cURL komutu, Postman ya da dev2kit koleksiyonu, Kibana kaydı, OpenAPI JSON'u bulunamadı."
+            findings.emptyReason = L10n.t("auto.reason.nothing")
         }
         return findings
     }
@@ -106,11 +106,11 @@ public enum AutoImport {
         let data = Data(text.utf8)
         if object["format"] as? String == CollectionPorting.currentFormat,
            findings.collections.count < maxJSONFindings {
-            let name = (object["collection"] as? [String: Any])?["name"] as? String ?? "dev2kit koleksiyonu"
+            let name = (object["collection"] as? [String: Any])?["name"] as? String ?? L10n.t("auto.dev2kitCollection")
             findings.collections.append(CollectionFinding(id: findings.collections.count, kind: .dev2kit, name: name, data: data))
         } else if let postman = isPostman(object) ? object : (object["collection"] as? [String: Any]).flatMap({ isPostman($0) ? $0 : nil }),
                   findings.collections.count < maxJSONFindings {
-            let name = (postman["info"] as? [String: Any])?["name"] as? String ?? "Postman koleksiyonu"
+            let name = (postman["info"] as? [String: Any])?["name"] as? String ?? L10n.t("porting.postmanName")
             findings.collections.append(CollectionFinding(id: findings.collections.count, kind: .postman, name: name, data: data))
         } else if object["openapi"] is String || object["swagger"] is String {
             if findings.openAPI == nil { findings.openAPI = text }

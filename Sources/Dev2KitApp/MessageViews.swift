@@ -35,10 +35,10 @@ extension MessageKind {
 
     var accessibilityName: String {
         switch self {
-        case .info: return "Bilgi"
-        case .success: return "Başarılı"
-        case .warning: return "Uyarı"
-        case .error: return "Hata"
+        case .info: return L10n.t("message.kind.info")
+        case .success: return L10n.t("message.kind.success")
+        case .warning: return L10n.t("message.kind.warning")
+        case .error: return L10n.t("message.kind.error")
         }
     }
 }
@@ -95,11 +95,11 @@ struct ResultSheet: View {
             HStack {
                 Spacer()
                 if let url = message.revealURL {
-                    Button("Finder'da Göster") {
+                    Button(L10n.t("common.revealInFinder")) {
                         NSWorkspace.shared.activateFileViewerSelecting([url])
                     }
                 }
-                Button("Tamam", action: onDismiss)
+                Button(L10n.t("common.ok"), action: onDismiss)
                     .buttonStyle(PrimaryActionButtonStyle())
                     .keyboardShortcut(.defaultAction)
             }

@@ -8,6 +8,9 @@ import XCTest
 /// Bu garantiler eski "token değişkenleri" için de vardı; Token Factory'ye
 /// taşınırken kaybolmasın diye aynı testler burada.
 final class TokenFactorySecurityTests: XCTestCase {
+    /// Beklenen mesajlar Türkçe.
+    override func invokeTest() { withLanguage(.turkish) { super.invokeTest() } }
+
     private let sources = TokenFactory.sources(
         in: [RequestModel(name: "login", tokenOutput: TokenOutput(variableName: "accessToken"))],
         environment: nil

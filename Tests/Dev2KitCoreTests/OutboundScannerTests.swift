@@ -2,6 +2,9 @@ import XCTest
 @testable import Dev2KitCore
 
 final class OutboundScannerTests: XCTestCase {
+    /// Beklenen mesajlar Türkçe.
+    override func invokeTest() { withLanguage(.turkish) { super.invokeTest() } }
+
     static let files: [(path: String, text: String)] = [
         ("src/main/resources/application.yml", """
         spring:
@@ -356,7 +359,7 @@ final class OutboundScannerTests: XCTestCase {
         let variables = OutboundCollectionBuilder.variables(for: result, profile: nil)
         let outcome = try OutboundCollectionBuilder.makeCollection(from: result, variables: variables, existingNames: [])
         let names = outcome.collection.requests.map(\.name)
-        XCTAssertEqual(outcome.collection.name, "fx-bff — Giden İstekler")
+        XCTAssertEqual(outcome.collection.name, "fx-bff — Giden Request'ler")
         XCTAssertTrue(names.contains("partner-customer / getCustomer"))
         XCTAssertTrue(names.contains("PaymentService / POST /payments"))
         XCTAssertTrue(names.contains("PaymentService / GET /payments/{{orderId}} (eksik)"))

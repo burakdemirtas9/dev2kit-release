@@ -27,7 +27,7 @@ public enum HashTool {
         case .sha1: bytes = Data(Insecure.SHA1.hash(data: data))
         case .md5: bytes = Data(Insecure.MD5.hash(data: data))
         case .hmacSHA256, .hmacSHA512:
-            guard !key.isEmpty else { throw WorkbenchIssue(message: "HMAC için anahtar (key) gerekli") }
+            guard !key.isEmpty else { throw WorkbenchIssue(message: L10n.t("hash.keyRequired")) }
             let symmetric = SymmetricKey(data: Data(key.utf8))
             bytes = algorithm == .hmacSHA256
                 ? Data(HMAC<SHA256>.authenticationCode(for: data, using: symmetric))

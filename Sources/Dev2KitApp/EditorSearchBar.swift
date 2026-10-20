@@ -9,7 +9,7 @@ import Dev2KitCore
 struct EditorSearchBar: View {
     @ObservedObject var search: EditorSearchController
     /// API Client Türkçe, Workbench İngilizce (docs/V2.md); aynı bileşen.
-    var strings: SearchStrings = .turkish
+    var strings: SearchStrings { .localized }
     /// Çubuğun bulunduğu mod: gizli moddaki çubuk Esc'i yakalamasın (iki mod
     /// da canlı tutuluyor, bkz. ContentView).
     var mode: AppMode = .apiClient
@@ -26,7 +26,7 @@ struct EditorSearchBar: View {
                 .font(.system(.body, design: .monospaced))
                 .focused($focused)
                 .onSubmit { search.submit() }
-                .inputLimit(.search, english: strings.isEnglish)
+                .inputLimit(.search)
 
             status
 
@@ -142,7 +142,7 @@ struct EditorSearchBar: View {
 /// Arama çubuğunu açıp kapatan düğme. Araç çubuğunda `FoldButtons`'ın yanında.
 struct SearchToggleButton: View {
     @ObservedObject var search: EditorSearchController
-    var strings: SearchStrings = .turkish
+    var strings: SearchStrings { .localized }
 
     var body: some View {
         Button {
@@ -158,20 +158,18 @@ struct SearchToggleButton: View {
     }
 }
 
-/// Arama çubuğunun metinleri.
+/// Arama çubuğunun metinleri: seçili dilde (`L10n`). Eskiden Türkçe ve
+/// İngilizce iki sabit kopyaydı (API Client / Workbench).
 struct SearchStrings {
     let prompt, caseSensitive, regex, close, invalidPattern, noResults, pressReturn, previous, next, toggle: String
-    var isEnglish = false
 
-    static let turkish = SearchStrings(
-        prompt: "Ara", caseSensitive: "Büyük/küçük harfe duyarlı", regex: "Düzenli ifade — ⏎ ile çalışır",
-        close: "Aramayı kapat", invalidPattern: "geçersiz kalıp", noResults: "sonuç yok", pressReturn: "⏎ ile ara",
-        previous: "Önceki eşleşme", next: "Sonraki eşleşme", toggle: "Metinde ara"
-    )
-
-    static let english = SearchStrings(
-        prompt: "Find", caseSensitive: "Match case", regex: "Regular expression — runs on ⏎",
-        close: "Close find", invalidPattern: "invalid pattern", noResults: "no results", pressReturn: "⏎ to search",
-        previous: "Previous match", next: "Next match", toggle: "Find in text (⌘F)", isEnglish: true
-    )
+    static var localized: SearchStrings {
+        SearchStrings(
+            prompt: L10n.t("search.prompt"), caseSensitive: L10n.t("search.caseSensitive"),
+            regex: L10n.t("search.regex"), close: L10n.t("search.close"),
+            invalidPattern: L10n.t("search.invalidPattern"), noResults: L10n.t("search.noResults"),
+            pressReturn: L10n.t("search.pressReturn"), previous: L10n.t("search.previous"),
+            next: L10n.t("search.next"), toggle: L10n.t("search.toggle")
+        )
+    }
 }

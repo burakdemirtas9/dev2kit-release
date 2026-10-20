@@ -11,20 +11,19 @@ extension View {
     /// Neden böyle: bağlamada (binding) kırpmak donmayı önlemiyordu — metin
     /// önce alana yerleşiyor (1 MB 1,7 sn, ölçüldü). Biçimleyiciyle 0 ms.
     /// `TextField`'ın kendisi değişmediği için odak, Enter, stil aynı kalır.
-    func inputLimit(_ field: InputLimits.Field, english: Bool = false) -> some View {
-        modifier(InputLimitModifier(field: field, english: english))
+    func inputLimit(_ field: InputLimits.Field) -> some View {
+        modifier(InputLimitModifier(field: field))
     }
 }
 
 private struct InputLimitModifier: ViewModifier {
     let field: InputLimits.Field
-    let english: Bool
     @State private var rejections = 0
 
     func body(content: Content) -> some View {
         content
             .background(InputLimitInstaller(limit: field.maxCharacters) { rejections += 1 })
-            .inputLimitNotice(field, english: english, trigger: rejections)
+            .inputLimitNotice(field, trigger: rejections)
     }
 }
 
@@ -32,14 +31,13 @@ extension View {
     /// Sınır aşıldığında bip + alanın altında kısa uyarı; `trigger` her
     /// arttığında. `NSTextField` olmayan alanlar (adres düzenleyicisi) kendi
     /// reddini sayıp bunu kullanır.
-    func inputLimitNotice(_ field: InputLimits.Field, english: Bool = false, trigger: Int) -> some View {
-        modifier(InputLimitNotice(field: field, english: english, trigger: trigger))
+    func inputLimitNotice(_ field: InputLimits.Field, trigger: Int) -> some View {
+        modifier(InputLimitNotice(field: field, trigger: trigger))
     }
 }
 
 private struct InputLimitNotice: ViewModifier {
     let field: InputLimits.Field
-    let english: Bool
     let trigger: Int
     @State private var notice: String?
     @State private var hideTask: Task<Void, Never>?
@@ -66,7 +64,7 @@ private struct InputLimitNotice: ViewModifier {
 
     private func reject() {
         NSSound.beep()
-        notice = InputLimits.tooLongMessage(field, english: english)
+        notice = InputLimits.tooLongMessage(field)
         hideTask?.cancel()
         hideTask = Task {
             try? await Task.sleep(for: .seconds(4))

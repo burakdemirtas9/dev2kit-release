@@ -46,7 +46,7 @@ public enum ShellTokenizer {
                     hasCurrent = true
                     index += 2
                 } else {
-                    throw TokenizeError(message: "Komut ters bölü ile bitiyor.")
+                    throw TokenizeError(message: L10n.t("shell.trailingBackslash"))
                 }
 
             case "'":
@@ -58,7 +58,7 @@ public enum ShellTokenizer {
                     current.append(chars[index])
                     index += 1
                 }
-                guard closed else { throw TokenizeError(message: "Kapatılmamış tek tırnak (').") }
+                guard closed else { throw TokenizeError(message: L10n.t("shell.unclosedSingle")) }
 
             case "\"":
                 hasCurrent = true
@@ -82,7 +82,7 @@ public enum ShellTokenizer {
                     current.append(chars[index])
                     index += 1
                 }
-                guard closed else { throw TokenizeError(message: "Kapatılmamış çift tırnak (\").") }
+                guard closed else { throw TokenizeError(message: L10n.t("shell.unclosedDouble")) }
 
             case "$" where index + 1 < chars.count && chars[index + 1] == "'":
                 hasCurrent = true
@@ -99,7 +99,7 @@ public enum ShellTokenizer {
                     current.append(chars[index])
                     index += 1
                 }
-                guard closed else { throw TokenizeError(message: "Kapatılmamış $'...' bloğu.") }
+                guard closed else { throw TokenizeError(message: L10n.t("shell.unclosedDollar")) }
 
             default:
                 current.append(ch)

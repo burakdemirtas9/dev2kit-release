@@ -24,7 +24,7 @@ public enum StructureCheck {
         let pairs: [Character: Character] = [")": "(", "]": "[", "}": "{"]
 
         func issue(_ message: String, at offset: Int) -> WorkbenchValidation {
-            .invalid(.at(characterOffset: offset, in: scanner.chars, message: "Geçersiz \(rules.language): \(message)"))
+            .invalid(.at(characterOffset: offset, in: scanner.chars, message: L10n.t("beautify.invalid", rules.language, message)))
         }
 
         while !scanner.isAtEnd {
@@ -38,7 +38,7 @@ public enum StructureCheck {
             // `/* */` yorumu; `//` yorum değil (CSS'te `url(http://…)`).
             if ch == "/", scanner.peek() == "*" {
                 guard (try? scanner.readComment(language: rules.language)) != nil else {
-                    return issue("/* yorumu */ ile kapatılmamış", at: start)
+                    return issue(L10n.t("beautify.unclosedComment"), at: start)
                 }
                 continue
             }
@@ -48,7 +48,7 @@ public enum StructureCheck {
                     backslashEscapes: !rules.sqlQuoting,
                     doubledQuotes: rules.sqlQuoting
                 ) != nil else {
-                    return issue("\(ch) ile açılan metin kapatılmamış", at: start)
+                    return issue(L10n.t("beautify.unclosedText", String(ch)), at: start)
                 }
                 continue
             }
@@ -56,9 +56,9 @@ public enum StructureCheck {
             case "(", "[", "{":
                 stack.append((ch, start))
             case ")", "]", "}":
-                guard let top = stack.last else { return issue("eşleşmeyen \(ch)", at: start) }
+                guard let top = stack.last else { return issue(L10n.t("beautify.unmatched", String(ch)), at: start) }
                 guard top.char == pairs[ch] else {
-                    return issue("\(top.char) kapatılmadan \(ch) geldi", at: start)
+                    return issue(L10n.t("structure.closedBefore", String(top.char), String(ch)), at: start)
                 }
                 stack.removeLast()
             default:
@@ -66,7 +66,7 @@ public enum StructureCheck {
             }
             scanner.index += 1
         }
-        if let open = stack.last { return issue("\(open.char) kapatılmamış", at: open.offset) }
+        if let open = stack.last { return issue(L10n.t("beautify.unclosed", String(open.char)), at: open.offset) }
         return .structurallyValid
     }
 }

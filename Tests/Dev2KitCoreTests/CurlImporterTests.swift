@@ -47,6 +47,9 @@ final class ShellTokenizerTests: XCTestCase {
 }
 
 final class CurlImporterTests: XCTestCase {
+    /// Beklenen mesajlar Türkçe.
+    override func invokeTest() { withLanguage(.turkish) { super.invokeTest() } }
+
     func testSimpleGet() throws {
         let result = try CurlImporter.parse("curl https://api.example.com/users")
         XCTAssertEqual(result.request.method, .get)

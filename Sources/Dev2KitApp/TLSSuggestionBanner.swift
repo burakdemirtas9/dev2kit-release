@@ -17,11 +17,11 @@ struct TLSSuggestionBanner: View {
         // içindeki riskler ayrı uyarı satırları. Mor birincil eylem öneriyi taşır.
         MessageBanner(
             kind: .info,
-            title: "Bu host'u “\(match.profileName)” profiline ekle?",
-            message: "\(match.hostToAdd) için profil yok; “\(match.profileName)” \(match.matchedPattern) kalıbını içeriyor. İstek kendiliğinden yeniden gönderilmez.",
+            title: L10n.t("tlsSuggestion.title", match.profileName),
+            message: L10n.t("tlsSuggestion.message", match.hostToAdd, match.profileName, match.matchedPattern),
             lines: warnings.map { MessageLine(.warning, $0) }
         ) {
-            Button(match.carriesClientCertificate ? "Ekle…" : "Profile Ekle") {
+            Button(match.carriesClientCertificate ? L10n.t("tlsSuggestion.addEllipsis") : L10n.t("tlsSuggestion.add")) {
                 // Kimlik taşıyan profilde tek tık yok: kullanıcı neyi
                 // onayladığını yazılı görsün.
                 if match.carriesClientCertificate {
@@ -35,22 +35,22 @@ struct TLSSuggestionBanner: View {
             // beliriyor ve ⏎ güvenlikle ilgili bir değişikliği tek tuşa
             // indirirdi. (Sandbox denemesinde tam olarak bu oldu: sıradan
             // bir ⏎ host'u profile ekledi.)
-            Button("Profili Aç") {
+            Button(L10n.t("tlsSuggestion.open")) {
                 appState.showTLSSettings(profileID: match.profileID)
             }
-            Button("Vazgeç") {
+            Button(L10n.t("common.cancel")) {
                 appState.declineTLSSuggestion()
             }
             .buttonStyle(.borderless)
         }
         .confirmationDialog(
-            "\(match.hostToAdd) “\(match.profileName)” profiline eklensin mi?",
+            L10n.t("tlsSuggestion.confirm.title", match.hostToAdd, match.profileName),
             isPresented: $showingConfirm,
             titleVisibility: .visible
         ) {
             // Yıkıcı değil: ekleme geri alınabilir. Risk mesajda yazılı.
-            Button("Profile Ekle") { appState.acceptTLSSuggestion() }
-            Button("Vazgeç", role: .cancel) {}
+            Button(L10n.t("tlsSuggestion.add")) { appState.acceptTLSSuggestion() }
+            Button(L10n.t("common.cancel"), role: .cancel) {}
         } message: {
             Text(confirmationMessage)
         }
@@ -61,20 +61,20 @@ struct TLSSuggestionBanner: View {
     private var warnings: [String] {
         var result: [String] = []
         if match.carriesClientCertificate {
-            result.append("Bu profil bir istemci sertifikası taşıyor: kimliğin bu ada da sunulacak.")
+            result.append(L10n.t("tlsSuggestion.warning.identity"))
         }
         if match.isNonPublicSuffix {
-            result.append("Bu ad kayıtlı değil; aynı yerel ağdaki herhangi bir cihaz onu üstlenebilir.")
+            result.append(L10n.t("tlsSuggestion.warning.local"))
         }
         return result
     }
 
     private var confirmationMessage: String {
         var lines = [
-            "Kalıcı olarak eklenir; istediğin zaman TLS > Host Profilleri'nden çıkarabilirsin.",
+            L10n.t("tlsSuggestion.confirm.message"),
         ]
         lines.append(contentsOf: warnings)
-        lines.append("İstek kendiliğinden yeniden gönderilmez.")
+        lines.append(L10n.t("tlsSuggestion.noResend"))
         return lines.joined(separator: "\n\n")
     }
 }

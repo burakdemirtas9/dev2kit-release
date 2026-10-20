@@ -2,6 +2,9 @@ import XCTest
 @testable import Dev2KitCore
 
 final class OpenAPIImporterTests: XCTestCase {
+    /// Beklenen mesajlar Türkçe.
+    override func invokeTest() { withLanguage(.turkish) { super.invokeTest() } }
+
     private let source = URL(string: "http://localhost:8080/fx-bff-service/v3/api-docs")!
 
     private let openAPI3: [String: Any] = [
@@ -180,7 +183,7 @@ final class OpenAPIImporterTests: XCTestCase {
     func testNotesExplainVariablesAndTokenURL() throws {
         let notes = try collection(openAPI3).warnings
         XCTAssertTrue(notes.contains { $0.contains("{{fx}}") && $0.contains("http://localhost:8080/fx-bff-service") })
-        XCTAssertTrue(notes.contains { $0.contains("Yol parametreleri") })
+        XCTAssertTrue(notes.contains { $0.contains("Path parametreleri") })
         XCTAssertTrue(notes.contains { $0.contains("https://auth.ornek.com/token") } == false, "kullanılmayan şemanın adresi yazılmaz")
     }
 

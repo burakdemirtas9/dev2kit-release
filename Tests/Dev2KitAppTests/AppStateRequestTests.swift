@@ -5,6 +5,9 @@ import XCTest
 /// İstek yaşam döngüsü: ekleme, çoğaltma, taşıma, silme ve seçim etkileri.
 @MainActor
 final class AppStateRequestTests: XCTestCase {
+    /// Beklenen mesajlar Türkçe.
+    override func invokeTest() { withLanguage(.turkish) { super.invokeTest() } }
+
     private var harness: AppStateHarness!
     private var state: AppState { harness.state }
 

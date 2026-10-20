@@ -8,6 +8,9 @@ import XCTest
 /// döndürdüğü değerler (macOS 26 / Darwin 27). Hata koduna bakmak yetmiyordu:
 /// hostname'i de yanlış olan 10 yıllık sertifika yine -67901 veriyor.
 final class TrustFailureTests: XCTestCase {
+    /// Beklenen mesajlar Türkçe.
+    override func invokeTest() { withLanguage(.turkish) { super.invokeTest() } }
+
 
     // Ölçülen gerçek çıktılar
     private let uzunAdDogru: [[String: Any]] = [

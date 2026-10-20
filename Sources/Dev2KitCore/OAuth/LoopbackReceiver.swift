@@ -34,7 +34,7 @@ public final class LoopbackReceiver: @unchecked Sendable {
     public init(preferredPort: UInt16 = 0) throws {
         let handle = socket(AF_INET, SOCK_STREAM, 0)
         guard handle >= 0 else {
-            throw ReceiverError(message: "Yerel soket açılamadı (errno \(errno)).")
+            throw ReceiverError(message: L10n.t("loopback.socket", String(errno)))
         }
 
         var reuse: Int32 = 1
@@ -54,11 +54,11 @@ public final class LoopbackReceiver: @unchecked Sendable {
         }
         guard bound == 0 else {
             close(handle)
-            throw ReceiverError(message: "Yerel port bağlanamadı (errno \(errno)).")
+            throw ReceiverError(message: L10n.t("loopback.bind", String(errno)))
         }
         guard listen(handle, 1) == 0 else {
             close(handle)
-            throw ReceiverError(message: "Yerel port dinlenemedi (errno \(errno)).")
+            throw ReceiverError(message: L10n.t("loopback.listen", String(errno)))
         }
 
         var assigned = sockaddr_in()
@@ -70,7 +70,7 @@ public final class LoopbackReceiver: @unchecked Sendable {
         }
         guard named == 0 else {
             close(handle)
-            throw ReceiverError(message: "Yerel port öğrenilemedi (errno \(errno)).")
+            throw ReceiverError(message: L10n.t("loopback.port", String(errno)))
         }
 
         self.descriptor = handle
@@ -89,7 +89,7 @@ public final class LoopbackReceiver: @unchecked Sendable {
             queue.asyncAfter(deadline: .now() + timeout) { [weak self] in
                 guard state.finish() else { return }
                 self?.closeSocket()
-                state.resume(throwing: ReceiverError(message: "Yetkilendirme zaman aşımına uğradı."))
+                state.resume(throwing: ReceiverError(message: L10n.t("loopback.timeout")))
             }
 
             queue.async { [weak self] in
@@ -120,7 +120,7 @@ public final class LoopbackReceiver: @unchecked Sendable {
         while true {
             let client = accept(descriptor, nil, nil)
             guard client >= 0 else {
-                throw ReceiverError(message: "Callback beklenirken bağlantı kapandı.")
+                throw ReceiverError(message: L10n.t("loopback.closed"))
             }
             defer { close(client) }
 
@@ -192,20 +192,20 @@ public final class LoopbackReceiver: @unchecked Sendable {
         func resume(throwing error: Error) { continuation.resume(throwing: error) }
     }
 
-    private static let successHTML = """
-    <!doctype html><html lang="tr"><head><meta charset="utf-8"><title>dev2kit</title>
+    private static var successHTML: String { """
+    <!doctype html><html lang="\(L10n.language.rawValue)"><head><meta charset="utf-8"><title>dev2kit</title>
     <style>body{font-family:-apple-system,system-ui,sans-serif;background:#130d2e;color:#f3f0fe;
     display:flex;align-items:center;justify-content:center;height:100vh;margin:0}
     .k{text-align:center}h1{color:#aa9cd5;font-size:20px}p{color:#959595;font-size:14px}</style>
-    </head><body><div class="k"><h1>Yetkilendirme tamamlandı</h1>
-    <p>Bu sekmeyi kapatıp dev2kit'ya dönebilirsin.</p></div></body></html>
-    """
+    </head><body><div class="k"><h1>\(L10n.t("loopback.success.title"))</h1>
+    <p>\(L10n.t("loopback.success.body"))</p></div></body></html>
+    """ }
 
-    private static let failureHTML = """
-    <!doctype html><html lang="tr"><head><meta charset="utf-8"><title>dev2kit</title>
+    private static var failureHTML: String { """
+    <!doctype html><html lang="\(L10n.language.rawValue)"><head><meta charset="utf-8"><title>dev2kit</title>
     <style>body{font-family:-apple-system,system-ui,sans-serif;background:#130d2e;color:#f3f0fe;
     display:flex;align-items:center;justify-content:center;height:100vh;margin:0}
     .k{text-align:center}h1{color:#e23737;font-size:20px}</style>
-    </head><body><div class="k"><h1>Beklenmeyen istek</h1></div></body></html>
-    """
+    </head><body><div class="k"><h1>\(L10n.t("loopback.failure.title"))</h1></div></body></html>
+    """ }
 }

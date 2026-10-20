@@ -86,7 +86,7 @@ enum TLSChallengeHandler {
         guard let trust = challenge.protectionSpace.serverTrust else {
             return (.cancelAuthenticationChallenge, nil, Rejection(
                 host: host,
-                reason: "Sunucu bir sertifika sunmadı."
+                reason: L10n.t("trust.noCertificate")
             ))
         }
         // KAÇIŞ KAPISI: kullanıcı doğrulamayı kapattı. Değerlendirme hiç
@@ -118,7 +118,7 @@ enum TLSChallengeHandler {
               SecTrustSetAnchorCertificatesOnly(trust, profile.pinToCA) == errSecSuccess else {
             return (.cancelAuthenticationChallenge, nil, Rejection(
                 host: host,
-                reason: "Güven değerlendirmesi kurulamadı (sertifika çıpaları uygulanamadı)."
+                reason: L10n.t("trust.setupFailed")
             ))
         }
 
@@ -145,7 +145,7 @@ enum TLSChallengeHandler {
             var reason = TrustFailure.describe(checks) ?? explain(error)
             // Ad uyuşmazlığında asıl soru "peki sertifikada hangi adlar var".
             if checks.contains(TrustFailure.hostnameKey), let names {
-                reason += " — sunucunun GÖNDERDİĞİ sertifika şu adlar için geçerli: \(names)"
+                reason += L10n.t("trust.presentedNames", names)
             }
             return (.cancelAuthenticationChallenge, nil, Rejection(
                 host: host, reason: reason, presentedNames: names
@@ -164,15 +164,11 @@ enum TLSChallengeHandler {
     /// düşüyor); public köklerde 398. Kökün kendi süresi uzun olabilir, kural
     /// yalnızca uç sertifikaya uygulanıyor.
     static func explain(_ error: CFError?) -> String {
-        let fallback = "sertifika zinciri doğrulanamadı"
+        let fallback = L10n.t("trust.chainFailed")
         guard let error = error as Error? as NSError? else { return fallback }
         if error.domain == NSOSStatusErrorDomain,
            error.code == Int(errSecCertificateValidityPeriodTooLong) {
-            return "sunucu sertifikasının geçerlilik süresi Apple'ın izin verdiği üst sınırı "
-                + "aşıyor (kurum CA'larında 825, public CA'larda 398 gün). Kurum kökünün süresi "
-                + "uzun olabilir; sınır yalnızca sunucu sertifikasına uygulanır. Kalıcı çözüm: "
-                + "PKI ekibinden daha kısa ömürlü sertifika. Kurum CA'sı güven deposundaysa "
-                + "TLS > Güven Deposu'ndan ömür sınırı muaf tutulabilir" + "."
+            return L10n.t("trust.check.validityPeriod") + "."
         }
         return error.localizedDescription.isEmpty ? fallback : error.localizedDescription
     }
@@ -193,9 +189,9 @@ enum TLSChallengeHandler {
         guard !names.isEmpty else { return nil }
         // Uzun listelerde mesaj okunmaz hale gelmesin.
         let shown = names.prefix(8).joined(separator: ", ")
-        var summary = names.count > 8 ? "\(shown) (+\(names.count - 8) tane daha)" : shown
+        var summary = names.count > 8 ? L10n.t("trust.moreNames", shown, L10n.number(names.count - 8)) : shown
         if let issuer = CertificateLoader.details(of: leaf).issuerCommonName {
-            summary += " · düzenleyen: \(issuer)"
+            summary += L10n.t("trust.issuer", issuer)
         }
         return summary
     }

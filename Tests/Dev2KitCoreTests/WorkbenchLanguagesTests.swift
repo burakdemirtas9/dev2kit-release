@@ -2,6 +2,9 @@ import XCTest
 @testable import Dev2KitCore
 
 final class StructureCheckTests: XCTestCase {
+    /// Beklenen mesajlar Türkçe.
+    override func invokeTest() { withLanguage(.turkish) { super.invokeTest() } }
+
     private func issue(_ text: String, _ rules: StructureCheck.Rules = .css) -> WorkbenchIssue? {
         if case .invalid(let issue) = StructureCheck.validate(text, rules: rules) { return issue }
         return nil
@@ -37,6 +40,9 @@ final class StructureCheckTests: XCTestCase {
 }
 
 final class MarkupToolsTests: XCTestCase {
+    /// Beklenen mesajlar Türkçe.
+    override func invokeTest() { withLanguage(.turkish) { super.invokeTest() } }
+
     func testXMLValidationWithPosition() throws {
         XCTAssertEqual(MarkupTools.validateXML("<a><b>1</b></a>"), .valid)
         guard case .invalid(let issue) = MarkupTools.validateXML("<a>\n  <b>1</c>\n</a>") else { return XCTFail() }
@@ -59,9 +65,9 @@ final class MarkupToolsTests: XCTestCase {
         XCTAssertTrue(unclosed.message.contains("<span> kapatılmadan </div>"), unclosed.message)
         XCTAssertEqual(unclosed.line, 3)
         guard case .invalid(let stray) = MarkupTools.checkHTML("<p>x</p></section>") else { return XCTFail() }
-        XCTAssertTrue(stray.message.contains("</section> için açılış"), stray.message)
+        XCTAssertTrue(stray.message.contains("</section> kapanışının açılışı yok"), stray.message)
         guard case .invalid(let open) = MarkupTools.checkHTML("<main><div>x") else { return XCTFail() }
-        XCTAssertTrue(open.message.contains("<div> kapatılmamış"), open.message)
+        XCTAssertTrue(open.message.contains("<div> etiketi kapatılmamış"), open.message)
     }
 
     func testMinify() throws {

@@ -15,7 +15,7 @@ extension AppState {
         let trimmed = address.trimmingCharacters(in: .whitespaces)
         guard let url = URL(string: trimmed), let scheme = url.scheme?.lowercased(),
               scheme == "http" || scheme == "https", url.host?.isEmpty == false else {
-            throw OpenAPIFetchError(message: "Geçerli bir http ya da https adresi gir, ör. http://localhost:8080/v3/api-docs")
+            throw OpenAPIFetchError(message: L10n.t("openapi.invalidURL"))
         }
         let engine = self.engine
         let policy = hostPolicy
@@ -40,7 +40,7 @@ extension AppState {
                 throw OpenAPIDiscovery.HTTPStatusError(url: candidate, statusCode: response.statusCode)
             }
             guard response.body.count <= ImportReviewer.maxImportBytes else {
-                throw OpenAPIFetchError(message: "Doküman çok büyük; en fazla \(ImportReviewer.maxImportBytes / 1_048_576) MB.")
+                throw OpenAPIFetchError(message: L10n.t("openapi.documentTooLarge", L10n.number(ImportReviewer.maxImportBytes / 1_048_576)))
             }
             return response.body
         }
@@ -57,7 +57,7 @@ extension AppState {
             let review = ImportReviewer.review(collection: outcome.collection, notes: outcome.warnings, context: importContext)
             return .success(PreparedImport(review: review, wasRenamed: outcome.wasRenamed))
         } catch {
-            return .failure(ImportFailure(message: "Koleksiyon oluşturulamadı: \(error.localizedDescription)"))
+            return .failure(ImportFailure(message: L10n.t("import.createFailed", error.localizedDescription)))
         }
     }
 
@@ -84,7 +84,7 @@ extension AppState {
             let review = ImportReviewer.review(collection: outcome.collection, notes: outcome.warnings, context: importContext)
             return .success(PreparedImport(review: review, wasRenamed: outcome.wasRenamed))
         } catch {
-            return .failure(ImportFailure(message: "Koleksiyon oluşturulamadı: \(error.localizedDescription)"))
+            return .failure(ImportFailure(message: L10n.t("import.createFailed", error.localizedDescription)))
         }
     }
 
@@ -118,14 +118,14 @@ extension AppState {
     func importCollection(from url: URL, source: ImportSource) {
         let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
         guard size <= ImportReviewer.maxImportBytes else {
-            portingMessage = importFailed("Dosya çok büyük (\(ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file))). En fazla \(ImportReviewer.maxImportBytes / 1_048_576) MB içe aktarılır; koleksiyonu bölüp parça parça aktar.")
+            portingMessage = importFailed(L10n.t("import.fileTooLarge", ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file), L10n.number(ImportReviewer.maxImportBytes / 1_048_576)))
             return
         }
         let data: Data
         do {
             data = try Data(contentsOf: url)
         } catch {
-            portingMessage = importFailed("Dosya okunamadı: \(error.localizedDescription)\n\nDosyanın yerini ve okuma iznini kontrol et.")
+            portingMessage = importFailed(L10n.t("import.fileUnreadable", error.localizedDescription))
             return
         }
         switch prepareImport(data, source: source) {
@@ -165,7 +165,7 @@ extension AppState {
     ///   adları; birlikte onaylandıklarında ad çakışmasın.
     func prepareImport(_ data: Data, source: ImportSource, reservedNames: [String] = []) -> Result<PreparedImport, ImportFailure> {
         guard data.count <= ImportReviewer.maxImportBytes else {
-            return .failure(ImportFailure(message: "Koleksiyon çok büyük; en fazla \(ImportReviewer.maxImportBytes / 1_048_576) MB içe aktarılır."))
+            return .failure(ImportFailure(message: L10n.t("import.collectionTooLarge", L10n.number(ImportReviewer.maxImportBytes / 1_048_576))))
         }
         do {
             let existingNames = workspace.collections.map(\.name) + reservedNames
@@ -179,7 +179,7 @@ extension AppState {
             let review = ImportReviewer.review(collection: outcome.collection, notes: outcome.warnings, context: importContext)
             return .success(PreparedImport(review: review, wasRenamed: outcome.wasRenamed))
         } catch {
-            return .failure(ImportFailure(message: "İçe aktarma başarısız: \(error.localizedDescription)"))
+            return .failure(ImportFailure(message: L10n.t("import.failed", error.localizedDescription)))
         }
     }
 
@@ -209,7 +209,7 @@ extension AppState {
 
     /// İçe aktarma hatası: sistem alert'inde, başarıdan ayrı başlıkla.
     func importFailed(_ message: String) -> ResultMessage {
-        ResultMessage(kind: .error, title: "İçe aktarılamadı", message: message)
+        ResultMessage(kind: .error, title: L10n.t("result.importFailed"), message: message)
     }
 
     func exportCollection(_ id: UUID) {
@@ -217,21 +217,21 @@ extension AppState {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.json]
         panel.nameFieldStringValue = "\(collection.name).dev2kit.json"
-        panel.title = "Koleksiyonu Dışa Aktar"
+        panel.title = L10n.t("export.panel")
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             try CollectionPorting.exportData(collection).write(to: url)
             portingMessage = ResultMessage(
                 kind: .success,
-                title: "Dışa aktarıldı",
+                title: L10n.t("result.exported"),
                 message: "“\(collection.name)” · \(url.lastPathComponent)",
-                lines: [MessageLine(.info, "Secret değerleri dosyaya yazılmadı; dosyada yalnızca {{secret:isim}} referansları var.")]
+                lines: [MessageLine(.info, L10n.t("result.exported.secrets"))]
             )
         } catch {
             portingMessage = ResultMessage(
                 kind: .error,
-                title: "Dışa aktarılamadı",
-                message: "Seçilen konuma yazılamadı: \(error.localizedDescription)\n\nBaşka bir konum seçip yeniden dene."
+                title: L10n.t("result.exportFailed"),
+                message: L10n.t("result.exportFailed.message", error.localizedDescription)
             )
         }
     }
@@ -269,7 +269,7 @@ extension AppState {
                 includeSecrets: includeSecrets
             )
         } catch {
-            return "# cURL üretilemedi: \(error.localizedDescription)"
+            return L10n.t("curl.generateFailed", error.localizedDescription)
         }
     }
 }

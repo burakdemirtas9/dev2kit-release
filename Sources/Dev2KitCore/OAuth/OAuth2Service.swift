@@ -85,7 +85,7 @@ public struct OAuth2Service: Sendable {
     private func perform(_ request: URLRequest, hostPolicy: HostPolicyState) async throws -> OAuth2Token {
         let (data, response) = try await session.data(for: request, delegate: PolicyRedirectGuard(policy: hostPolicy))
         guard let http = response as? HTTPURLResponse else {
-            throw OAuth2Client.FlowError(message: "Sağlayıcıdan HTTP yanıtı alınamadı.")
+            throw OAuth2Client.FlowError(message: L10n.t("oauth.flow.noHTTPResponse"))
         }
         return try OAuth2Client.parseTokenResponse(data, statusCode: http.statusCode)
     }

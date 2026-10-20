@@ -18,12 +18,12 @@ public enum TokenField {
 
         public var errorDescription: String? {
             switch self {
-            case .emptyPath: return "yanıttaki alan adı boş"
-            case .invalidPath(let path): return "alan yolu geçersiz: \(path)"
-            case .notJSON: return "yanıt JSON değil"
-            case .missing(let path): return "yanıtta '\(path)' alanı yok"
-            case .notText(let path): return "'\(path)' alanı metin değil"
-            case .empty(let path): return "'\(path)' alanı boş"
+            case .emptyPath: return L10n.t("tokenField.emptyPath")
+            case .invalidPath(let path): return L10n.t("tokenField.invalidPath", path)
+            case .notJSON: return L10n.t("tokenField.notJSON")
+            case .missing(let path): return L10n.t("tokenField.missing", path)
+            case .notText(let path): return L10n.t("tokenField.notText", path)
+            case .empty(let path): return L10n.t("tokenField.empty", path)
             }
         }
     }

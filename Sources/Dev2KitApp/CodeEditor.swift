@@ -224,7 +224,7 @@ struct EditorLimits {
     /// editörü girdi sınırından büyük metni de GÖSTERİR, bkz. `maxOutputBytes`).
     var maxDisplayBytes: Int = WorkbenchLimits.maxInputBytes
     /// Sonuç `maxBytes`'ı ya da `maxLines`'ı aşıyor: değişiklik yapılmadı.
-    /// Mesajı çağıran kendi dilinde yazar (`Rejection.english` / `.turkish`).
+    /// Mesaj seçili dilde (`Rejection.localized`).
     var onRejected: (WorkbenchLimits.Rejection) -> Void
     /// Sonuçta `maxLineBytes`'tan uzun satır var: değişiklik editöre girmedi,
     /// tam sonuç metni verilir (ör. editörde göstermeden saklamak için).

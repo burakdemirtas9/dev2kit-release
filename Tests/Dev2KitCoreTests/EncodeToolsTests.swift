@@ -3,6 +3,9 @@ import XCTest
 
 /// Step 2a kodlayıcı/çözücüler (kullanıcı kararı, 2026-10-19).
 final class EncodeToolsTests: XCTestCase {
+    /// Beklenen mesajlar Türkçe.
+    override func invokeTest() { withLanguage(.turkish) { super.invokeTest() } }
+
     private let istanbul = TimeZone(identifier: "Europe/Istanbul")!
     private let now = Date(timeIntervalSince1970: 1_792_352_551) // 2026-10-18 19:42:31 UTC
 

@@ -16,10 +16,10 @@ public enum SecretStoreError: Error, LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .keychainStatus(let status):
-            let message = SecCopyErrorMessageString(status, nil) as String? ?? "bilinmeyen hata"
-            return "Keychain hatası (\(status)): \(message)"
+            let message = SecCopyErrorMessageString(status, nil) as String? ?? L10n.t("keychain.unknown")
+            return L10n.t("keychain.error", String(status), message)
         case .encodingFailed:
-            return "Secret değeri kodlanamadı."
+            return L10n.t("keychain.encoding")
         }
     }
 }

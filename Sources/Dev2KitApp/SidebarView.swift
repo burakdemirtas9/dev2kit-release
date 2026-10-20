@@ -106,7 +106,7 @@ struct SidebarView: View {
         ScrollViewReader { proxy in
         List(selection: listSelection(order: visibleOrder)) {
             if appState.isSearching, matches.isEmpty {
-                Text("\"\(appState.searchQuery)\" için eşleşme yok")
+                Text(L10n.t("sidebar.search.noMatch", appState.searchQuery))
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .center)
@@ -145,7 +145,7 @@ struct SidebarView: View {
                             Button {
                                 appState.addRequest(to: collection.id)
                             } label: {
-                                Label("Yeni İstek", systemImage: "plus")
+                                Label(L10n.t("menu.newRequest"), systemImage: "plus")
                                     .font(.secondaryText)
                                     .rowHitTarget(minHeight: 20)
                             }
@@ -202,38 +202,38 @@ struct SidebarView: View {
             searchFocused = true
         }
         .alert(
-            "Koleksiyonu Yeniden Adlandır",
+            L10n.t("collection.rename.title"),
             isPresented: Binding(
                 get: { renameTargetID != nil },
                 set: { if !$0 { renameTargetID = nil } }
             )
         ) {
-            TextField("Koleksiyon adı", text: $renameText)
+            TextField(L10n.t("collection.name.placeholder"), text: $renameText)
                 .inputLimit(.name)
-            Button("Yeniden Adlandır") {
+            Button(L10n.t("collection.rename.confirm")) {
                 if let id = renameTargetID {
                     appState.renameCollection(id, to: renameText)
                 }
                 renameTargetID = nil
             }
-            Button("Vazgeç", role: .cancel) { renameTargetID = nil }
+            Button(L10n.t("common.cancel"), role: .cancel) { renameTargetID = nil }
         }
         .alert(
-            "“\(deleteTarget?.name ?? "")” silinsin mi?",
+            L10n.t("common.deleteNamed.title", deleteTarget?.name ?? ""),
             isPresented: Binding(
                 get: { deleteTarget != nil },
                 set: { if !$0 { deleteTarget = nil } }
             )
         ) {
-            Button("Koleksiyonu Sil", role: .destructive) {
+            Button(L10n.t("collection.delete"), role: .destructive) {
                 if let target = deleteTarget {
                     appState.deleteCollection(target.id)
                 }
                 deleteTarget = nil
             }
-            Button("Vazgeç", role: .cancel) { deleteTarget = nil }
+            Button(L10n.t("common.cancel"), role: .cancel) { deleteTarget = nil }
         } message: {
-            Text("İçindeki \(deleteTarget?.requests.count ?? 0) istek de kalıcı olarak silinir. Geri alınamaz.")
+            Text(L10n.plural("collection.delete.message", count: deleteTarget?.requests.count ?? 0))
         }
         .alert(
             deleteRequestTitle,
@@ -242,13 +242,13 @@ struct SidebarView: View {
                 set: { if !$0 { deleteRequestTargets = [] } }
             )
         ) {
-            Button(deleteRequestTargets.count > 1 ? "\(deleteRequestTargets.count) İsteği Sil" : "İsteği Sil", role: .destructive) {
+            Button(deleteRequestTargets.count > 1 ? L10n.plural("request.deleteMany", count: deleteRequestTargets.count) : L10n.t("request.delete"), role: .destructive) {
                 appState.deleteRequests(deleteRequestTargets)
                 deleteRequestTargets = []
             }
-            Button("Vazgeç", role: .cancel) { deleteRequestTargets = [] }
+            Button(L10n.t("common.cancel"), role: .cancel) { deleteRequestTargets = [] }
         } message: {
-            Text("Kalıcı olarak silinir. Geri alınamaz.")
+            Text(L10n.t("common.deletePermanent"))
         }
         .frame(minWidth: 220)
     }
@@ -256,9 +256,9 @@ struct SidebarView: View {
     /// Silme onayının başlığı: tek istekte adı, çoklu seçimde sayısı.
     private var deleteRequestTitle: String {
         if deleteRequestTargets.count == 1, let id = deleteRequestTargets.first {
-            return "“\(appState.request(withID: id)?.name ?? "")” silinsin mi?"
+            return L10n.t("common.deleteNamed.title", appState.request(withID: id)?.name ?? "")
         }
-        return "\(deleteRequestTargets.count) istek silinsin mi?"
+        return L10n.plural("request.deleteMany.title", count: deleteRequestTargets.count)
     }
 
     /// Sidebar filtresi. ⌘F odaklanır, Esc temizler, ⏎ ilk sonucu seçer.
@@ -270,7 +270,7 @@ struct SidebarView: View {
                 Image(systemName: "magnifyingglass")
                     .font(.secondaryText)
                     .foregroundStyle(.secondary)
-                TextField("İstek ara", text: $state.searchQuery)
+                TextField(L10n.t("sidebar.search.placeholder"), text: $state.searchQuery)
                     .inputLimit(.search)
                     .textFieldStyle(.plain)
                     .focused($searchFocused)
@@ -288,7 +288,7 @@ struct SidebarView: View {
                     Text("\(hitCount)")
                         .font(.tinyText.monospacedDigit())
                         .foregroundStyle(.secondary)
-                        .help("\(hitCount) eşleşen istek")
+                        .help(L10n.plural("sidebar.search.hits", count: hitCount))
                     Button {
                         appState.clearSearch()
                         searchFocused = true
@@ -298,7 +298,7 @@ struct SidebarView: View {
                             .iconHitTarget(20)
                     }
                     .buttonStyle(.plain)
-                    .help("Aramayı temizle (Esc)")
+                    .help(L10n.t("sidebar.search.clear"))
                 }
             }
             .padding(.horizontal, 8)

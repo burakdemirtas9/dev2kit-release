@@ -29,24 +29,24 @@ struct DiffCheckerView: View {
     private var header: some View {
         let options = diff.document.options
         return HStack(spacing: 12) {
-            Picker("Language", selection: Binding(
+            Picker(L10n.t("diff.language"), selection: Binding(
                 get: { diff.document.language },
                 set: { diff.select(language: $0) }
             )) {
                 ForEach(DiffChecker.Language.allCases) { Text($0.title).tag($0) }
             }
             .fixedSize()
-            .help("Both sides are formatted with this language before comparing")
-            Toggle("Normalize formatting", isOn: Binding(
+            .help(L10n.t("diff.language.help"))
+            Toggle(L10n.t("diff.normalize"), isOn: Binding(
                 get: { options.normalize },
                 set: { var new = options; new.normalize = $0; diff.update(options: new) }
             ))
-            .help("Format both sides first (JSON keys sorted), so indentation and key order do not count as differences")
-            Toggle("Ignore whitespace", isOn: Binding(
+            .help(L10n.t("diff.normalize.help"))
+            Toggle(L10n.t("diff.ignoreWhitespace"), isOn: Binding(
                 get: { options.line.ignoreWhitespace },
                 set: { var new = options; new.line.ignoreWhitespace = $0; diff.update(options: new) }
             ))
-            Toggle("Ignore case", isOn: Binding(
+            Toggle(L10n.t("diff.ignoreCase"), isOn: Binding(
                 get: { options.line.ignoreCase },
                 set: { var new = options; new.line.ignoreCase = $0; diff.update(options: new) }
             ))
@@ -65,8 +65,8 @@ struct DiffCheckerView: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
-            .help("Swap left and right")
-            .accessibilityLabel("Swap left and right")
+            .help(L10n.t("diff.swap"))
+            .accessibilityLabel(L10n.t("diff.swap"))
             Button {
                 diff.inputsHidden.toggle()
             } label: {
@@ -74,8 +74,8 @@ struct DiffCheckerView: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
-            .help(diff.inputsHidden ? "Show inputs" : "Hide inputs to give the result more room")
-            .accessibilityLabel(diff.inputsHidden ? "Show inputs" : "Hide inputs")
+            .help(diff.inputsHidden ? L10n.t("diff.showInputs") : L10n.t("diff.hideInputs.help"))
+            .accessibilityLabel(diff.inputsHidden ? L10n.t("diff.showInputs") : L10n.t("diff.hideInputs"))
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
@@ -100,12 +100,12 @@ struct DiffCheckerView: View {
                            sample: String, focusRequest: Int?) -> some View {
         VStack(spacing: 0) {
             HStack(spacing: 6) {
-                Text(title).font(.secondaryText.weight(.semibold)).foregroundStyle(.secondary)
+                Text(title == "Left" ? L10n.t("diff.left") : L10n.t("diff.right")).font(.secondaryText.weight(.semibold)).foregroundStyle(.secondary)
                 Text(text.wrappedValue.isEmpty ? "" : TextStats.size(text.wrappedValue.utf8.count))
                     .font(.tinyText.monospacedDigit())
                     .foregroundStyle(.tertiary)
                 if let issue {
-                    Label("Compared as-is: \(issue)", systemImage: "exclamationmark.triangle.fill")
+                    Label(L10n.t("diff.comparedAsIs", issue), systemImage: "exclamationmark.triangle.fill")
                         .font(.tinyText)
                         .foregroundStyle(Theme.warning)
                         .lineLimit(1)
@@ -117,16 +117,16 @@ struct DiffCheckerView: View {
             .frame(height: 26)
             if hidden {
                 OversizedTextNotice(
-                    title: "Not shown: \(TextStats.size(text.wrappedValue.utf8.count))",
-                    detail: "A line longer than \(TextStats.size(WorkbenchLimits.maxEditorLineBytes)) would freeze dev2kit in the editor. It is kept and compared."
+                    title: L10n.t("diff.hidden.title", TextStats.size(text.wrappedValue.utf8.count)),
+                    detail: L10n.t("diff.hidden.detail", TextStats.size(WorkbenchLimits.maxEditorLineBytes))
                 ) {
-                    CopyButton(text: text.wrappedValue, help: "Copy")
-                    Button("Clear") { text.wrappedValue = "" }.controlSize(.small)
+                    CopyButton(text: text.wrappedValue, help: L10n.t("common.copy"))
+                    Button(L10n.t("common.clear")) { text.wrappedValue = "" }.controlSize(.small)
                 }
                 .background(Theme.editorBackground)
             } else {
                 CodeEditor(text: text, language: language, limits: EditorLimits(
-                    onRejected: { diff.reportLimit($0.english) },
+                    onRejected: { diff.reportLimit($0.localized) },
                     onLongLine: { text.wrappedValue = $0 }
                 ), focusRequest: focusRequest)
                 .id("\(diff.document.id)-\(title)")
@@ -134,7 +134,7 @@ struct DiffCheckerView: View {
                 .background(Theme.editorBackground)
                 .overlay(alignment: .topLeading) {
                     if text.wrappedValue.isEmpty {
-                        SampleInputHint(sample: sample, note: "Paste the \(title.lowercased()) side here.", leading: 0)
+                        SampleInputHint(sample: sample, note: title == "Left" ? L10n.t("diff.pasteLeft") : L10n.t("diff.pasteRight"), leading: 0)
                     }
                 }
             }
@@ -159,7 +159,7 @@ private struct DiffResultView: View {
                         DiffLinesView(rows: result.rows, highlighted: highlightedRow)
                     }
                 } else {
-                    Text(diff.document.hasContent ? "" : "Paste two texts to compare. Inputs stay in memory only.")
+                    Text(diff.document.hasContent ? "" : L10n.t("diff.empty"))
                         .font(.callout)
                         .foregroundStyle(.tertiary)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -177,29 +177,29 @@ private struct DiffResultView: View {
         HStack(spacing: 10) {
             if let result = diff.result {
                 if result.isIdentical {
-                    Label("Identical", systemImage: "checkmark.circle.fill")
+                    Label(L10n.t("diff.identical"), systemImage: "checkmark.circle.fill")
                         .foregroundStyle(Theme.up)
                 } else {
                     Text("+\(result.added)").foregroundStyle(Theme.up)
                     Text("−\(result.removed)").foregroundStyle(Theme.down)
                     if let changes = result.jsonChanges {
-                        Text("\(changes.count) value \(changes.count == 1 ? "change" : "changes")")
+                        Text(L10n.plural("diff.valueChanges", count: changes.count))
                             .foregroundStyle(.secondary)
                     }
                 }
                 if result.isSimplified {
-                    Label("Too many differences in a block; shown as replaced", systemImage: "exclamationmark.triangle.fill")
+                    Label(L10n.t("diff.tooMany"), systemImage: "exclamationmark.triangle.fill")
                         .foregroundStyle(Theme.warning)
                 }
             }
             if diff.isRunning { ProgressView().controlSize(.small) }
             if diff.isLarge {
-                Text("Large input: not run automatically").foregroundStyle(.secondary)
-                Button("Run") { diff.runNow() }.controlSize(.small).disabled(!diff.isStale)
+                Text(L10n.t("wb.largeInput")).foregroundStyle(.secondary)
+                Button(L10n.t("wb.run")) { diff.runNow() }.controlSize(.small).disabled(!diff.isStale)
             }
             Spacer(minLength: 0)
             if diff.document.language == .json, diff.result?.jsonChanges != nil {
-                Picker("Result", selection: Binding(
+                Picker(L10n.t("diff.result"), selection: Binding(
                     get: { diff.document.resultMode },
                     set: { diff.select(resultMode: $0) }
                 )) {
@@ -215,8 +215,8 @@ private struct DiffResultView: View {
                     if let row = diff.moveToChange(forward: false) { withAnimation { proxy.scrollTo(row, anchor: .center) } }
                 } label: { Image(systemName: "chevron.up").iconHitTarget() }
                     .buttonStyle(.plain)
-                    .help("Previous difference")
-                    .accessibilityLabel("Previous difference")
+                    .help(L10n.t("diff.previous"))
+                    .accessibilityLabel(L10n.t("diff.previous"))
                 Text((diff.currentChange.map { "\($0 + 1)/" } ?? "") + "\(starts.count)")
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
@@ -224,8 +224,8 @@ private struct DiffResultView: View {
                     if let row = diff.moveToChange(forward: true) { withAnimation { proxy.scrollTo(row, anchor: .center) } }
                 } label: { Image(systemName: "chevron.down").iconHitTarget() }
                     .buttonStyle(.plain)
-                    .help("Next difference")
-                    .accessibilityLabel("Next difference")
+                    .help(L10n.t("diff.next"))
+                    .accessibilityLabel(L10n.t("diff.next"))
             }
         }
         .font(.secondaryText)
@@ -295,14 +295,14 @@ private struct JSONChangeList: View {
 
     var body: some View {
         if changes.isEmpty {
-            Label("No value differences", systemImage: "checkmark.circle.fill")
+            Label(L10n.t("diff.noValueChanges"), systemImage: "checkmark.circle.fill")
                 .foregroundStyle(Theme.up)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             List(changes) { change in
                 HStack(spacing: 8) {
                     symbol(change.kind)
-                    Text(change.path.isEmpty ? "(root)" : change.path)
+                    Text(change.path.isEmpty ? L10n.t("diff.root") : change.path)
                         .font(.system(.callout, design: .monospaced))
                         .foregroundStyle(Color(nsColor: Theme.syntaxKey))
                     Text(description(change.kind))
@@ -311,16 +311,16 @@ private struct JSONChangeList: View {
                         .lineLimit(1)
                         .truncationMode(.middle)
                     Spacer(minLength: 4)
-                    CopyButton(text: change.path, help: "Copy path: \(change.path)")
+                    CopyButton(text: change.path, help: L10n.t("wb.tree.copyPath", change.path))
                 }
                 .contextMenu {
-                    Button("Copy Path") { copy(change.path) }
+                    Button(L10n.t("diff.copyPath")) { copy(change.path) }
                     switch change.kind {
-                    case .added(let value): Button("Copy New Value") { copy(raw(value)) }
-                    case .removed(let value): Button("Copy Old Value") { copy(raw(value)) }
+                    case .added(let value): Button(L10n.t("diff.copyNew")) { copy(raw(value)) }
+                    case .removed(let value): Button(L10n.t("diff.copyOld")) { copy(raw(value)) }
                     case .changed(let from, let to):
-                        Button("Copy Old Value") { copy(raw(from)) }
-                        Button("Copy New Value") { copy(raw(to)) }
+                        Button(L10n.t("diff.copyOld")) { copy(raw(from)) }
+                        Button(L10n.t("diff.copyNew")) { copy(raw(to)) }
                     }
                 }
             }

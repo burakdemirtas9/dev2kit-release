@@ -94,7 +94,7 @@ public enum JSONTool {
     ) throws -> String {
         let root = try JSONDocument.parse(input)
         guard let current = root.value(at: steps) else {
-            throw WorkbenchIssue(message: "Düzenlenen değer girdide artık yok")
+            throw WorkbenchIssue(message: L10n.t("wbjson.editedGone"))
         }
         let newValue: JSONValue
         if case .string = current {
@@ -112,7 +112,7 @@ public enum JSONTool {
     /// hiçbir şey yapmaz (biçimlendirmez). Literal değilse hata.
     public static func decodeLiteral(_ literal: String) throws -> String {
         guard case .string(let text) = try JSONDocument.parse(literal) else {
-            throw WorkbenchIssue(message: "Unescape: metin bir JSON string değil")
+            throw WorkbenchIssue(message: L10n.t("wbjson.notString"))
         }
         return text
     }
@@ -128,7 +128,7 @@ public enum JSONTool {
     /// anlamsız bir hata çıkıyordu.
     public static func unescape(_ input: String, options: WorkbenchOptions) throws -> String {
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { throw WorkbenchIssue(message: "Unescape: içerik boş") }
+        guard !trimmed.isEmpty else { throw WorkbenchIssue(message: L10n.t("wbjson.unescapeEmpty")) }
         let isQuoted = trimmed.hasPrefix("\"") && trimmed.hasSuffix("\"") && trimmed.count >= 2
         if !isQuoted, case .valid = validate(trimmed) {
             return try format(trimmed, options: options)
@@ -137,14 +137,14 @@ public enum JSONTool {
         let decoded: String
         do {
             guard case .string(let text) = try JSONDocument.parse(literal) else {
-                throw WorkbenchIssue(message: "Unescape: metin bir JSON string değil")
+                throw WorkbenchIssue(message: L10n.t("wbjson.notString"))
             }
             decoded = text
         } catch let issue as WorkbenchIssue {
             // Tırnaksız girdide konum, eklenen tırnak yüzünden bir kayık olur;
             // sebebi açıkça söylemek konumdan daha yararlı.
-            let reason = issue.message.replacingOccurrences(of: "Geçersiz JSON: ", with: "")
-            throw WorkbenchIssue(message: "Unescape: metin kaçışlı bir JSON string değil (\(reason)). Kaçışsız tırnak (\") içeriyor olabilir.")
+            let reason = issue.message.replacingOccurrences(of: L10n.t("json.invalid", ""), with: "")
+            throw WorkbenchIssue(message: L10n.t("wbjson.notEscaped", reason))
         }
         if case .valid = validate(decoded) {
             return try format(decoded, options: options)
@@ -171,7 +171,7 @@ public struct JSONTreeNode: Identifiable, Sendable {
     public let hiddenSiblings: Int
 
     public init(value: JSONValue) {
-        self.init(id: "", label: "kök", value: value, steps: [], hiddenSiblings: 0)
+        self.init(id: "", label: L10n.t("wb.tree.root"), value: value, steps: [], hiddenSiblings: 0)
     }
 
     init(id: String, label: String, value: JSONValue, steps: [JSONPathStep], hiddenSiblings: Int) {
@@ -288,7 +288,7 @@ public extension JSONValue {
         default:
             break
         }
-        throw WorkbenchIssue(message: "Düzenlenen değer girdide artık yok")
+        throw WorkbenchIssue(message: L10n.t("wbjson.editedGone"))
     }
 }
 

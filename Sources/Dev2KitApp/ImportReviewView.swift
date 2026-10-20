@@ -13,11 +13,11 @@ struct ImportReviewView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label("İçe Aktarma İncelemesi", systemImage: "checkmark.shield")
+            Label(L10n.t("review.title"), systemImage: "checkmark.shield")
                 .font(.title2.bold())
             Text(blockedCount > 0
-                 ? "Aktarmadan önce aşağıdakilere bak. Engellenen \(blockedCount) istek aktarılmayacak."
-                 : "Aktarmadan önce aşağıdakilere bak.")
+                 ? L10n.plural("review.subtitle.blocked", count: blockedCount)
+                 : L10n.t("review.subtitle"))
                 .foregroundStyle(.secondary)
 
             ScrollView {
@@ -32,9 +32,9 @@ struct ImportReviewView: View {
             Divider()
             HStack {
                 Spacer()
-                Button("Vazgeç", role: .cancel) { onCancel() }
+                Button(L10n.t("common.cancel"), role: .cancel) { onCancel() }
                     .keyboardShortcut(.cancelAction)
-                Button(importableCount == 1 ? "1 isteği aktar" : "\(importableCount) isteği aktar") { onConfirm() }
+                Button(L10n.plural("review.import", count: importableCount)) { onConfirm() }
                     .keyboardShortcut(.defaultAction)
                     .disabled(importableCount == 0)
             }
@@ -47,7 +47,7 @@ struct ImportReviewView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text(review.collection.name).font(.headline)
-                Text("\(review.requests.count) istek")
+                Text(L10n.plural("review.requestCount", count: review.requests.count))
                     .font(.secondaryText)
                     .foregroundStyle(.secondary)
             }
@@ -55,7 +55,7 @@ struct ImportReviewView: View {
                 .filter { !$0.findings.isEmpty }
                 .sorted { ($0.worstSeverity?.rawValue ?? 9) < ($1.worstSeverity?.rawValue ?? 9) }
             if flagged.isEmpty {
-                Label("İsteklerde sorun bulunmadı.", systemImage: "checkmark.circle")
+                Label(L10n.t("review.noIssues"), systemImage: "checkmark.circle")
                     .font(.callout)
                     .foregroundStyle(Theme.up)
             }
@@ -79,7 +79,7 @@ struct ImportReviewView: View {
                     .foregroundStyle(Theme.purple)
                 Text(review.request.name).fontWeight(.medium)
                 if review.isBlocked {
-                    Text("aktarılmayacak")
+                    Text(L10n.t("review.notImported"))
                         .font(.tinyText.bold())
                         .padding(.horizontal, 5).padding(.vertical, 1)
                         .foregroundStyle(Theme.down)

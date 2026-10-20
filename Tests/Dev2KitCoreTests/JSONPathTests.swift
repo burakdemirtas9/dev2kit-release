@@ -4,6 +4,9 @@ import XCTest
 /// JSONPath (RFC 9535). Örnek veri RFC'deki kitapçı belgesi (herkese açık
 /// örnek, gerçek veri değil).
 final class JSONPathTests: XCTestCase {
+    /// Beklenen mesajlar İngilizce.
+    override func invokeTest() { withLanguage(.english) { super.invokeTest() } }
+
     private let store = """
     { "store": {
         "book": [

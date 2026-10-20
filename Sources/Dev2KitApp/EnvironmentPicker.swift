@@ -6,16 +6,16 @@ struct EnvironmentPicker: View {
 
     /// Toolbar'da görünen ad: seçili environment, uzunsa kırpılmış hali.
     private var selectedLabel: String {
-        guard let environment = appState.activeEnvironment else { return "Environment Yok" }
+        guard let environment = appState.activeEnvironment else { return L10n.t("environment.none") }
         let name = DisplayName.truncated(environment.name, limit: DisplayName.environmentPickerLimit)
-        return name.isEmpty ? "Adsız" : name
+        return name.isEmpty ? L10n.t("common.unnamed.title") : name
     }
 
     /// Kırpılmış adın tamamı fare üstüne gelince görünür.
     private var helpText: String {
-        guard let environment = appState.activeEnvironment else { return "Aktif environment" }
+        guard let environment = appState.activeEnvironment else { return L10n.t("environment.active") }
         let full = environment.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        return full.isEmpty ? "Aktif environment" : "Aktif environment: \(full)"
+        return full.isEmpty ? L10n.t("environment.active") : L10n.t("environment.active.named", full)
     }
 
     var body: some View {
@@ -30,7 +30,7 @@ struct EnvironmentPicker: View {
         // burada geri alır, diğer toolbar düğmeleri ikon kalır.
         Menu {
             Picker("Environment", selection: $state.workspace.activeEnvironmentID) {
-                Text("Environment Yok").tag(UUID?.none)
+                Text(L10n.t("environment.none")).tag(UUID?.none)
                 ForEach(appState.workspace.environments) { environment in
                     Text(environment.name).tag(UUID?.some(environment.id))
                 }

@@ -89,7 +89,7 @@ private struct RequestTab: View {
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .help("Sekmeyi kapat (⌘W)")
+                    .help(L10n.t("tabs.close.help"))
                 }
             }
             .frame(width: 14)
@@ -117,15 +117,15 @@ private struct RequestTab: View {
                 appState.selectedRequestID = request.id
             }
         }
-        .help(isPreview ? "\(request.name) — önizleme; çift tıklayınca kalıcı olur" : request.name)
+        .help(isPreview ? L10n.t("tabs.preview.help", request.name) : request.name)
         .contextMenu {
             if isPreview {
-                Button("Kalıcı Yap") { appState.pinTab(request.id) }
+                Button(L10n.t("tabs.pin")) { appState.pinTab(request.id) }
                 Divider()
             }
-            Button("Kapat") { appState.closeTab(request.id) }
-            Button("Diğerlerini Kapat") { appState.closeOtherTabs(request.id) }
-            Button("Sağdakileri Kapat") { appState.closeTabsToRight(of: request.id) }
+            Button(L10n.t("common.close")) { appState.closeTab(request.id) }
+            Button(L10n.t("tabs.closeOthers")) { appState.closeOtherTabs(request.id) }
+            Button(L10n.t("tabs.closeRight")) { appState.closeTabsToRight(of: request.id) }
         }
     }
 }

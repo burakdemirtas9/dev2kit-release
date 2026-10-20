@@ -2,6 +2,9 @@ import XCTest
 @testable import Dev2KitCore
 
 final class ImportReviewerTests: XCTestCase {
+    /// Beklenen mesajlar Türkçe.
+    override func invokeTest() { withLanguage(.turkish) { super.invokeTest() } }
+
     private let context = ImportReviewer.Context(policy: .notConfigured, vaultSecretNames: ["prod_token"])
 
     private func findings(_ request: RequestModel, policy: HostPolicyState = .notConfigured) -> [ImportFinding] {
@@ -19,7 +22,7 @@ final class ImportReviewerTests: XCTestCase {
     // MARK: - Kesin engel
 
     func testFileSchemeIsBlocked() {
-        XCTAssertEqual(titles(RequestModel(url: "file:///etc/passwd"), .block), ["Desteklenmeyen adres türü"])
+        XCTAssertEqual(titles(RequestModel(url: "file:///etc/passwd"), .block), ["Desteklenmeyen URL türü"])
     }
 
     func testLiteralHostOutsidePolicyIsBlocked() {
@@ -64,8 +67,8 @@ final class ImportReviewerTests: XCTestCase {
         )
         let detail = try XCTUnwrap(findings(request).first { $0.title == "Düz metin kimlik bilgisi" }).detail
         XCTAssertTrue(detail.contains("Basic auth parolası"))
-        XCTAssertTrue(detail.contains("\"Cookie\" başlığı"))
-        XCTAssertTrue(detail.contains("gövde"))
+        XCTAssertTrue(detail.contains("\"Cookie\" header'ı"))
+        XCTAssertTrue(detail.contains("body"))
         XCTAssertFalse(detail.contains("X-Token"), "secret referansı düz metin değil")
     }
 
@@ -86,7 +89,7 @@ final class ImportReviewerTests: XCTestCase {
     func testMetadataPunycodeAndUserInfo() {
         XCTAssertTrue(titles(RequestModel(url: "http://169.254.169.254/latest"), .warn).contains("Bulut metadata adresi"))
         XCTAssertTrue(titles(RequestModel(url: "https://xn--pypal-4ve.com"), .warn).contains("Benzer görünen alan adı"))
-        XCTAssertTrue(titles(RequestModel(url: "https://ali:parola@a.com"), .warn).contains("Adreste kullanıcı bilgisi"))
+        XCTAssertTrue(titles(RequestModel(url: "https://ali:parola@a.com"), .warn).contains("URL'de kullanıcı bilgisi"))
     }
 
     func testPersonalDataIsInformational() {

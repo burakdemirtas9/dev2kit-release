@@ -24,9 +24,9 @@ extension AppState {
         do {
             let destination = try TrustStore.install(from: url)
             reloadTrustStore()
-            return TrustStoreNotice(text: "\(destination.lastPathComponent) eklendi.", isError: false)
+            return TrustStoreNotice(text: L10n.t("tls.added", destination.lastPathComponent), isError: false)
         } catch {
-            return TrustStoreNotice(text: "Eklenemedi: \(error.localizedDescription)", isError: true)
+            return TrustStoreNotice(text: L10n.t("tls.addFailed", error.localizedDescription), isError: true)
         }
     }
 
@@ -34,9 +34,9 @@ extension AppState {
         do {
             try TrustStore.remove(path: path)
             reloadTrustStore()
-            return TrustStoreNotice(text: "Sertifika kaldırıldı.", isError: false)
+            return TrustStoreNotice(text: L10n.t("tls.removed"), isError: false)
         } catch {
-            return TrustStoreNotice(text: "Kaldırılamadı: \(error.localizedDescription)", isError: true)
+            return TrustStoreNotice(text: L10n.t("tls.removeFailed", error.localizedDescription), isError: true)
         }
     }
 

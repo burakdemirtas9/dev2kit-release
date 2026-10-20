@@ -14,21 +14,21 @@ struct CookiesView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Çerezler")
+            Text(L10n.t("cookies.title"))
                 .font(.title2).bold()
-            Text("Aktif environment: \(appState.activeEnvironment?.name ?? "Environment Yok"). Çerezler environment başına ayrı tutulur ve yalnızca bellekte durur — uygulama kapanınca silinir, diske yazılmaz.")
+            Text(L10n.t("cookies.subtitle", appState.activeEnvironment?.name ?? L10n.t("environment.none")))
                 .font(.secondaryText)
                 .foregroundStyle(.secondary)
 
             if cookies.isEmpty {
                 ContentUnavailableView {
                     Label {
-                        Text("Çerez yok")
+                        Text(L10n.t("cookies.empty.title"))
                     } icon: {
                         CookieIcon().frame(width: 44, height: 44)
                     }
                 } description: {
-                    Text("Sunucular Set-Cookie döndükçe burada görünür.")
+                    Text(L10n.t("cookies.empty.message"))
                 }
                 .frame(maxWidth: .infinity, minHeight: 200)
             } else {
@@ -54,11 +54,11 @@ struct CookiesView: View {
                                 .font(.secondaryText)
                                 .foregroundStyle(.secondary)
                             if let expires = cookie.expiresDate {
-                                Text(expires.formatted(date: .abbreviated, time: .shortened))
+                                Text(L10n.date(expires))
                                     .font(.secondaryText)
                                     .foregroundStyle(.tertiary)
                             } else {
-                                Text("oturum")
+                                Text(L10n.t("cookies.session"))
                                     .font(.secondaryText)
                                     .foregroundStyle(.tertiary)
                             }
@@ -75,7 +75,7 @@ struct CookiesView: View {
                     appState.clearActiveCookies()
                     reload()
                 } label: {
-                    Label("Tümünü Sil (oturumu kapat)", systemImage: "trash")
+                    Label(L10n.t("cookies.deleteAll"), systemImage: "trash")
                 }
                 .disabled(cookies.isEmpty)
                 Button {
@@ -83,9 +83,9 @@ struct CookiesView: View {
                 } label: {
                     Image(systemName: "arrow.clockwise")
                 }
-                .help("Yenile")
+                .help(L10n.t("common.refresh"))
                 Spacer()
-                Button("Kapat") { dismiss() }
+                Button(L10n.t("common.close")) { dismiss() }
                     .keyboardShortcut(.cancelAction)
             }
         }

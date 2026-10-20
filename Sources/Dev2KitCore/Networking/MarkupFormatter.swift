@@ -132,7 +132,7 @@ public enum MarkupFormatter {
         let scanner = CodeScanner(chars: chars, index: start)
         for (open, close) in [("<!--", "-->"), ("<![CDATA[", "]]>"), ("<?", "?>")] where scanner.hasPrefix(open) {
             guard let end = scanner.position(of: close, from: start + open.count) else {
-                throw BeautifyError.invalid(flavor.label, "\"\(close)\" kapanışı bulunamadı.")
+                throw BeautifyError.invalid(flavor.label, L10n.t("markup.noClose", close))
             }
             return end
         }
@@ -150,7 +150,7 @@ public enum MarkupFormatter {
             }
             i += 1
         }
-        throw BeautifyError.invalid(flavor.label, "\"<\" etiketi \">\" ile kapatılmamış.")
+        throw BeautifyError.invalid(flavor.label, L10n.t("markup.unclosedBracket"))
     }
 
     private static func isVerbatim(_ token: Token) -> Bool {
@@ -287,7 +287,7 @@ public enum MarkupFormatter {
                         index += 1
                         continue
                     }
-                    throw BeautifyError.invalid(flavor.label, "</\(name)> kapanışının açılışı yok.")
+                    throw BeautifyError.invalid(flavor.label, L10n.t("markup.noOpen", name))
                 }
                 if top == name {
                     stack.removeLast()
@@ -302,7 +302,7 @@ public enum MarkupFormatter {
                 } else {
                     throw BeautifyError.invalid(
                         flavor.label,
-                        "</\(name)> kapanışı beklenmiyordu, açık etiket <\(top)>."
+                        L10n.t("markup.unexpectedClose", name, top)
                     )
                 }
                 index += 1
@@ -310,7 +310,7 @@ public enum MarkupFormatter {
         }
 
         if let unclosed = stack.last, flavor == .xml {
-            throw BeautifyError.invalid(flavor.label, "<\(unclosed)> etiketi kapatılmamış.")
+            throw BeautifyError.invalid(flavor.label, L10n.t("markup.unclosedTag", unclosed))
         }
         return writer.text
     }

@@ -12,7 +12,7 @@ struct ResponseSizePopover: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             group(
-                title: "Yanıt Boyutu",
+                title: L10n.t("size.response"),
                 icon: "arrow.down.circle.fill",
                 tint: Theme.up,
                 total: size.responseTotal,
@@ -22,7 +22,7 @@ struct ResponseSizePopover: View {
 
             if let ratio = size.compressionRatio {
                 // Sıkıştırma kazancı: tel üzerindeki gövde vs açılmış hali.
-                Text("Gövde sıkıştırılmış: \(Self.bytes(size.responseBody)) → \(Self.bytes(size.responseBodyDecoded)) · %\(Int(ratio * 100)) kazanç")
+                Text(L10n.t("size.compressed", Self.bytes(size.responseBody), Self.bytes(size.responseBodyDecoded), L10n.number(Int(ratio * 100))))
                     .font(.secondaryText)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -31,7 +31,7 @@ struct ResponseSizePopover: View {
             Divider()
 
             group(
-                title: "İstek Boyutu",
+                title: L10n.t("size.request"),
                 icon: "arrow.up.circle.fill",
                 tint: Theme.warning,
                 total: size.requestTotal,
@@ -53,8 +53,8 @@ struct ResponseSizePopover: View {
                 Text(Self.bytes(total))
                     .font(.system(.headline, design: .monospaced))
             }
-            row("Başlıklar", headers)
-            row("Gövde", body)
+            row("Headers", headers)
+            row("Body", body)
         }
     }
 

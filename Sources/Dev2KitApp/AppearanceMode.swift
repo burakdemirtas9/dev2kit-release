@@ -1,3 +1,4 @@
+import Dev2KitCore
 import AppKit
 
 /// Görünüm tercihi: sistem, açık, koyu.
@@ -8,9 +9,9 @@ enum AppearanceMode: String, CaseIterable {
 
     var label: String {
         switch self {
-        case .system: return "Sistem"
-        case .light: return "Açık"
-        case .dark: return "Koyu"
+        case .system: return L10n.t("appearance.system")
+        case .light: return L10n.t("appearance.light")
+        case .dark: return L10n.t("appearance.dark")
         }
     }
 

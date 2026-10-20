@@ -4,6 +4,9 @@ import XCTest
 /// Yorumlu içerik: normal beautifier'lar gibi biçimlendirilir, hata vermez;
 /// yorumlar yerinde korunur.
 final class CommentFormattingTests: XCTestCase {
+    /// Beklenen mesajlar Türkçe.
+    override func invokeTest() { withLanguage(.turkish) { super.invokeTest() } }
+
     // MARK: - JSON (JSONC)
 
     func testJSONWithLineCommentsIsBeautified() throws {

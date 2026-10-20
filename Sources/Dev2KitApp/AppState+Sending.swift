@@ -68,7 +68,7 @@ extension AppState {
                         )
                     } catch let error as TokenError {
                         self.tokenBlockedSends[id] = usedTokens.map(\.variable)
-                        self.showTokenAlert("Token alınamadı; istek gönderilmedi", error.localizedDescription, for: id)
+                        self.showTokenAlert(L10n.t("token.alert.notSent"), error.localizedDescription, for: id)
                         throw error
                     }
                 }
@@ -115,7 +115,7 @@ extension AppState {
                 self.setResponse(.blocked(findings), for: id)
                 // Denetim izi: engellenen gönderim geçmişte görünsün.
                 let reasons = findings.map(\.title).joined(separator: ", ")
-                self.recordHistory(request, outcome: .failed(message: "Güvenlik engeli: \(reasons)"), responseText: nil)
+                self.recordHistory(request, outcome: .failed(message: L10n.t("send.blocked.history", reasons)), responseText: nil)
             } catch RequestEngineError.needsApproval(let findings) {
                 self.setResponse(.needsApproval(findings), for: id)
             } catch {
@@ -138,7 +138,7 @@ extension AppState {
         do {
             try approvalStore.approve(findings.compactMap(\.approvalKey))
         } catch {
-            setResponse(.failure("Onay kaydedilemedi: \(error.localizedDescription)"), for: request.id)
+            setResponse(.failure(L10n.t("send.approvalFailed", error.localizedDescription)), for: request.id)
             return
         }
         send(request)
@@ -180,7 +180,7 @@ extension AppState {
         } catch {
             // Yenileme başarısızsa istek eski token'la gider ve 401 alır;
             // kullanıcı Auth sekmesinden yeniden yetkilendirir.
-            authMessage = "Token yenilenemedi: \(error.localizedDescription)"
+            authMessage = (L10n.t("oauth.refreshFailed", error.localizedDescription), false)
         }
     }
 
@@ -211,9 +211,9 @@ extension AppState {
                     openURL: { url in NSWorkspace.shared.open(url) }
                 )
                 try saveToken(token, for: config)
-                authMessage = "Yetkilendirme tamamlandı."
+                authMessage = (L10n.t("oauth.authorized"), true)
             } catch {
-                authMessage = error.localizedDescription
+                authMessage = (error.localizedDescription, false)
             }
             authorizingConfigID = nil
         }
@@ -258,7 +258,7 @@ extension AppState {
     nonisolated static func makeDisplay(_ response: ResponseData) -> ResponseDisplay {
         let contentType = response.headers
             .first { $0.name.lowercased() == "content-type" }?.value ?? ""
-        let text = response.bodyText ?? "(ikili veri: \(response.body.count) byte)"
+        let text = response.bodyText ?? L10n.plural("response.binary", count: response.body.count)
         // Tür tahmini ve biçimlendirme tek yerde: Beautifier (Core, testli).
         let kind = Beautifier.kind(contentType: contentType, body: text)
         let pretty = Beautifier.beautifiedOrOriginal(text, as: kind)
@@ -284,6 +284,6 @@ extension AppState {
     func clearToken(for config: OAuth2Config) {
         try? secretStore.deleteSecret(forName: config.tokenSecretName)
         invalidateSecretNames()
-        authMessage = "Token silindi."
+        authMessage = (L10n.t("oauth.tokenDeleted"), true)
     }
 }

@@ -18,10 +18,10 @@ public enum OpenAPIImporter {
 
         public var errorDescription: String? {
             switch self {
-            case .notJSON: return "Yanıt JSON değil."
-            case .yaml: return "YAML biçimi desteklenmiyor; dokümanın JSON halini ver (Springdoc: /v3/api-docs)."
-            case .notOpenAPI: return "JSON bir OpenAPI/Swagger dokümanı değil (\"openapi\" ya da \"swagger\" alanı yok)."
-            case .noOperations: return "Dokümanda hiç işlem (path + metot) yok."
+            case .notJSON: return L10n.t("openapi.notJSON")
+            case .yaml: return L10n.t("openapi.yaml")
+            case .notOpenAPI: return L10n.t("openapi.notOpenAPI")
+            case .noOperations: return L10n.t("openapi.noOperations")
             }
         }
     }
@@ -386,21 +386,21 @@ public enum OpenAPIImporter {
             let httpScheme = (scheme["scheme"] as? String ?? "").lowercased()
             switch (type, httpScheme) {
             case ("http", "basic"), ("basic", _):
-                usedSchemes[schemeName] = "Basic auth: {{username}} ve {{secret:password}} olarak eklendi"
+                usedSchemes[schemeName] = L10n.t("openapi.scheme.basic")
                 return .basic(username: "{{username}}", password: "{{secret:password}}")
             case ("apikey", _):
                 let name = scheme["name"] as? String ?? "X-Api-Key"
                 let place = scheme["in"] as? String ?? "header"
                 if place == "cookie" {
-                    usedSchemes[schemeName] = "Cookie ile API key desteklenmiyor; elle ekle"
+                    usedSchemes[schemeName] = L10n.t("openapi.scheme.cookie")
                     return .none
                 }
-                usedSchemes[schemeName] = "API key: {{secret:\(name)}} olarak eklendi"
+                usedSchemes[schemeName] = L10n.t("openapi.scheme.apiKey", name)
                 return .apiKey(key: name, value: "{{secret:\(name)}}", location: place == "query" ? .queryParam : .header)
             default:
                 // bearer, oauth2, openIdConnect: token {{accessToken}} değişkeninden.
                 collectTokenURLs(scheme)
-                usedSchemes[schemeName] = "Bearer token: {{accessToken}} olarak eklendi"
+                usedSchemes[schemeName] = L10n.t("openapi.scheme.bearer")
                 return .bearer(token: "{{accessToken}}")
             }
         }
@@ -417,29 +417,29 @@ public enum OpenAPIImporter {
         func notes(serverURL: String?, sourceURL: URL?) -> [String] {
             var notes: [String] = []
             if let serverURL {
-                notes.append("İstek adresleri {{\(variableName)}} değişkenini kullanır; dokümandaki sunucu: \(serverURL)")
+                notes.append(L10n.t("openapi.note.server", variableName, serverURL))
             } else {
-                notes.append("Dokümanda sunucu adresi yok; {{\(variableName)}} değişkenine adresi elle gir.")
+                notes.append(L10n.t("openapi.note.noServer", variableName))
             }
             if let serverHost = serverURL.flatMap(URL.init(string:))?.host?.lowercased(),
                let sourceHost = sourceURL?.host?.lowercased(), serverHost != sourceHost {
-                notes.append("⚠︎ Doküman \(sourceHost) adresinden alındı ama istekler \(serverHost) adresine gidecek. Doküman güvenilir değilse bu adresi kontrol et.")
+                notes.append(L10n.t("openapi.note.otherHost", sourceHost, serverHost))
             }
             let pathParams = (root["paths"] as? [String: Any] ?? [:]).keys.contains { $0.contains("{") }
             if pathParams {
-                notes.append("Yol parametreleri {{ad}} olarak bırakıldı; environment'a ekle ya da adreste elle doldur.")
+                notes.append(L10n.t("openapi.note.pathParams"))
             }
             for (name, detail) in usedSchemes.sorted(by: { $0.key < $1.key }) {
-                notes.append("Güvenlik şeması \"\(name)\" — \(detail).")
+                notes.append(L10n.t("openapi.note.scheme", name, detail))
             }
             if !tokenURLs.isEmpty {
-                notes.append("OAuth2 token adresi: \(tokenURLs.sorted().joined(separator: ", ")). Environment'ta \"accessToken\" adında token değişkeni tanımlayabilirsin.")
+                notes.append(L10n.t("openapi.note.oauth", tokenURLs.sorted().joined(separator: ", ")))
             }
             if skippedFileFields > 0 {
-                notes.append("\(skippedFileFields) dosya alanı atlandı (dosya yükleme henüz desteklenmiyor).")
+                notes.append(L10n.plural("openapi.note.fileFields", count: skippedFileFields))
             }
             if skippedCookieParams > 0 {
-                notes.append("\(skippedCookieParams) cookie parametresi atlandı.")
+                notes.append(L10n.plural("openapi.note.cookies", count: skippedCookieParams))
             }
             return notes
         }

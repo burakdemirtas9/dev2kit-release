@@ -33,7 +33,7 @@ public enum TimestampConverter {
             default: (seconds, unit) = (number / 1_000_000_000, "nanoseconds")
             }
             guard TimeText.isRepresentable(seconds) else {
-                throw WorkbenchIssue(message: "Zaman aralık dışı: \"\(value.prefix(40))\" (0001–9999 yılları arası gösterilebilir)")
+                throw WorkbenchIssue(message: L10n.t("time.outOfRange", String(value.prefix(40))))
             }
             return (Date(timeIntervalSince1970: seconds), unit)
         }
@@ -48,7 +48,7 @@ public enum TimestampConverter {
         if let date = TimeText.formatter("EEE, dd MMM yyyy HH:mm:ss zzz", TimeZone(identifier: "GMT")!).date(from: value) {
             return (date, "HTTP date")
         }
-        throw WorkbenchIssue(message: "Tanınmayan zaman: \"\(value)\" (Unix sayısı, ISO 8601 ya da yyyy-MM-dd HH:mm:ss bekleniyor)")
+        throw WorkbenchIssue(message: L10n.t("time.unknown", value))
     }
 
     private static func describe(_ date: Date, source: String, now: Date, timeZone: TimeZone) -> String {

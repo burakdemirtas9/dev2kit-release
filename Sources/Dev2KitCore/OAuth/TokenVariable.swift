@@ -16,8 +16,8 @@ public struct TokenVariable: Codable, Hashable, Identifiable, Sendable {
 
         public var title: String {
             switch self {
-            case .basicHeader: return "Basic başlığı"
-            case .requestBody: return "Gövdede"
+            case .basicHeader: return L10n.t("oauth.clientAuth.header")
+            case .requestBody: return L10n.t("oauth.clientAuth.body")
             }
         }
     }

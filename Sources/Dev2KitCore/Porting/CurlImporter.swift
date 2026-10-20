@@ -16,10 +16,10 @@ public enum CurlImporter {
         public var errorDescription: String? { message }
     }
 
-    public static func parse(_ command: String, name: String = "cURL İsteği") throws -> Result {
+    public static func parse(_ command: String, name: String = L10n.t("curl.defaultName")) throws -> Result {
         let tokens = try ShellTokenizer.tokenize(command)
         guard !tokens.isEmpty else {
-            throw ParseError(message: "Komut boş.")
+            throw ParseError(message: L10n.t("curl.empty"))
         }
 
         var warnings: [String] = []
@@ -45,7 +45,7 @@ public enum CurlImporter {
                 return String(token[token.index(after: equals)...])
             }
             guard position + 1 < tokens.count else {
-                throw ParseError(message: "\(token) bayrağının değeri eksik.")
+                throw ParseError(message: L10n.t("curl.missingValue", token))
             }
             position += 1
             return tokens[position]
@@ -66,7 +66,7 @@ public enum CurlImporter {
                 if let method = HTTPMethod(rawValue: raw) {
                     explicitMethod = method
                 } else {
-                    warnings.append("Desteklenmeyen metot \"\(raw)\"; GET olarak alındı.")
+                    warnings.append(L10n.t("curl.badMethod", raw))
                 }
 
             case "-H", "--header":
@@ -79,7 +79,7 @@ public enum CurlImporter {
                         headers.append(KeyValueEntry(key: key, value: headerValue))
                     }
                 } else {
-                    warnings.append("\"\(raw)\" başlığı \"Ad: değer\" biçiminde değil, atlandı.")
+                    warnings.append(L10n.t("curl.badHeader", raw))
                 }
 
             case "-d", "--data", "--data-raw", "--data-ascii", "--data-binary":
@@ -102,12 +102,12 @@ public enum CurlImporter {
                     let key = String(raw[raw.startIndex..<separator])
                     let fieldValue = String(raw[raw.index(after: separator)...])
                     if fieldValue.hasPrefix("@") || fieldValue.hasPrefix("<") {
-                        warnings.append("\"\(key)\" alanı dosya yüklüyor; dosya desteği yok, alan atlandı.")
+                        warnings.append(L10n.t("curl.fileField", key))
                     } else {
                         formParts.append((key, fieldValue))
                     }
                 } else {
-                    warnings.append("\"\(raw)\" form alanı \"ad=değer\" biçiminde değil, atlandı.")
+                    warnings.append(L10n.t("curl.badFormField", raw))
                 }
 
             case "-u", "--user":
@@ -137,15 +137,15 @@ public enum CurlImporter {
                 explicitMethod = .head
 
             case "-k", "--insecure":
-                warnings.append("⚠︎ -k (sertifika doğrulamasını kapat) uygulanmadı: dev2kit TLS doğrulamasını devre dışı bırakmaz.")
+                warnings.append(L10n.t("curl.insecure"))
 
             case "-x", "--proxy":
                 _ = try? value(for: token, at: &index)
-                warnings.append("⚠︎ --proxy desteklenmiyor, yok sayıldı.")
+                warnings.append(L10n.t("curl.proxy"))
 
             case "-E", "--cert", "--key", "--cacert":
                 _ = try? value(for: token, at: &index)
-                warnings.append("⚠︎ İstemci sertifikası / özel CA henüz desteklenmiyor, yok sayıldı.")
+                warnings.append(L10n.t("curl.clientCert"))
 
             // Davranışı etkilemeyen ya da bizde zaten varsayılan olan bayraklar.
             case "--compressed", "-s", "--silent", "-S", "--show-error", "-v", "--verbose",
@@ -154,18 +154,18 @@ public enum CurlImporter {
 
             default:
                 if token.hasPrefix("-") {
-                    warnings.append("\"\(token)\" bayrağı tanınmadı, yok sayıldı.")
+                    warnings.append(L10n.t("curl.unknownFlag", token))
                 } else if url == nil {
                     url = token
                 } else {
-                    warnings.append("Fazladan argüman \"\(token)\" yok sayıldı.")
+                    warnings.append(L10n.t("curl.extraArgument", token))
                 }
             }
             index += 1
         }
 
         guard let resolvedURL = url, !resolvedURL.isEmpty else {
-            throw ParseError(message: "Komutta URL bulunamadı.")
+            throw ParseError(message: L10n.t("curl.noURL"))
         }
 
         var model = RequestModel(name: name, url: normalize(resolvedURL))
@@ -221,11 +221,7 @@ public enum CurlImporter {
         // curl gövdeli GET gönderebiliyor, URLSession gönderemiyor. İstek
         // sorunsuz içe aktarılır ama gövdesiz gideceği ŞİMDİ söylenir.
         if !model.method.allowsBody, hasBody(model) {
-            warnings.append(
-                "⚠︎ \(model.method.rawValue) isteği gövdesiz gönderilir: macOS'un ağ katmanı "
-                + "gövdeli \(model.method.rawValue) göndermiyor. Gövde editörde korunur; "
-                + "göndermek için metodu POST yap ya da gövdeyi Query sekmesine taşı."
-            )
+            warnings.append(L10n.t("curl.bodyDropped", model.method.rawValue))
         }
 
         // Düz metin kimlik bilgisi uyarısı ImportReviewer'dadır: hangi alanda

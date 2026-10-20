@@ -19,13 +19,13 @@ public struct VariableResolver: Sendable {
         public var errorDescription: String? {
             switch self {
             case .unknownVariable(let name):
-                return "Tanımsız değişken: {{\(name)}} — aktif environment'ı kontrol et."
+                return L10n.t("resolver.undefined", name)
             case .variableIsSecret(let name):
-                return "\"\(name)\" bir secret — {{secret:\(name)}} olarak yazmalısın."
+                return L10n.t("resolver.isSecret", name)
             case .unknownSecret(let name):
-                return "Tanımsız secret: {{secret:\(name)}} — Secrets ekranından ekleyebilirsin."
+                return L10n.t("resolver.undefinedSecret", name)
             case .nestingTooDeep(let name):
-                return "Değişken çözümü çok derin: {{\(name)}} (döngüsel referans olabilir)."
+                return L10n.t("resolver.tooDeep", name)
             }
         }
     }

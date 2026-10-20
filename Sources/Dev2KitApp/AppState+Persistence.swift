@@ -52,7 +52,7 @@ extension AppState {
     private func writeWorkspace() {
         persistTask = nil
         guard !persistenceBlocked else {
-            saveState = .failed("Workspace dosyası okunamadığı için kayıt kapalı")
+            saveState = .failed(L10n.t("save.blocked"))
             return
         }
         // Encode + disk yazımı arka planda; MainActor yalnızca sonucu işler.
@@ -63,7 +63,7 @@ extension AppState {
                     self.saveState = .saved(Date())
                     return
                 }
-                self.saveError = "workspace.json yazılamadı: \(error.localizedDescription)"
+                self.saveError = L10n.t("save.writeFailed", error.localizedDescription)
                 self.saveState = .failed(error.localizedDescription)
             }
         }

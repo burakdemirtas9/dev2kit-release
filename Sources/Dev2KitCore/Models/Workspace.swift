@@ -52,7 +52,14 @@ public struct CollectionModel: Codable, Identifiable, Hashable, Sendable {
     /// Yeniden adlandırılmaz, silinmez, dışa aktarılmaz, taşıma hedefi olmaz.
     public var isTokenFactory: Bool
 
+    /// Saklanan ad (eski dosyalarla uyum için sabit). Ekranda `displayName`.
     public static let ungroupedName = "Koleksiyonsuz"
+
+    /// Ekranda gösterilen ad: koleksiyonsuz kap seçili dilde ("Koleksiyonsuz"
+    /// / "Uncollected"); diğerleri kullanıcının verdiği ad, çevrilmez.
+    public var displayName: String {
+        isUngrouped ? L10n.t("collection.ungrouped") : name
+    }
     public static let tokenFactoryName = "Token Factory"
 
     /// Kullanıcının yönetebildiği sıradan bir koleksiyon mu.

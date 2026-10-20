@@ -32,7 +32,7 @@ struct BodyEditor: View {
 
     private static func label(_ kind: BodyKind) -> String {
         switch kind {
-        case .none: return "None"
+        case .none: return L10n.t("body.kind.none")
         case .formData: return "Form Data"
         case .urlEncoded: return "x-www-form-urlencoded"
         case .raw: return "Raw"
@@ -41,7 +41,7 @@ struct BodyEditor: View {
 
     private static func label(_ kind: Beautifier.Kind) -> String {
         switch kind {
-        case .plain: return "Text"
+        case .plain: return L10n.t("body.kind.text")
         case .json: return "JSON"
         case .xml: return "XML"
         case .html: return "HTML"
@@ -150,9 +150,9 @@ struct BodyEditor: View {
         return Button {
             beautify()
         } label: {
-            Label("Beautify", systemImage: "wand.and.stars")
+            Label(L10n.t("body.beautify"), systemImage: "wand.and.stars")
         }
-        .help(isPlain ? "Düz metin biçimlendirilmez" : "\(Self.label(kind)) içeriğini biçimlendir")
+        .help(isPlain ? L10n.t("body.beautify.plain") : L10n.t("body.beautify.help", Self.label(kind)))
         .disabled(rawContent.wrappedValue.isEmpty || isPlain)
     }
 
@@ -163,22 +163,22 @@ struct BodyEditor: View {
             // Üstteki VStack leading hizalı olduğu için boş durum ekranı
             // kendi genişliğinde sola yapışıyordu; alanı doldurup ortalanır.
             ContentUnavailableView(
-                "Body yok",
+                L10n.t("body.none.title"),
                 systemImage: "square.dashed",
-                description: Text("Bu istek body içermiyor.")
+                description: Text(L10n.t("body.none.message"))
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .raw:
             if bodyHiddenFromEditor {
                 OversizedTextNotice(
-                    title: "Gövde editörde gösterilmiyor: \(TextStats.size(body_.rawContent.utf8.count))",
-                    detail: "\(TextStats.size(WorkbenchLimits.maxInputBytes))'tan büyük ya da \(TextStats.size(WorkbenchLimits.maxEditorLineBytes))'tan uzun satırlı metin (sıkıştırılmış JSON tek satırdır) editörde dev2kit'i dondurur. Gövde saklanır ve olduğu gibi gönderilir; biçimlendirirsen editörde açılır."
+                    title: L10n.t("body.hidden.title", TextStats.size(body_.rawContent.utf8.count)),
+                    detail: L10n.t("body.hidden.detail", TextStats.size(WorkbenchLimits.maxInputBytes), TextStats.size(WorkbenchLimits.maxEditorLineBytes))
                 ) {
-                    Button("Biçimlendir") { beautify() }
+                    Button(L10n.t("body.format")) { beautify() }
                         .controlSize(.small)
                         .disabled(rawKind.wrappedValue == .plain)
-                    CopyButton(text: body_.rawContent, help: "Gövdeyi kopyala")
-                    Button("Temizle") { rawContent.wrappedValue = "" }
+                    CopyButton(text: body_.rawContent, help: L10n.t("body.copy"))
+                    Button(L10n.t("common.clear")) { rawContent.wrappedValue = "" }
                         .controlSize(.small)
                 }
                 .background(Theme.editorBackground)
@@ -191,7 +191,7 @@ struct BodyEditor: View {
                         search: search,
                         paneIdentifier: AppState.CodeEditorPane.body.rawValue,
                         limits: EditorLimits(
-                            onRejected: { formatError = $0.turkish },
+                            onRejected: { formatError = $0.localized },
                             onLongLine: { rawContent.wrappedValue = $0 }
                         ),
                         onCursorChange: { cursor = ($0, $1) }
@@ -199,7 +199,7 @@ struct BodyEditor: View {
                         .background(Theme.editorBackground)
                         .overlay(alignment: .topLeading) {
                             if rawContent.wrappedValue.isEmpty {
-                                Text("{ \"ornek\": \"{{degisken}} destekler\" }")
+                                Text(L10n.t("body.placeholder"))
                                     .foregroundStyle(.tertiary)
                                     .font(.system(.body, design: .monospaced))
                                     // Şeridin altında kalmasın: genişliği editör bildiriyor.
@@ -211,13 +211,13 @@ struct BodyEditor: View {
                         .onChange(of: rawContent.wrappedValue) { formatError = nil }
                     EditorFooter {
                         if let cursor, !body_.rawContent.isEmpty {
-                            Text("Satır \(cursor.line), Sütun \(cursor.column)")
+                            Text(L10n.t("editor.cursor", L10n.number(cursor.line), L10n.number(cursor.column)))
                         }
                     } trailing: {
                         // Yazarken her tuşta: karakter sayımı büyük gövdede pahalı,
                         // yalnızca boyut ve satır.
                         if !body_.rawContent.isEmpty {
-                            Text("\(Self.size(body_.rawContent.utf8.count)) · \(TextStats.lineCount(body_.rawContent)) satır")
+                            Text(L10n.t("body.footer", Self.size(body_.rawContent.utf8.count), L10n.plural("editor.lines", count: TextStats.lineCount(body_.rawContent))))
                         }
                     }
                 }
@@ -225,15 +225,15 @@ struct BodyEditor: View {
         case .urlEncoded, .formData:
             KeyValueEditor(
                 entries: formFields,
-                keyPlaceholder: "alan",
-                valuePlaceholder: "değer veya {{degisken}}",
+                keyPlaceholder: L10n.t("form.key.placeholder"),
+                valuePlaceholder: L10n.t("query.value.placeholder"),
                 valueLimit: .formValue
             )
         }
     }
 
     static func size(_ bytes: Int) -> String {
-        bytes < 1_000 ? "\(bytes) bayt" : TextStats.size(bytes)
+        bytes < 1_000 ? L10n.plural("editor.bytes", count: bytes) : TextStats.size(bytes)
     }
 
     /// Gövde editörde gösterilemeyecek kadar büyük ya da uzun satırlı mı
@@ -261,6 +261,6 @@ struct BodyEditor: View {
             return error.localizedDescription
         }
         return error.localizedDescription
-            + " — metinde kıvrık tırnak (\u{201C} \u{201D}) var, düz tırnak (\") olmalı."
+            + L10n.t("body.curlyQuotes")
     }
 }

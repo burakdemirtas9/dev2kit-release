@@ -14,7 +14,7 @@ struct ResponseTimingPopover: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Label("Yanıt Süresi", systemImage: "clock")
+                Label(L10n.t("timing.title"), systemImage: "clock")
                     .font(.headline)
                 Spacer()
                 Text(Self.format(timing.total))
@@ -29,7 +29,7 @@ struct ResponseTimingPopover: View {
 
             if timing.isReusedConnection {
                 // DNS/TCP/TLS satırlarının yokluğu eksik ölçüm değil.
-                Label("Bağlantı yeniden kullanıldı — DNS, TCP ve TLS aşamaları yaşanmadı.",
+                Label(L10n.t("timing.reused"),
                       systemImage: "arrow.triangle.2.circlepath")
                     .font(.secondaryText)
                     .foregroundStyle(.secondary)
@@ -71,13 +71,13 @@ struct ResponseTimingPopover: View {
 
     private static func label(_ kind: ResponseTiming.Phase.Kind) -> String {
         switch kind {
-        case .prepare: return "Hazırlık"
+        case .prepare: return L10n.t("timing.prepare")
         case .dns: return "DNS"
-        case .tcp: return "TCP el sıkışma"
-        case .tls: return "TLS el sıkışma"
-        case .request: return "İstek gönderimi"
-        case .waiting: return "Bekleme (TTFB)"
-        case .download: return "İndirme"
+        case .tcp: return L10n.t("timing.tcp")
+        case .tls: return L10n.t("timing.tls")
+        case .request: return L10n.t("timing.request")
+        case .waiting: return L10n.t("timing.waiting")
+        case .download: return L10n.t("timing.download")
         }
     }
 

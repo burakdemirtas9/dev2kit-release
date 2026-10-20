@@ -20,8 +20,8 @@ struct OAuth2Editor: View {
             Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 6) {
                 row("Authorization URL", "https://idp.example.com/authorize", $config.authorizationURL)
                 row("Token URL", "https://idp.example.com/token", $config.tokenURL)
-                row("Client ID", "istemci kimliği", $config.clientID)
-                row("Client Secret", "boş bırak veya {{secret:isim}}", $config.clientSecret)
+                row("Client ID", L10n.t("oauth.clientID.placeholder"), $config.clientID)
+                row("Client Secret", L10n.t("oauth.clientSecret.placeholder"), $config.clientSecret)
                 row("Scopes", "openid profile email", $config.scopes)
             }
 
@@ -32,10 +32,10 @@ struct OAuth2Editor: View {
                     if isAuthorizing {
                         HStack(spacing: 6) {
                             ProgressView().controlSize(.small)
-                            Text("Tarayıcı bekleniyor…")
+                            Text(L10n.t("oauth.waitingForBrowser"))
                         }
                     } else {
-                        Label(token == nil ? "Yetkilendir" : "Yeniden Yetkilendir", systemImage: "person.badge.key")
+                        Label(token == nil ? L10n.t("oauth.authorize") : L10n.t("oauth.reauthorize"), systemImage: "person.badge.key")
                     }
                 }
                 .disabled(isAuthorizing || config.authorizationURL.isEmpty || config.clientID.isEmpty)
@@ -44,21 +44,21 @@ struct OAuth2Editor: View {
                     Button(role: .destructive) {
                         appState.clearToken(for: config)
                     } label: {
-                        Label("Token'ı Sil", systemImage: "trash")
+                        Label(L10n.t("oauth.deleteToken"), systemImage: "trash")
                     }
                     .disabled(isAuthorizing)
                 }
             }
 
             if let message = appState.authMessage {
-                Text(message)
+                Text(message.text)
                     .font(.secondaryText)
-                    .foregroundStyle(message.contains("tamamlandı") ? Theme.up : Theme.down)
+                    .foregroundStyle(message.isSuccess ? Theme.up : Theme.down)
                     .lineLimit(3)
             }
 
             Label(
-                "Sistem tarayıcısı kullanılır; uygulama parolanı hiç görmez. Token şifreli vault'ta saklanır, koleksiyon dosyasına yazılmaz. Yönlendirme yalnızca 127.0.0.1'e bağlanır.",
+                L10n.t("oauth.securityNote"),
                 systemImage: "lock.shield"
             )
             .font(.secondaryText)
@@ -75,18 +75,18 @@ struct OAuth2Editor: View {
                     .foregroundStyle(token.isExpired() ? Theme.warning : Theme.up)
                 if let expiry = token.expiresAt {
                     Text(token.isExpired()
-                         ? "Token süresi doldu — gönderimde otomatik yenilenecek"
-                         : "Token geçerli · \(expiry.formatted(date: .omitted, time: .shortened))'a kadar")
+                         ? L10n.t("oauth.token.expired")
+                         : L10n.t("oauth.token.validUntil", L10n.time(expiry)))
                 } else {
-                    Text("Token var (süre bilgisi yok)")
+                    Text(L10n.t("oauth.token.noExpiry"))
                 }
                 if token.refreshToken != nil {
-                    Text("· yenilenebilir").foregroundStyle(.tertiary)
+                    Text(L10n.t("oauth.token.refreshable")).foregroundStyle(.tertiary)
                 }
             }
             .font(.secondaryText)
         } else {
-            Label("Henüz token yok", systemImage: "circle.dashed")
+            Label(L10n.t("oauth.token.none"), systemImage: "circle.dashed")
                 .font(.secondaryText)
                 .foregroundStyle(.secondary)
         }

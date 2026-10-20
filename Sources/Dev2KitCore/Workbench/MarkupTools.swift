@@ -21,7 +21,7 @@ public enum MarkupTools {
         if parser.parse() { return .valid }
         let first = recorder.first
         let code = first?.code ?? (parser.parserError as NSError?)?.code ?? -1
-        let message = "Geçersiz XML: \(xmlMessage(code))"
+        let message = L10n.t("beautify.invalid", "XML", xmlMessage(code))
         let line = first?.line ?? parser.lineNumber
         let column = first?.column ?? parser.columnNumber
         guard line > 0 else { return .invalid(WorkbenchIssue(message: message)) }
@@ -39,18 +39,18 @@ public enum MarkupTools {
 
     private static func xmlMessage(_ code: Int) -> String {
         switch XMLParser.ErrorCode(rawValue: code) {
-        case .tagNameMismatchError?: return "açılış ve kapanış etiketi eşleşmiyor"
-        case .prematureDocumentEndError?: return "belge beklenmeden bitti ya da kökten sonra içerik var (tek kök eleman olmalı)"
+        case .tagNameMismatchError?: return L10n.t("xml.tagMismatch")
+        case .prematureDocumentEndError?: return L10n.t("xml.prematureEnd")
         case .gtRequiredError?: return "'>' bekleniyordu"
         case .ltRequiredError?: return "'<' bekleniyordu"
-        case .attributeNotStartedError?, .attributeNotFinishedError?: return "öznitelik değeri tırnak içinde olmalı"
-        case .attributeRedefinedError?: return "aynı öznitelik iki kez tanımlı"
-        case .entityRefAtEOFError?, .entityRefLoopError?, .undeclaredEntityError?: return "tanımsız ya da hatalı entity (&…;)"
-        case .lessThanSymbolInAttributeError?: return "öznitelik değerinde '<' kaçışlanmalı (&lt;)"
-        case .emptyDocumentError?: return "belge boş"
-        case .nameRequiredError?: return "etiket adı bekleniyordu"
-        case .commentNotFinishedError?: return "yorum (<!-- -->) kapatılmamış"
-        default: return "iyi biçimli değil (kod \(code))"
+        case .attributeNotStartedError?, .attributeNotFinishedError?: return L10n.t("xml.attrQuote")
+        case .attributeRedefinedError?: return L10n.t("xml.attrTwice")
+        case .entityRefAtEOFError?, .entityRefLoopError?, .undeclaredEntityError?: return L10n.t("xml.entity")
+        case .lessThanSymbolInAttributeError?: return L10n.t("xml.lessThan")
+        case .emptyDocumentError?: return L10n.t("xml.empty")
+        case .nameRequiredError?: return L10n.t("xml.nameRequired")
+        case .commentNotFinishedError?: return L10n.t("xml.unclosedComment")
+        default: return L10n.t("xml.notWellFormed", String(code))
         }
     }
 
@@ -79,12 +79,12 @@ public enum MarkupTools {
             guard chars[index] == "<" else { index += 1; continue }
             let start = index
             if scanner.hasPrefix("<!--", at: index) {
-                guard let end = scanner.position(of: "-->", from: index + 4) else { return issue("yorum (<!-- -->) kapatılmamış", at: start) }
+                guard let end = scanner.position(of: "-->", from: index + 4) else { return issue(L10n.t("xml.unclosedComment"), at: start) }
                 index = end + 1
                 continue
             }
             if scanner.hasPrefix("<!", at: index) || scanner.hasPrefix("<?", at: index) {
-                guard let end = scanner.position(of: ">", from: index + 2) else { return issue("'>' bekleniyordu", at: start) }
+                guard let end = scanner.position(of: ">", from: index + 2) else { return issue(L10n.t("xml.expectedGT"), at: start) }
                 index = end + 1
                 continue
             }
@@ -97,7 +97,7 @@ public enum MarkupTools {
             }
             guard nameEnd > nameStart, chars[nameStart].isLetter else { index += 1; continue }
             let name = String(chars[nameStart..<nameEnd]).lowercased()
-            guard let tagEnd = tagEnd(chars, from: nameEnd) else { return issue("<\(name) etiketi '>' ile kapatılmamış", at: start) }
+            guard let tagEnd = tagEnd(chars, from: nameEnd) else { return issue(L10n.t("xml.tagNotClosed", name), at: start) }
             let selfClosing = chars[tagEnd - 1] == "/"
             index = tagEnd + 1
 
@@ -105,11 +105,11 @@ public enum MarkupTools {
                 if let position = stack.lastIndex(where: { $0.name == name }) {
                     // Aradaki kapanışı isteğe bağlı olanlar örtük kapanır.
                     if let blocker = stack[(position + 1)...].last(where: { !optionalClose.contains($0.name) }) {
-                        return issue("<\(blocker.name)> kapatılmadan </\(name)> geldi", at: start)
+                        return issue(L10n.t("xml.closedBefore", blocker.name, name), at: start)
                     }
                     stack.removeSubrange(position...)
                 } else if !MarkupFormatter.voidElements.contains(name) {
-                    return issue("</\(name)> için açılış etiketi yok", at: start)
+                    return issue(L10n.t("markup.noOpen", name), at: start)
                 }
                 continue
             }
@@ -121,7 +121,7 @@ public enum MarkupTools {
                 // İçerik etiket sayılmaz; kapanışa atla.
                 guard let close = closingTag(chars, name: name, from: index),
                       let closeEnd = MarkupTools.tagEnd(chars, from: close) else {
-                    return issue("<\(name)> kapatılmamış", at: start)
+                    return issue(L10n.t("markup.unclosedTag", name), at: start)
                 }
                 index = closeEnd + 1
                 continue
@@ -129,7 +129,7 @@ public enum MarkupTools {
             stack.append((name, start))
         }
         if let unclosed = stack.last(where: { !optionalClose.contains($0.name) }) {
-            return issue("<\(unclosed.name)> kapatılmamış", at: unclosed.offset)
+            return issue(L10n.t("markup.unclosedTag", unclosed.name), at: unclosed.offset)
         }
         return .structurallyValid
     }
@@ -195,14 +195,14 @@ public enum MarkupTools {
             guard chars[index] == "<" else { textRun.append(chars[index]); index += 1; continue }
             if scanner.hasPrefix("<!--", at: index) {
                 guard let end = scanner.position(of: "-->", from: index + 4) else {
-                    throw BeautifyError.invalid(language, "yorum (<!-- -->) kapatılmamış.")
+                    throw BeautifyError.invalid(language, L10n.t("xml.unclosedComment"))
                 }
                 index = end + 1
                 continue
             }
             if scanner.hasPrefix("<![CDATA[", at: index) {
                 guard let end = scanner.position(of: "]]>", from: index + 9) else {
-                    throw BeautifyError.invalid(language, "CDATA kapatılmamış.")
+                    throw BeautifyError.invalid(language, L10n.t("beautify.unclosed", "CDATA"))
                 }
                 flushText()
                 out += String(chars[index...end])

@@ -26,23 +26,33 @@ struct ResponseView: View {
         case preview = "Önizleme"
         case headers = "Headers"
         case redirects = "Yönlendirme"
+
+        /// Görünen ad (seçili dilde). `rawValue` sabit kimlik.
+        var title: String {
+            switch self {
+            case .body: return "Body"
+            case .preview: return L10n.t("response.tab.preview")
+            case .headers: return "Headers"
+            case .redirects: return L10n.t("response.tab.redirects")
+            }
+        }
     }
 
     var body: some View {
         switch appState.lastResponse {
         case .idle:
             ContentUnavailableView(
-                "Henüz yanıt yok",
+                L10n.t("response.empty.title"),
                 systemImage: "arrow.down.circle",
-                description: Text("⌘⏎ ile isteği gönder.")
+                description: Text(L10n.t("response.empty.message"))
             )
         case .loading:
-            ProgressView("Gönderiliyor…")
+            ProgressView(L10n.t("response.sending"))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .failure(let message):
             VStack(spacing: 12) {
                 ContentUnavailableView(
-                    "İstek başarısız",
+                    L10n.t("response.failed"),
                     systemImage: "exclamationmark.triangle",
                     description: Text(message)
                 )
@@ -59,26 +69,26 @@ struct ResponseView: View {
         case .blocked(let findings):
             securityReview(
                 findings,
-                title: "İstek engellendi",
-                subtitle: "Bu istek gönderilmedi ve bu haliyle gönderilemez. Aşağıdaki sorunları düzeltince yeniden gönderebilirsin.",
+                title: L10n.t("response.blocked.title"),
+                subtitle: L10n.t("response.blocked.subtitle"),
                 icon: "xmark.shield.fill",
                 tint: Theme.down
             )
         case .needsApproval(let findings):
             securityReview(
                 findings,
-                title: "İstek durduruldu",
-                subtitle: "Göndermeden önce aşağıdakileri kontrol et. Onaylarsan aynı durum bir daha sorulmaz.",
+                title: L10n.t("response.stopped.title"),
+                subtitle: L10n.t("response.stopped.subtitle"),
                 icon: "exclamationmark.shield.fill",
                 tint: Theme.warning
             ) {
                 HStack {
                     Spacer()
-                    Button("Vazgeç", role: .cancel) {
+                    Button(L10n.t("common.cancel"), role: .cancel) {
                         appState.dismissSecurityReview()
                     }
                     .keyboardShortcut(.cancelAction)
-                    Button("Yine de Gönder") {
+                    Button(L10n.t("response.sendAnyway")) {
                         appState.approveAndSend(findings)
                     }
                 }
@@ -93,7 +103,7 @@ struct ResponseView: View {
                 if response.requestBodyOmitted {
                     HStack(spacing: 6) {
                         MessageIcon(kind: .warning)
-                        Text("GET isteği gövdesiz gönderildi. Gövde içeriği editörde korundu.")
+                        Text(L10n.t("response.getBodyOmitted"))
                             .fixedSize(horizontal: false, vertical: true)
                         Spacer(minLength: 0)
                     }
@@ -101,7 +111,7 @@ struct ResponseView: View {
                     .padding(.horizontal, 12)
                     .padding(.vertical, 5)
                     .background(MessageKind.warning.background)
-                    .help("macOS'un ağ katmanı gövdeli GET göndermiyor. Gövdeyi göndermek için metodu POST, PUT ya da PATCH yap.")
+                    .help(L10n.t("response.getBodyOmitted.help"))
                     .accessibilityElement(children: .combine)
                 }
                 if let id = appState.selectedRequestID, let advice = appState.tokenRetryAdvice[id] {
@@ -114,7 +124,7 @@ struct ResponseView: View {
                 // gövde sekmesinde.
                 HStack(spacing: 2) {
                     ForEach(availableTabs(display), id: \.self) { tab in
-                        responseTabButton(tab, title: tab == .redirects ? "\(tab.rawValue) (\(response.redirects.count))" : tab.rawValue)
+                        responseTabButton(tab, title: tab == .redirects ? "\(tab.title) (\(L10n.number(response.redirects.count)))" : tab.title)
                     }
                     Spacer()
                     if selectedTab == .body {
@@ -130,10 +140,10 @@ struct ResponseView: View {
                 case .body:
                     if !display.fitsEditor {
                         OversizedTextNotice(
-                            title: "Yanıt gövdesi gösterilmiyor: \(TextStats.size(display.prettyText.utf8.count))",
-                            detail: "\(TextStats.size(WorkbenchLimits.maxOutputBytes))'tan büyük ya da \(TextStats.size(WorkbenchLimits.maxEditorLineBytes))'tan uzun satırlı metin (biçimlenemeyen sıkıştırılmış veri tek satırdır) editörde dev2kit'i dondurur. Gövde bellekte; kopyalayabilirsin."
+                            title: L10n.t("response.hidden.title", TextStats.size(display.prettyText.utf8.count)),
+                            detail: L10n.t("response.hidden.detail", TextStats.size(WorkbenchLimits.maxOutputBytes), TextStats.size(WorkbenchLimits.maxEditorLineBytes))
                         ) {
-                            CopyButton(text: display.prettyText, help: "Yanıt gövdesini kopyala")
+                            CopyButton(text: display.prettyText, help: L10n.t("response.copyBody"))
                         }
                         .background(Theme.editorBackground)
                     } else {
@@ -154,10 +164,10 @@ struct ResponseView: View {
                         .background(Theme.editorBackground)
                         EditorFooter {
                             if let cursor, !display.prettyText.isEmpty {
-                                Text("Satır \(cursor.line), Sütun \(cursor.column)")
+                                Text(L10n.t("editor.cursor", L10n.number(cursor.line), L10n.number(cursor.column)))
                             }
                         } trailing: {
-                            Text(display.stats.summaryTR)
+                            Text(display.stats.summary)
                         }
                     }
                 case .preview:
@@ -229,15 +239,15 @@ struct ResponseView: View {
                 copiedCorrelationID = false
             }
             .alert(
-                "Yanıt kaydedilemedi",
+                L10n.t("response.saveFailed.title"),
                 isPresented: Binding(
                     get: { fileSaveError != nil },
                     set: { if !$0 { fileSaveError = nil } }
                 )
             ) {
-                Button("Tamam") { fileSaveError = nil }
+                Button(L10n.t("common.ok")) { fileSaveError = nil }
             } message: {
-                Text("\(fileSaveError ?? "")\n\nBaşka bir klasör seçip yeniden dene.")
+                Text(L10n.t("response.saveFailed.message", fileSaveError ?? ""))
             }
         }
     }
@@ -298,7 +308,7 @@ struct ResponseView: View {
                     }
                     if !step.strippedHeaders.isEmpty {
                         Label(
-                            "Farklı host: \(step.strippedHeaders.joined(separator: ", ")) başlıkları düşürüldü",
+                            L10n.t("response.redirect.stripped", step.strippedHeaders.joined(separator: ", ")),
                             systemImage: "lock.shield.fill"
                         )
                         .font(.secondaryText)
@@ -308,12 +318,12 @@ struct ResponseView: View {
                 .padding(.vertical, 2)
             }
             if let stop = response.redirectStop {
-                Label("Zincir kesildi: \(stop.explanation)", systemImage: "hand.raised.fill")
+                Label(L10n.t("response.redirect.chainStopped", stop.explanation), systemImage: "hand.raised.fill")
                     .font(.secondaryText)
                     .foregroundStyle(Theme.down)
             }
             if let final = response.finalURL {
-                Label("Son adres: \(final.absoluteString)", systemImage: "flag.checkered")
+                Label(L10n.t("response.redirect.finalURL", final.absoluteString), systemImage: "flag.checkered")
                     .font(.secondaryText)
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
@@ -338,7 +348,7 @@ struct ResponseView: View {
                 } else if hoveringCorrelationID {
                     Image(systemName: "doc.on.doc")
                 }
-                Text(copiedCorrelationID ? "Kopyalandı" : correlation.headerName)
+                Text(copiedCorrelationID ? L10n.t("common.copied") : correlation.headerName)
                     .font(.secondaryMono)
             }
             .padding(.horizontal, 6)
@@ -349,8 +359,8 @@ struct ResponseView: View {
         .buttonStyle(.plain)
         .foregroundStyle(.secondary)
         .onHover { hoveringCorrelationID = $0 }
-        .help("Değeri kopyala")
-        .accessibilityLabel("\(correlation.headerName) değerini kopyala")
+        .help(L10n.t("variable.copyValue"))
+        .accessibilityLabel(L10n.t("response.correlation.copy", correlation.headerName))
         .accessibilityHint(correlation.explanation)
     }
 
@@ -367,8 +377,8 @@ struct ResponseView: View {
                 .iconHitTarget(20)
         }
         .buttonStyle(.plain)
-        .help(copiedThis ? "Kopyalandı" : "“\(name): …” satırını kopyala")
-        .accessibilityLabel(copiedThis ? "Kopyalandı" : "\(name) başlığını kopyala")
+        .help(copiedThis ? L10n.t("common.copied") : L10n.t("response.header.copyLine", name))
+        .accessibilityLabel(copiedThis ? L10n.t("common.copied") : L10n.t("response.header.copy", name))
     }
 
     private func copyToPasteboard(_ text: String) {
@@ -426,8 +436,8 @@ struct ResponseView: View {
                         .iconHitTarget(20)
                 }
                 .buttonStyle(.plain)
-                .help("Sürenin aşamalara dağılımı: DNS, TCP, TLS, bekleme, indirme")
-                .accessibilityLabel("Yanıt süresi kırılımı")
+                .help(L10n.t("response.timing.help"))
+                .accessibilityLabel(L10n.t("response.timing.accessibility"))
                 .popover(isPresented: $showingTiming, arrowEdge: .bottom) {
                     ResponseTimingPopover(timing: timing)
                 }
@@ -444,8 +454,8 @@ struct ResponseView: View {
                         .iconHitTarget(20)
                 }
                 .buttonStyle(.plain)
-                .help("İstek ve yanıt boyutu: başlıklar ve gövde ayrı")
-                .accessibilityLabel("Boyut ayrıntısı")
+                .help(L10n.t("response.size.help"))
+                .accessibilityLabel(L10n.t("response.size.accessibility"))
                 .popover(isPresented: $showingSize, arrowEdge: .bottom) {
                     ResponseSizePopover(size: size)
                 }
@@ -465,27 +475,27 @@ struct ResponseView: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
-                .help("Bağlantı künyesi: protokol, adresler, TLS ve sertifika")
-                .accessibilityLabel("Bağlantı künyesi")
+                .help(L10n.t("response.network.help"))
+                .accessibilityLabel(L10n.t("response.network.accessibility"))
                 .popover(isPresented: $showingNetwork, arrowEdge: .bottom) {
                     NetworkPopover(info: network)
                 }
             }
             if response.bodyLimitExceeded {
                 // Tavan (RequestEngine.maxResponseBytes): indirme durduruldu.
-                Label("Yanıt \(TextStats.size(RequestEngine.maxResponseBytes))'ı aştı, kesildi", systemImage: "scissors")
+                Label(L10n.t("response.truncated", TextStats.size(RequestEngine.maxResponseBytes)), systemImage: "scissors")
                     .font(.secondaryText)
                     .foregroundStyle(Theme.warning)
-                    .help("Yanıt \(TextStats.size(RequestEngine.maxResponseBytes))'tan büyük; bellek dolmasın diye indirme durduruldu. Yalnızca ilk \(TextStats.size(RequestEngine.maxResponseBytes)) gösteriliyor, kopyalanan ve kaydedilen de bu kadar.")
+                    .help(L10n.t("response.truncated.help", TextStats.size(RequestEngine.maxResponseBytes)))
             }
             if response.certificateValidationSkipped {
-                Label("Sertifika doğrulanmadı", systemImage: "exclamationmark.shield.fill")
+                Label(L10n.t("response.unverified"), systemImage: "exclamationmark.shield.fill")
                     .font(.secondaryText)
                     .foregroundStyle(Theme.down)
-                    .help("Bu yanıt, sunucu sertifikası doğrulanmadan kurulan bir bağlantıdan geldi. Kaynağın gerçekten o sunucu olduğu garanti değil.")
+                    .help(L10n.t("response.unverified.help"))
             }
             if !response.redirects.isEmpty {
-                Label("\(response.redirects.count) yönlendirme", systemImage: "arrow.triangle.turn.up.right.diamond")
+                Label(L10n.plural("response.redirectCount", count: response.redirects.count), systemImage: "arrow.triangle.turn.up.right.diamond")
                     .font(.secondaryText)
                     .foregroundStyle(Theme.warning)
             }
@@ -513,23 +523,23 @@ struct ResponseView: View {
                 NSPasteboard.general.setString(display.prettyText, forType: .string)
                 copied = true
             } label: {
-                Label(copied ? "Kopyalandı" : "Kopyala",
+                Label(copied ? L10n.t("common.copied") : L10n.t("common.copy"),
                       systemImage: copied ? "checkmark" : "doc.on.doc")
             }
             .disabled(!isText)
             .help(isText
-                  ? "Görünen gövdeyi panoya kopyalar"
-                  : "Gövde boş ya da metin değil; Dosyaya Kaydet ile alabilirsin")
+                  ? L10n.t("response.copy.help")
+                  : L10n.t("response.copy.unavailable"))
 
             Button {
                 saveBodyToFile(response)
             } label: {
-                Label("Dosyaya Kaydet…", systemImage: "square.and.arrow.down")
+                Label(L10n.t("response.saveToFile"), systemImage: "square.and.arrow.down")
             }
             .disabled(response.body.isEmpty)
             .help(response.body.isEmpty
-                  ? "Gövde boş"
-                  : "Sunucudan gelen ham gövdeyi, seçtiğin konuma kaydeder")
+                  ? L10n.t("response.bodyEmpty")
+                  : L10n.t("response.saveToFile.help"))
         }
         .buttonStyle(.borderless)
     }
@@ -539,7 +549,7 @@ struct ResponseView: View {
     /// penceresinde kullanıcı seçer; Vazgeç derse hiçbir şey yazılmaz.
     private func saveBodyToFile(_ response: ResponseData) {
         let panel = NSSavePanel()
-        panel.title = "Yanıtı Dosyaya Kaydet"
+        panel.title = L10n.t("response.saveToFile.panel")
         panel.nameFieldStringValue = ResponseFileName.suggested(for: response)
         panel.canCreateDirectories = true
         guard panel.runModal() == .OK, let url = panel.url else { return }

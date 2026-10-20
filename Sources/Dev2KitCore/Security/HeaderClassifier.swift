@@ -15,9 +15,9 @@ public enum HeaderCategory: Int, CaseIterable, Sendable {
     public var title: String {
         switch self {
         case .normal: return "Normal"
-        case .sensitive: return "Hassas"
-        case .infrastructure: return "Proxy / izleme"
-        case .dropped: return "Her zaman atılır"
+        case .sensitive: return L10n.t("headers.category.sensitive")
+        case .infrastructure: return L10n.t("headers.category.infrastructure")
+        case .dropped: return L10n.t("headers.category.dropped")
         }
     }
 }

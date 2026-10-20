@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import Dev2KitCore
 
 /// Pencerenin üst ortasındaki mod seçici: SİSTEMİN segmentli kontrolü
 /// (macOS 26'da cam başparmak, sürükleyerek de kaydırılır) + seçili modun
@@ -28,8 +29,8 @@ struct ModeSegmentedControl: NSViewRepresentable {
             control.setImage(DottedSegmentedControl.spacer, forSegment: index)
             control.setImageScaling(.scaleNone, forSegment: index)
         }
-        control.setAccessibilityLabel("Mod")
-        control.toolTip = "API Client ile Workbench arasında geç"
+        control.setAccessibilityLabel(L10n.t("toolbar.mode"))
+        control.toolTip = L10n.t("toolbar.mode.help")
         return control
     }
 
@@ -38,6 +39,9 @@ struct ModeSegmentedControl: NSViewRepresentable {
         let index = AppMode.allCases.firstIndex(of: selection) ?? 0
         if control.selectedSegment != index { control.selectedSegment = index }
         control.needsLayout = true
+        // Dil değişince ipucu ve erişilebilirlik adı da güncellensin.
+        control.toolTip = L10n.t("toolbar.mode.help")
+        control.setAccessibilityLabel(L10n.t("toolbar.mode"))
     }
 
     final class Coordinator: NSObject {

@@ -51,7 +51,7 @@ struct TokenFactoryPanel: View {
                     RoundedRectangle(cornerRadius: 6)
                         .fill(Theme.purple.opacity(0.12))
                         .strokeBorder(Theme.purple, lineWidth: 2)
-                    Label("Bırak: Token Factory'ye kopyalanır", systemImage: "plus.square.on.square")
+                    Label(L10n.t("tokenFactory.dropHint"), systemImage: "plus.square.on.square")
                         .font(.secondaryText.weight(.semibold))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 10)
@@ -63,18 +63,18 @@ struct TokenFactoryPanel: View {
             }
         }
         .confirmationDialog(
-            "“\(pendingDelete?.name ?? "")” silinsin mi?",
+            L10n.t("common.deleteNamed.title", pendingDelete?.name ?? ""),
             isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
             titleVisibility: .visible
         ) {
-            Button("İsteği Sil", role: .destructive) {
+            Button(L10n.t("request.delete"), role: .destructive) {
                 if let request = pendingDelete { appState.deleteRequest(request.id) }
                 pendingDelete = nil
             }
-            Button("Vazgeç", role: .cancel) { pendingDelete = nil }
+            Button(L10n.t("common.cancel"), role: .cancel) { pendingDelete = nil }
         } message: {
             let variable = (pendingDelete?.tokenOutput ?? TokenOutput()).trimmedVariableName
-            Text("Kalıcı olarak silinir. {{\(variable)}} kullanan istekler artık token alamaz.")
+            Text(L10n.t("token.delete.message", variable))
         }
     }
 
@@ -99,14 +99,14 @@ struct TokenFactoryPanel: View {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .font(.tinyText)
                             .foregroundStyle(Theme.down)
-                            .help("Token Factory yapılandırmasında sorun var")
+                            .help(L10n.t("token.panel.problem"))
                     }
                     Spacer(minLength: 0)
                 }
                 .rowHitTarget()
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(collapsed ? "Token Factory'yi aç" : "Token Factory'yi daralt")
+            .accessibilityLabel(collapsed ? L10n.t("token.panel.expand") : L10n.t("token.panel.collapse"))
 
             Button {
                 collapsed = false
@@ -116,8 +116,8 @@ struct TokenFactoryPanel: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
-            .help("Token isteği ekle")
-            .accessibilityLabel("Token isteği ekle")
+            .help(L10n.t("token.panel.add"))
+            .accessibilityLabel(L10n.t("token.panel.add"))
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 2)
@@ -125,14 +125,14 @@ struct TokenFactoryPanel: View {
 
     private var emptyState: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Token üreten istekleri buraya ekle. Diğer istekler token'ı {{token}} ile kullanır.")
+            Text(L10n.t("token.panel.empty"))
                 .font(.secondaryText)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             Button {
                 appState.addTokenFactoryRequest()
             } label: {
-                Label("Token İsteği Ekle", systemImage: "plus")
+                Label(L10n.t("tokenFactory.add"), systemImage: "plus")
                     .font(.secondaryText)
                     .rowHitTarget(minHeight: 20)
             }
@@ -176,18 +176,18 @@ struct TokenFactoryPanel: View {
             )
         }
         .buttonStyle(.plain)
-        .help(isActive ? request.name : "\(request.name) — aktif environment'ta etkin değil")
+        .help(isActive ? request.name : L10n.t("token.panel.inactive", request.name))
         .contextMenu {
             Button {
                 appState.duplicateRequest(request.id)
             } label: {
-                Label("Çoğalt", systemImage: "plus.square.on.square")
+                Label(L10n.t("request.duplicate"), systemImage: "plus.square.on.square")
             }
             Divider()
             Button(role: .destructive) {
                 pendingDelete = request
             } label: {
-                Label("Sil…", systemImage: "trash")
+                Label(L10n.t("common.deleteEllipsis"), systemImage: "trash")
             }
         }
     }
@@ -197,15 +197,15 @@ struct TokenFactoryPanel: View {
         if hasProblem {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.tinyText).foregroundStyle(Theme.down)
-                .accessibilityLabel("yapılandırma sorunu")
+                .accessibilityLabel(L10n.t("token.state.problem"))
         } else {
             switch state {
             case .valid:
                 Image(systemName: "circle.fill").font(.system(size: 6)).foregroundStyle(Theme.up)
-                    .accessibilityLabel("token geçerli")
+                    .accessibilityLabel(L10n.t("token.state.valid"))
             case .failed:
                 Image(systemName: "circle.fill").font(.system(size: 6)).foregroundStyle(Theme.down)
-                    .accessibilityLabel("token alınamadı")
+                    .accessibilityLabel(L10n.t("token.state.failed"))
             case .fetching:
                 ProgressView().controlSize(.mini)
             case nil:

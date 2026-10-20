@@ -62,12 +62,12 @@ struct Dev2KitApp: App {
         // "New Window" yerine "Yeni İstek": tek pencereli, koleksiyon merkezli
         // bir araçta ⌘N'in beklenen anlamı yeni istektir (Postman/Insomnia da böyle).
         CommandGroup(replacing: .newItem) {
-            Button("Yeni İstek") {
+            Button(L10n.t("menu.newRequest")) {
                 appState.addRequestToCurrentCollection()
             }
             .keyboardShortcut("n", modifiers: .command)
             .disabled(apiClientCommandsDisabled)
-            Button("Yeni Koleksiyon") {
+            Button(L10n.t("menu.newCollection")) {
                 appState.addCollection()
             }
             .keyboardShortcut("n", modifiers: [.command, .shift])
@@ -78,12 +78,12 @@ struct Dev2KitApp: App {
         CommandGroup(replacing: .saveItem) {
             // Workbench diske yazmaz; ⌘S yalnızca bunu söyler (docs/V2.md).
             // API Client zaten her değişikliği kendiliğinden kaydediyor.
-            Button("Save") {
+            Button(L10n.t("menu.save")) {
                 workbench.save()
             }
             .keyboardShortcut("s", modifiers: .command)
             .disabled(appState.isAPIClient)
-            Button("Sekmeyi Kapat") {
+            Button(L10n.t("menu.closeTab")) {
                 if let id = appState.selectedRequestID, appState.openTabs.contains(id) {
                     appState.closeTab(id)
                 } else {
@@ -92,7 +92,7 @@ struct Dev2KitApp: App {
             }
             .keyboardShortcut("w", modifiers: .command)
             .disabled(apiClientCommandsDisabled)
-            Button("Pencereyi Kapat") {
+            Button(L10n.t("menu.closeWindow")) {
                 NSApp.keyWindow?.performClose(nil)
             }
             .keyboardShortcut("w", modifiers: [.command, .shift])
@@ -103,7 +103,7 @@ struct Dev2KitApp: App {
             // ⌘F her modda odaktaki yerde arar: API Client'ta gövde ya da yanıt
             // editörüne tıklandıysa orada, değilse istek listesinde;
             // Workbench'te son tıklanan girdi/çıktıda.
-            Button(appState.isAPIClient ? "Ara" : "Find") {
+            Button(L10n.t("menu.find")) {
                 if appState.isAPIClient {
                     appState.findInAPIClient(firstResponder: NSApp.keyWindow?.firstResponder)
                 } else {
@@ -113,12 +113,12 @@ struct Dev2KitApp: App {
             .keyboardShortcut("f", modifiers: .command)
             // Editöre tıklamadan da açılabilsin diye iki ayrı komut daha:
             // gövde ve yanıt birbirinden bağımsız aranır.
-            Button("Gövdede Ara") {
+            Button(L10n.t("menu.findInBody")) {
                 appState.openBodySearch()
             }
             .keyboardShortcut("f", modifiers: [.command, .option])
             .disabled(apiClientCommandsDisabled)
-            Button("Yanıtta Ara") {
+            Button(L10n.t("menu.findInResponse")) {
                 appState.openResponseSearch()
             }
             .keyboardShortcut("f", modifiers: [.command, .shift])
@@ -127,17 +127,25 @@ struct Dev2KitApp: App {
         // Kod editörlerinin yazı boyutu: iki modda da (gövde, yanıt, Workbench).
         CommandGroup(after: .toolbar) {
             Divider()
-            Button("Yazıyı Büyüt") { editorFontSize = EditorZoom.zoomed(editorFontSize, by: 1) }
+            // Arayüz dili: anında uygulanır, tercih saklanır (L10n / Localizer).
+            Picker(L10n.t("menu.language"), selection: Binding(
+                get: { Localizer.shared.language },
+                set: { Localizer.shared.language = $0 }
+            )) {
+                ForEach(AppLanguage.allCases) { Text($0.displayName).tag($0) }
+            }
+            Divider()
+            Button(L10n.t("menu.zoomIn")) { editorFontSize = EditorZoom.zoomed(editorFontSize, by: 1) }
                 .keyboardShortcut("+", modifiers: .command)
                 .disabled(editorFontSize >= EditorZoom.range.upperBound)
-            Button("Yazıyı Küçült") { editorFontSize = EditorZoom.zoomed(editorFontSize, by: -1) }
+            Button(L10n.t("menu.zoomOut")) { editorFontSize = EditorZoom.zoomed(editorFontSize, by: -1) }
                 .keyboardShortcut("-", modifiers: .command)
                 .disabled(editorFontSize <= EditorZoom.range.lowerBound)
-            Button("Gerçek Boyut") { editorFontSize = EditorZoom.standard }
+            Button(L10n.t("menu.actualSize")) { editorFontSize = EditorZoom.standard }
                 .keyboardShortcut("0", modifiers: .command)
                 .disabled(editorFontSize == EditorZoom.standard)
         }
-        CommandMenu("İstek") {
+        CommandMenu(L10n.t("menu.request")) {
             ForEach(Array(EditorTab.allCases.enumerated()), id: \.element) { index, tab in
                 Button(tab.rawValue) {
                     appState.editorTab = tab
@@ -150,14 +158,14 @@ struct Dev2KitApp: App {
             .disabled(appState.selectedRequestID == nil || apiClientCommandsDisabled)
             Divider()
             // Ok tuşları klavye düzeninden bağımsız: ⇧⌘] Türkçe klavyede ⇧⌘Ü görünürdü.
-            Button("Sonraki Sekme") { appState.selectAdjacentTab(1) }
+            Button(L10n.t("menu.nextTab")) { appState.selectAdjacentTab(1) }
                 .keyboardShortcut(.rightArrow, modifiers: [.command, .option])
                 .disabled(appState.openTabs.count < 2 || apiClientCommandsDisabled)
-            Button("Önceki Sekme") { appState.selectAdjacentTab(-1) }
+            Button(L10n.t("menu.previousTab")) { appState.selectAdjacentTab(-1) }
                 .keyboardShortcut(.leftArrow, modifiers: [.command, .option])
                 .disabled(appState.openTabs.count < 2 || apiClientCommandsDisabled)
             Divider()
-            Button("Güvenlik Onaylarını Sıfırla…") {
+            Button(L10n.t("menu.resetApprovals")) {
                 confirmResetSecurityApprovals()
             }
         }
@@ -166,10 +174,10 @@ struct Dev2KitApp: App {
     /// Onaylar kalıcı olduğu için geri almanın da bir yolu olmalı.
     private func confirmResetSecurityApprovals() {
         let alert = NSAlert()
-        alert.messageText = "Güvenlik onayları sıfırlansın mı?"
-        alert.informativeText = "“Yine de Gönder” ile onayladığın uyarılar unutulur; aynı durumlar yeniden sorulur."
-        alert.addButton(withTitle: "Onayları Sıfırla")
-        alert.addButton(withTitle: "Vazgeç")
+        alert.messageText = L10n.t("approvals.reset.title")
+        alert.informativeText = L10n.t("approvals.reset.message")
+        alert.addButton(withTitle: L10n.t("approvals.reset.confirm"))
+        alert.addButton(withTitle: L10n.t("common.cancel"))
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         do {
             try appState.resetSecurityApprovals()
@@ -177,9 +185,9 @@ struct Dev2KitApp: App {
             // Sistem hata metni bağlamsız ve İngilizce kalabiliyordu.
             let failure = NSAlert()
             failure.alertStyle = .critical
-            failure.messageText = "Güvenlik onayları sıfırlanamadı"
-            failure.informativeText = "\(error.localizedDescription)\n\nOnayların değişmedi."
-            failure.addButton(withTitle: "Tamam")
+            failure.messageText = L10n.t("approvals.reset.failed")
+            failure.informativeText = L10n.t("approvals.reset.failedDetail", error.localizedDescription)
+            failure.addButton(withTitle: L10n.t("common.ok"))
             failure.runModal()
         }
     }

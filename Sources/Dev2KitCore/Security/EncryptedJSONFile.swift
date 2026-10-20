@@ -22,13 +22,11 @@ struct EncryptedJSONFile<Value: Codable>: Sendable {
         var errorDescription: String? {
             switch self {
             case .encodingFailed:
-                return "Şifreli dosya yazılamadı."
+                return L10n.t("crypto.writeFailed")
             case .keyUnreadable(let path):
-                return "Şifreleme anahtarı okunamadı: \(path). Dosyanın izinlerini ve içeriğini kontrol et; "
-                    + "yeni anahtar üretilmedi, mevcut veriler korunuyor."
+                return L10n.t("crypto.keyUnreadable", path)
             case .keyMissing(let path):
-                return "Şifreleme anahtarı bulunamadı: \(path). Şifreli veri var ama anahtarı yok; "
-                    + "anahtar dosyasını geri koy. Yeni anahtar üretilmedi, mevcut veriler korunuyor."
+                return L10n.t("crypto.keyMissing", path)
             }
         }
     }

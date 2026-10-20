@@ -2,6 +2,9 @@ import XCTest
 @testable import Dev2KitCore
 
 final class CollectionPortingTests: XCTestCase {
+    /// Beklenen mesajlar Türkçe.
+    override func invokeTest() { withLanguage(.turkish) { super.invokeTest() } }
+
     // MARK: - dev2kit roundtrip
 
     func testExportImportRoundtrip() throws {

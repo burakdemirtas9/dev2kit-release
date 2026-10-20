@@ -85,10 +85,10 @@ public enum RedirectGuard {
 
             public var explanation: String {
                 switch self {
-                case .policyDisabled: return "yönlendirme takibi kapalı"
-                case .tooManyRedirects: return "yönlendirme sınırı aşıldı"
-                case .insecureDowngrade: return "https → http düşüşü engellendi"
-                case .hostNotAllowed: return "yönetici politikası dışındaki host'a yönlendirme engellendi"
+                case .policyDisabled: return L10n.t("redirect.disabled")
+                case .tooManyRedirects: return L10n.t("redirect.tooMany")
+                case .insecureDowngrade: return L10n.t("redirect.downgrade")
+                case .hostNotAllowed: return L10n.t("redirect.hostNotAllowed")
                 }
             }
         }

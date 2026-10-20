@@ -115,6 +115,9 @@ final class HostPolicyTests: XCTestCase {
 }
 
 final class RequestInspectorTests: XCTestCase {
+    /// Beklenen mesajlar Türkçe.
+    override func invokeTest() { withLanguage(.turkish) { super.invokeTest() } }
+
     private let engine = RequestEngine()
 
     private func findings(
@@ -144,7 +147,7 @@ final class RequestInspectorTests: XCTestCase {
 
     func testNonHTTPSchemesAreBlocked() throws {
         for url in ["file:///etc/passwd", "ftp://example.com/dosya"] {
-            XCTAssertEqual(titles(try findings(RequestModel(url: url)), .block), ["Desteklenmeyen adres türü"], url)
+            XCTAssertEqual(titles(try findings(RequestModel(url: url)), .block), ["Desteklenmeyen URL türü"], url)
         }
     }
 
@@ -166,7 +169,7 @@ final class RequestInspectorTests: XCTestCase {
 
     func testBidiCharacterInURLIsBlocked() throws {
         let model = RequestModel(url: "https://api.example.com/\u{202E}fdp.exe")
-        XCTAssertTrue(titles(try findings(model), .block).contains("Adreste görünmez karakter"))
+        XCTAssertTrue(titles(try findings(model), .block).contains("URL'de görünmez karakter"))
     }
 
     func testHeaderInjectionThroughSecretValueIsBlocked() throws {
@@ -183,7 +186,7 @@ final class RequestInspectorTests: XCTestCase {
             guard case RequestEngineError.securityBlocked(let findings) = error else {
                 return XCTFail("güvenlik engeli bekleniyordu: \(error)")
             }
-            XCTAssertEqual(findings.map(\.title), ["Başlıkta satır sonu ya da görünmez karakter"])
+            XCTAssertEqual(findings.map(\.title), ["Header'da satır sonu ya da görünmez karakter"])
         }
     }
 
@@ -221,7 +224,7 @@ final class RequestInspectorTests: XCTestCase {
 
     func testUserInfoInURLWarns() throws {
         let result = try findings(RequestModel(url: "https://ali:parola@api.example.com"))
-        XCTAssertTrue(titles(result, .warn).contains("Adreste kullanıcı bilgisi"))
+        XCTAssertTrue(titles(result, .warn).contains("URL'de kullanıcı bilgisi"))
     }
 
     func testSecretInQueryWarns() throws {
@@ -229,7 +232,7 @@ final class RequestInspectorTests: XCTestCase {
             url: "https://api.example.com",
             queryParams: [KeyValueEntry(key: "api_key", value: "{{secret:token}}")]
         )
-        XCTAssertTrue(titles(try findings(model), .warn).contains("Secret adreste"))
+        XCTAssertTrue(titles(try findings(model), .warn).contains("Secret URL'de"))
     }
 
     func testEverySecretHostPairNeedsItsOwnApproval() throws {

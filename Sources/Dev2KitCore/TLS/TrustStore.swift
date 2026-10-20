@@ -63,6 +63,15 @@ public enum TrustStore {
         case machine = "Makine geneli"
         case user = "Kullanıcı"
         case environment = "DEV2KIT_CA_PATH"
+
+        /// Ekranda gösterilen ad (seçili dilde); ham değer sabit kalır.
+        public var title: String {
+            switch self {
+            case .machine: return L10n.t("trust.source.machine")
+            case .user: return L10n.t("trust.source.user")
+            case .environment: return rawValue
+            }
+        }
     }
 
     public struct LoadResult: Sendable {
@@ -126,10 +135,10 @@ public enum TrustStore {
                 // Tanınmayan uzantı SESSİZCE atlanmaz: kullanıcı dosyayı
                 // bıraktığını sanıp neden güvenilmediğini arıyordu.
                 guard extensions.contains(file.pathExtension.lowercased()) else {
-                    problems.append(
-                        "\(file.lastPathComponent): uzantı tanınmıyor, yüklenmedi "
-                            + "(\(extensions.sorted().map { "." + $0 }.joined(separator: ", ")) olmalı)."
-                    )
+                    problems.append(L10n.t(
+                        "trust.badExtension", file.lastPathComponent,
+                        extensions.sorted().map { "." + $0 }.joined(separator: ", ")
+                    ))
                     continue
                 }
                 guard seenPaths.insert(file.path).inserted else { continue }
@@ -186,7 +195,7 @@ public enum TrustStore {
         // sertifikalar yönetici/MDM sorumluluğundadır.
         guard path.hasPrefix(userDirectory.path) else {
             throw CertificateLoader.LoadError(
-                message: "Bu sertifika makine geneli dizinde; kaldırmak için yönetici hakkı gerekir."
+                message: L10n.t("trust.machineRemove")
             )
         }
         try FileManager.default.removeItem(atPath: path)

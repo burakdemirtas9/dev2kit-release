@@ -37,9 +37,9 @@ struct KibanaImportView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Kibana'dan İstek")
+            Text(L10n.t("kibana.title"))
                 .font(.title2).bold()
-            Text("Kibana'da kaydı açıp JSON halini kopyala ya da dışa aktarılan dosyayı seç. Her ortamın logu aktarılır; veri yalnızca bu Mac'te işlenir.")
+            Text(L10n.t("kibana.subtitle"))
                 .font(.secondaryText)
                 .foregroundStyle(.secondary)
 
@@ -78,11 +78,11 @@ struct KibanaImportView: View {
             // Boyut okumadan ÖNCE: OpenAPI içe aktarmasıyla aynı sınır.
             let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
             if size > InputLimits.maxImportBytes {
-                parseError = "Dosya çok büyük; en fazla \(TextStats.size(InputLimits.maxImportBytes))."
+                parseError = L10n.t("kibana.fileTooLarge", TextStats.size(InputLimits.maxImportBytes))
             } else if let data = try? Data(contentsOf: url) {
                 json = String(decoding: data, as: UTF8.self)
             } else {
-                parseError = "Dosya okunamadı."
+                parseError = L10n.t("openapi.fileUnreadable")
             }
         }
     }
@@ -106,16 +106,16 @@ struct KibanaImportView: View {
                         json = pasted
                     }
                 } label: {
-                    Label("Panodan Yapıştır", systemImage: "doc.on.clipboard")
+                    Label(L10n.t("openapi.paste"), systemImage: "doc.on.clipboard")
                 }
                 Button {
                     showingFilePicker = true
                 } label: {
-                    Label("Dosya Seç…", systemImage: "folder")
+                    Label(L10n.t("auto.chooseFile"), systemImage: "folder")
                 }
                 Spacer()
                 if let entries = result?.entries, entries.count > 1 {
-                    Picker("Kayıt:", selection: Binding(
+                    Picker(L10n.t("kibana.record"), selection: Binding(
                         get: { entryID ?? entries.first?.id },
                         set: { selectEntry($0) }
                     )) {
@@ -143,7 +143,7 @@ struct KibanaImportView: View {
                     .font(.secondaryMono)
                     .lineLimit(1)
                 Spacer()
-                Text("\(entry.environment ?? "ortam bilinmiyor") · \(entry.serviceName)\(entry.loggedStatus.map { " · \($0)" } ?? "")")
+                Text("\(entry.environment ?? L10n.t("kibana.unknownEnvironment")) · \(entry.serviceName)\(entry.loggedStatus.map { " · \($0)" } ?? "")")
                     .font(.secondaryText)
                     .foregroundStyle(.secondary)
             }
@@ -153,26 +153,26 @@ struct KibanaImportView: View {
                     .foregroundStyle(Theme.warning)
             }
 
-            Picker("Hedef:", selection: $applyToSelected) {
-                Text("Yeni istek").tag(false)
-                Text("Seçili isteğe uygula").tag(true)
+            Picker(L10n.t("kibana.target"), selection: $applyToSelected) {
+                Text(L10n.t("kibana.target.new")).tag(false)
+                Text(L10n.t("kibana.target.selected")).tag(true)
             }
             .pickerStyle(.segmented)
             .disabled(appState.selectedRequest == nil)
             .frame(maxWidth: 360)
 
             Toggle(isOn: $options.includeURL) {
-                sectionLabel("URL ve metot", detail: entry.urlTemplate)
+                sectionLabel(L10n.t("kibana.section.url"), detail: entry.urlTemplate)
             }
             if options.includeURL {
                 variableField(for: entry)
             }
             Toggle(isOn: $options.includeBody) {
-                sectionLabel("Gövde", detail: entry.body.map { "\($0.count) karakter" } ?? "logda gövde yok")
+                sectionLabel("Body", detail: entry.body.map { L10n.plural("kibana.characters", count: $0.count) } ?? L10n.t("kibana.noBody"))
             }
             .disabled(entry.body == nil)
             Toggle(isOn: $options.includeHeaders) {
-                sectionLabel("Başlıklar", detail: "\(selectedCount(entry)) / \(entry.headers.count - dropped(entry).count) seçili")
+                sectionLabel("Headers", detail: L10n.t("kibana.headersSelected", L10n.number(selectedCount(entry)), L10n.number(entry.headers.count - dropped(entry).count)))
             }
             if options.includeHeaders {
                 headerGroups(for: entry)
@@ -199,19 +199,19 @@ struct KibanaImportView: View {
         let defined = appState.activeEnvironment?.variables.contains { $0.key == entry.variableName } ?? false
         Group {
             if defined {
-                Label("{{\(entry.variableName)}} aktif environment'ta tanımlı.", systemImage: "checkmark.circle")
+                Label(L10n.t("kibana.variable.defined", entry.variableName), systemImage: "checkmark.circle")
                     .foregroundStyle(Theme.up)
             } else if let environment = appState.activeEnvironment {
                 VStack(alignment: .leading, spacing: 4) {
-                    TextField("Gateway adresi, ör. https://gateway.ornek.com", text: $gatewayAddress)
+                    TextField(L10n.t("kibana.gateway.placeholder"), text: $gatewayAddress)
                         .inputLimit(.url)
                         .textFieldStyle(.input)
                         .frame(maxWidth: 420)
-                    Text("{{\(entry.variableName)}} \"\(environment.name)\" environment'ına eklenir. Boş bırakırsan gönderirken tanımsız değişken uyarısı alırsın.")
+                    Text(L10n.t("kibana.variable.willAdd", entry.variableName, environment.name))
                         .foregroundStyle(.secondary)
                 }
             } else {
-                Label("Aktif environment yok; {{\(entry.variableName)}} değişkenini bir environment'a elle ekle.",
+                Label(L10n.t("openapi.variable.noEnvironment", entry.variableName),
                       systemImage: "exclamationmark.triangle")
                     .foregroundStyle(Theme.warning)
             }
@@ -244,7 +244,7 @@ struct KibanaImportView: View {
             }
             let droppedNames = dropped(entry).map(\.name).joined(separator: ", ")
             if !droppedNames.isEmpty {
-                Label("\(droppedNames) her zaman atılır: hedefle ve gövdeyle çakışır.", systemImage: "nosign")
+                Label(L10n.t("kibana.dropped", droppedNames), systemImage: "nosign")
                     .font(.secondaryText)
                     .foregroundStyle(.secondary)
             }
@@ -254,14 +254,14 @@ struct KibanaImportView: View {
     private func groupLabel(_ category: HeaderCategory, headers: [ClassifiedHeader]) -> some View {
         let selected = headers.filter { options.selectedHeaders.contains($0.id) }.count
         return HStack(spacing: 6) {
-            Text("\(category.title) (\(selected)/\(headers.count))")
+            Text("\(category.title) (\(L10n.number(selected))/\(L10n.number(headers.count)))")
             switch category {
             case .sensitive:
-                Text("token/cookie vault'a taşınır · kişisel veri düz metin kalır (KVKK)")
+                Text(L10n.t("kibana.sensitive.note"))
                     .font(.secondaryText)
                     .foregroundStyle(Theme.warning)
             case .infrastructure:
-                Text("başka bir isteğin izine ait")
+                Text(L10n.t("kibana.trace.note"))
                     .font(.secondaryText)
                     .foregroundStyle(.secondary)
             default:
@@ -278,7 +278,7 @@ struct KibanaImportView: View {
                 .font(.secondaryMono)
             Group {
                 if header.sensitiveKind != nil {
-                    Text("•••• (\(header.value.count) karakter)")
+                    Text(L10n.plural("kibana.masked", count: header.value.count))
                 } else {
                     Text(header.value)
                 }
@@ -288,12 +288,12 @@ struct KibanaImportView: View {
             .lineLimit(1)
             .truncationMode(.middle)
             if header.sensitiveKind == .credential {
-                tag("vault", color: Theme.up)
+                tag(L10n.t("kibana.tag.vault"), color: Theme.up)
             } else if header.sensitiveKind == .personal {
-                tag("kişisel", color: Theme.warning)
+                tag(L10n.t("kibana.tag.personal"), color: Theme.warning)
             }
             if header.isExpired() {
-                tag("süresi dolmuş", color: Theme.down)
+                tag(L10n.t("kibana.tag.expired"), color: Theme.down)
             }
         }
     }
@@ -321,9 +321,9 @@ struct KibanaImportView: View {
                     destinationPicker
                 }
                 Spacer()
-                Button("Vazgeç") { dismiss() }
+                Button(L10n.t("common.cancel")) { dismiss() }
                     .keyboardShortcut(.cancelAction)
-                Button(applyToSelected ? "Uygula" : "İçe Aktar") { performImport() }
+                Button(applyToSelected ? L10n.t("kibana.apply") : L10n.t("import.menu.title")) { performImport() }
                     .keyboardShortcut(.defaultAction)
                     .disabled(!canImport)
             }
@@ -347,8 +347,8 @@ struct KibanaImportView: View {
 
     private var destinationPicker: some View {
         HStack(spacing: 8) {
-            Picker("Ekle:", selection: $destination) {
-                Label(CollectionModel.ungroupedName, systemImage: "tray").tag(DestinationChoice.ungrouped)
+            Picker(L10n.t("import.addTo"), selection: $destination) {
+                Label(L10n.t("collection.ungrouped"), systemImage: "tray").tag(DestinationChoice.ungrouped)
                 let collections = appState.workspace.regularCollections
                 if !collections.isEmpty {
                     Divider()
@@ -357,17 +357,17 @@ struct KibanaImportView: View {
                     }
                 }
                 Divider()
-                Label("Yeni koleksiyon…", systemImage: "folder.badge.plus").tag(DestinationChoice.newCollection)
+                Label(L10n.t("import.newCollection"), systemImage: "folder.badge.plus").tag(DestinationChoice.newCollection)
             }
             .frame(maxWidth: 240)
             if destination == .newCollection {
                 VStack(alignment: .leading, spacing: 2) {
-                    TextField("Koleksiyon adı", text: $newCollectionName)
+                    TextField(L10n.t("collection.name.placeholder"), text: $newCollectionName)
                         .inputLimit(.name)
                         .textFieldStyle(.input)
                         .frame(width: 170)
                     if appState.existingCollection(named: newCollectionName) != nil {
-                        Text("Bu adla bir koleksiyon var; ona eklenir.")
+                        Text(L10n.t("import.collectionExists"))
                             .font(.tinyText)
                             .foregroundStyle(.secondary)
                     }
@@ -458,7 +458,7 @@ struct KibanaImportView: View {
             )
             dismiss()
         } catch {
-            importError = "Token'lar vault'a yazılamadı, içe aktarma yapılmadı: \(error.localizedDescription)"
+            importError = L10n.t("kibana.vaultFailed", error.localizedDescription)
         }
     }
 }

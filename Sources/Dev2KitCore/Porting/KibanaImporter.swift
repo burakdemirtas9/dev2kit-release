@@ -57,8 +57,8 @@ public enum KibanaImporter {
 
         public var errorDescription: String? {
             switch self {
-            case .invalidJSON: return "Geçerli bir JSON değil."
-            case .noDocuments: return "Kibana kaydı bulunamadı (_source ya da fields alanı yok)."
+            case .invalidJSON: return L10n.t("kibana.invalidJSON")
+            case .noDocuments: return L10n.t("kibana.noDocuments")
             }
         }
     }
@@ -112,21 +112,21 @@ public enum KibanaImporter {
     private static func entry(from document: [String: Any], position: Int) -> Result<Entry, Rejection> {
         let fields = Fields(document: document)
         let indexName = document["_index"] as? String ?? ""
-        let label = "Kayıt \(position)"
+        let label = L10n.t("kibana.recordNumber", L10n.number(position))
 
         let environment = environment(fromIndex: indexName)
         guard let rawPath = fields.string("request_path"), !rawPath.isEmpty else {
-            return .failure(Rejection(message: "\(label): request_path yok."))
+            return .failure(Rejection(message: L10n.t("kibana.noPath", label)))
         }
         guard let serviceName = fields.string("service_name")?.trimmingCharacters(in: .whitespaces),
               !serviceName.isEmpty else {
-            return .failure(Rejection(message: "\(label): service_name yok; adres değişkeni türetilemiyor."))
+            return .failure(Rejection(message: L10n.t("kibana.noService", label)))
         }
 
         var warnings: [String] = []
         let methodText = (fields.string("http_method") ?? "GET").uppercased()
         let method = HTTPMethod(rawValue: methodText) ?? {
-            warnings.append("Desteklenmeyen metot \"\(methodText)\"; GET olarak alındı.")
+            warnings.append(L10n.t("curl.badMethod", methodText))
             return .get
         }()
 

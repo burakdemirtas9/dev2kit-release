@@ -16,7 +16,7 @@ struct SecretsView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Secrets")
                 .font(.title2).bold()
-            Text("Değerler AES-GCM ile şifrelenmiş yerel vault'ta saklanır; koleksiyon dosyalarına asla düz metin yazılmaz. İsteklerde {{secret:isim}} olarak kullan.")
+            Text(L10n.t("secrets.subtitle"))
                 .font(.secondaryText)
                 .foregroundStyle(.secondary)
 
@@ -40,12 +40,12 @@ struct SecretsView: View {
             .frame(minHeight: 160)
 
             HStack {
-                TextField("isim (ör: github_token)", text: $newName)
+                TextField(L10n.t("secrets.name.placeholder"), text: $newName)
                     .inputLimit(.short)
                     .font(.system(.body, design: .monospaced))
-                SecureField("değer", text: $newValue)
+                SecureField(L10n.t("environment.variable.value"), text: $newValue)
                     .inputLimit(.secretValue)
-                Button("Ekle") { add() }
+                Button(L10n.t("common.add")) { add() }
                     .disabled(newName.trimmingCharacters(in: .whitespaces).isEmpty || newValue.isEmpty)
             }
             .textFieldStyle(.input)
@@ -56,7 +56,7 @@ struct SecretsView: View {
 
             HStack {
                 Spacer()
-                Button("Kapat") { dismiss() }
+                Button(L10n.t("common.close")) { dismiss() }
                     .keyboardShortcut(.cancelAction)
             }
         }

@@ -36,7 +36,7 @@ struct PostmanImportView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Postman'den Otomatik Al")
+            Text(L10n.t("postman.title"))
                 .font(.title2).bold()
 
             if connected {
@@ -63,7 +63,7 @@ struct PostmanImportView: View {
 
             HStack {
                 if connected {
-                    Button("API Anahtarını Değiştir") {
+                    Button(L10n.t("postman.changeKey")) {
                         connected = false
                         collections = []
                         errorMessage = nil
@@ -71,7 +71,7 @@ struct PostmanImportView: View {
                     .buttonStyle(.borderless)
                 }
                 Spacer()
-                Button("Kapat") { dismiss() }
+                Button(L10n.t("common.close")) { dismiss() }
                     .keyboardShortcut(.cancelAction)
             }
         }
@@ -84,7 +84,7 @@ struct PostmanImportView: View {
                 onConfirm: { finishImport(pending.items) },
                 onCancel: {
                     pendingReview = nil
-                    lastResultMessage = (["İçe aktarmadan vazgeçildi."] + pendingFailures).joined(separator: "\n")
+                    lastResultMessage = ([L10n.t("postman.cancelled")] + pendingFailures).joined(separator: "\n")
                 }
             )
         }
@@ -92,12 +92,12 @@ struct PostmanImportView: View {
 
     private var keySetup: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Postman koleksiyonların hesabına senkronlanır; buradan otomatik çekmek için bir Postman API anahtarı gerekir:")
+            Text(L10n.t("postman.intro"))
                 .font(.callout)
-            Text("postman.co → sağ üst profil → Settings → API Keys → Generate API Key")
+            Text(L10n.t("postman.keySteps"))
                 .font(.secondaryMono)
                 .foregroundStyle(.secondary)
-            Text("Anahtar şifreli vault'ta saklanır ve yalnızca api.getpostman.com'a gönderilir.")
+            Text(L10n.t("postman.keyNote"))
                 .font(.secondaryText)
                 .foregroundStyle(.secondary)
 
@@ -105,7 +105,7 @@ struct PostmanImportView: View {
                 SecureField("PMAK-...", text: $apiKeyInput)
                     .inputLimit(.credential)
                     .textFieldStyle(.input)
-                Button("Bağlan") { connect(with: apiKeyInput) }
+                Button(L10n.t("postman.connect")) { connect(with: apiKeyInput) }
                     .disabled(apiKeyInput.trimmingCharacters(in: .whitespaces).isEmpty || loading)
             }
             if loading { ProgressView().controlSize(.small) }
@@ -125,7 +125,7 @@ struct PostmanImportView: View {
     private var collectionList: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text("Aktarılacak koleksiyonları seç:")
+                Text(L10n.t("postman.choose"))
                     .font(.callout)
                 Spacer()
                 Button {
@@ -134,20 +134,20 @@ struct PostmanImportView: View {
                     Image(systemName: "arrow.clockwise")
                 }
                 .disabled(loading || isImporting)
-                .help("Listeyi yenile")
+                .help(L10n.t("postman.refresh"))
             }
 
             if loading && collections.isEmpty {
-                ProgressView("Koleksiyonlar yükleniyor…")
+                ProgressView(L10n.t("postman.loading"))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if collections.isEmpty {
                 ContentUnavailableView(
-                    "Koleksiyon yok",
+                    L10n.t("postman.empty.title"),
                     systemImage: "tray",
-                    description: Text("Bu hesapta koleksiyon bulunamadı.")
+                    description: Text(L10n.t("postman.empty.message"))
                 )
             } else {
-                Toggle("Hepsini Seç", isOn: Binding(
+                Toggle(L10n.t("auto.selectAll"), isOn: Binding(
                     get: { allSelected },
                     set: { selectAll in
                         selectedUIDs = selectAll ? Set(selectableCollections.map(\.id)) : []
@@ -163,7 +163,7 @@ struct PostmanImportView: View {
                                 .foregroundStyle(Theme.up)
                             Text(summary.name)
                             Spacer()
-                            Text("Aktarıldı")
+                            Text(L10n.t("postman.imported"))
                                 .font(.secondaryText)
                                 .foregroundStyle(.secondary)
                         } else {
@@ -199,7 +199,7 @@ struct PostmanImportView: View {
                         if isImporting {
                             ProgressView().controlSize(.small)
                         } else {
-                            Label("Seçilenleri Aktar (\(selectedUIDs.count))", systemImage: "square.and.arrow.down")
+                            Label(L10n.t("postman.importSelected", L10n.number(selectedUIDs.count)), systemImage: "square.and.arrow.down")
                         }
                     }
                     .keyboardShortcut(.defaultAction)
@@ -249,7 +249,7 @@ struct PostmanImportView: View {
     /// de kalanlarla devam edilir.
     private func importSelected() {
         guard let key = try? appState.secretStore.secret(forName: Self.keyName) else {
-            errorMessage = "API anahtarı bulunamadı; yeniden bağlan."
+            errorMessage = L10n.t("postman.keyMissing")
             connected = false
             return
         }
@@ -270,10 +270,10 @@ struct PostmanImportView: View {
                         prepared.append(item)
                         uids[item.id] = summary.id
                     case .failure(let failure):
-                        failures.append("✗ \"\(summary.name)\": \(failure.message)")
+                        failures.append(L10n.t("postman.failure", summary.name, failure.message))
                     }
                 } catch {
-                    failures.append("✗ \"\(summary.name)\" çekilemedi: \(error.localizedDescription)")
+                    failures.append(L10n.t("postman.fetchFailed", summary.name, error.localizedDescription))
                 }
             }
             importingUID = nil

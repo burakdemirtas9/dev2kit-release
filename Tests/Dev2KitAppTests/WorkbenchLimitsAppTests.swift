@@ -8,6 +8,9 @@ import XCTest
 /// editörde gösterilmez (tek satırlık 5 MB uygulamayı 10 dk+ donduruyordu).
 @MainActor
 final class WorkbenchLimitsAppTests: XCTestCase {
+    /// Beklenen mesajlar İngilizce.
+    override func invokeTest() { withLanguage(.english) { super.invokeTest() } }
+
     private func singleLineJSON(bytes: Int) -> String {
         let row = #"{"id":1,"ad":"Müşteri"},"#
         return "[" + String(repeating: row, count: bytes / row.utf8.count + 1) + "1]"
@@ -30,7 +33,7 @@ final class WorkbenchLimitsAppTests: XCTestCase {
 
     private func gate(_ recorder: Recorder) -> (CodeEditor.Coordinator, NSTextView) {
         let editor = CodeEditor(text: .constant(""), language: .plain, limits: EditorLimits(
-            onRejected: { recorder.rejected = $0.english },
+            onRejected: { recorder.rejected = $0.localized },
             onLongLine: { recorder.longLine = $0 }
         ))
         return (editor.makeCoordinator(), NSTextView())

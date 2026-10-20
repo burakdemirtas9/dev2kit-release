@@ -15,9 +15,9 @@ public enum CollectionPorting {
         public var errorDescription: String? {
             switch self {
             case .invalidFormat(let detail):
-                return "Dosya tanınamadı: \(detail)"
+                return L10n.t("porting.invalidFormat", detail)
             case .nameConflictUnresolved(let name):
-                return "\"\(name)\" için uygun bir isim bulunamadı — çok fazla kopya var. Mevcut koleksiyonları yeniden adlandırıp tekrar dene."
+                return L10n.t("porting.nameConflict", name)
             }
         }
     }
@@ -46,13 +46,13 @@ public enum CollectionPorting {
         let collection: CollectionModel
         if let envelope = try? decoder.decode(Envelope.self, from: data) {
             guard envelope.format == currentFormat else {
-                throw PortingError.invalidFormat("beklenen format \(currentFormat), gelen: \(envelope.format)")
+                throw PortingError.invalidFormat(L10n.t("porting.wrongFormat", currentFormat, envelope.format))
             }
             collection = envelope.collection
         } else if let bare = try? decoder.decode(CollectionModel.self, from: data) {
             collection = bare
         } else {
-            throw PortingError.invalidFormat("geçerli bir dev2kit koleksiyon JSON'u değil")
+            throw PortingError.invalidFormat(L10n.t("porting.notDev2kit"))
         }
         let (name, renamed) = try resolveName(collection.name, suffix: "New", existingNames: existingNames)
         return ImportOutcome(
@@ -77,7 +77,7 @@ public enum CollectionPorting {
         } else if let direct = try? decoder.decode(PostmanCollection.self, from: data) {
             postman = direct
         } else {
-            throw PortingError.invalidFormat("geçerli bir Postman v2.x koleksiyonu değil")
+            throw PortingError.invalidFormat(L10n.t("porting.notPostman"))
         }
 
         var warnings: [String] = []
@@ -85,16 +85,16 @@ public enum CollectionPorting {
         flatten(items: postman.item ?? [], prefix: "", into: &requests, warnings: &warnings)
 
         if requests.isEmpty {
-            warnings.append("Koleksiyonda dönüştürülebilir istek bulunamadı.")
+            warnings.append(L10n.t("porting.noRequests"))
         }
         // Script'ler bilinçli olarak çalıştırılmaz (içe aktarılan kod, kullanıcının
         // secret'larına erişebilirdi); ama sessizce kaybolmamalı.
         let scripts = postman.scriptCount
         if scripts > 0 {
-            warnings.append("\(scripts) Postman script'i (pre-request/test) aktarılmadı: dev2kit script çalıştırmaz. Bu script'lere bağlı adımları (token alma, değişken atama) elle yapman gerekebilir.")
+            warnings.append(L10n.plural("porting.scripts", count: scripts))
         }
         let (name, renamed) = try resolveName(
-            postman.info.name ?? "Postman Koleksiyonu",
+            postman.info.name ?? L10n.t("porting.postmanName"),
             suffix: "fromPostman",
             existingNames: existingNames
         )
@@ -156,16 +156,16 @@ public enum CollectionPorting {
         for item in items {
             if let children = item.item {
                 // Klasörler düzleştirilir; isim "Klasör / İstek" olur.
-                let folder = item.name ?? "Klasör"
-                if prefix.isEmpty, !warnings.contains(where: { $0.contains("Klasörler") }) {
-                    warnings.append("Klasörler desteklenmiyor; istek adları \"Klasör / İstek\" olarak düzleştirildi.")
+                let folder = item.name ?? L10n.t("porting.folder")
+                if prefix.isEmpty, !warnings.contains(L10n.t("porting.folders")) {
+                    warnings.append(L10n.t("porting.folders"))
                 }
                 flatten(items: children, prefix: prefix.isEmpty ? folder : "\(prefix) / \(folder)",
                         into: &requests, warnings: &warnings)
                 continue
             }
             guard let pmRequest = item.request else { continue }
-            let baseName = item.name ?? "İsimsiz İstek"
+            let baseName = item.name ?? L10n.t("porting.unnamed")
             let name = prefix.isEmpty ? baseName : "\(prefix) / \(baseName)"
             requests.append(convert(pmRequest, name: name, warnings: &warnings))
         }
@@ -182,7 +182,7 @@ public enum CollectionPorting {
             if let method = HTTPMethod(rawValue: methodText) {
                 model.method = method
             } else {
-                warnings.append("\"\(name)\": desteklenmeyen metot \(methodText), GET'e çevrildi.")
+                warnings.append(L10n.t("porting.badMethod", name, methodText))
             }
         }
         model.url = pm.url?.raw ?? ""
@@ -223,14 +223,14 @@ public enum CollectionPorting {
             for field in body.formdata ?? [] {
                 guard let key = field.key else { continue }
                 if field.type == "file" {
-                    warnings.append("\"\(requestName)\": dosya tipli form alanı \"\(key)\" atlandı (dosya desteği yok).")
+                    warnings.append(L10n.t("porting.fileField", requestName, key))
                     continue
                 }
                 fields.append(KeyValueEntry(key: key, value: field.value ?? "", enabled: !(field.disabled ?? false)))
             }
             return .multipartForm(fields: fields)
         default:
-            warnings.append("\"\(requestName)\": desteklenmeyen body tipi \"\(mode)\", body boş bırakıldı.")
+            warnings.append(L10n.t("porting.badBody", requestName, mode))
             return .none
         }
     }
@@ -260,7 +260,7 @@ public enum CollectionPorting {
                 location: location
             )
         default:
-            warnings.append("\"\(requestName)\": desteklenmeyen auth tipi \"\(type)\", Auth Yok olarak ayarlandı.")
+            warnings.append(L10n.t("porting.badAuth", requestName, type))
             return .none
         }
     }

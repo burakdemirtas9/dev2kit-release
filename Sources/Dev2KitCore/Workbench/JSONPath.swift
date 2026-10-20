@@ -27,7 +27,7 @@ public enum JSONPath {
         public let message: String
         public let column: Int
 
-        public var errorDescription: String? { "Query error at column \(column): \(message)" }
+        public var errorDescription: String? { L10n.t("jsonpath.error", L10n.number(column), message) }
     }
 
     /// Değerlendirme sınırı aşıldı (sorgu geçerli ama çok pahalı ya da çok
@@ -45,7 +45,7 @@ public enum JSONPath {
 
     public static func compile(_ query: String) throws -> Query {
         guard query.count <= maxQueryLength else {
-            throw QueryError(message: "the query is longer than \(maxQueryLength) characters", column: maxQueryLength + 1)
+            throw QueryError(message: L10n.t("jsonpath.tooLong", L10n.number(maxQueryLength)), column: maxQueryLength + 1)
         }
         var parser = Parser(query)
         return try parser.parseQuery()
@@ -159,13 +159,13 @@ public enum JSONPath {
         mutating func parseQuery() throws -> Query {
             skipBlank()
             guard current == "$" else {
-                if current == "@" { throw error("a query starts with $ (the root); @ is only valid inside a filter [?…]") }
-                throw error(atEnd ? "the query is empty; start with $" : "a query must start with $")
+                if current == "@" { throw error(L10n.t("jsonpath.atOutside")) }
+                throw error(atEnd ? L10n.t("jsonpath.empty") : L10n.t("jsonpath.startDollar"))
             }
             index += 1
             let segments = try parseSegments(inFilter: false)
             skipBlank()
-            guard atEnd else { throw error("unexpected \"\(current!)\"") }
+            guard atEnd else { throw error(L10n.t("jsonpath.unexpected", String(current!))) }
             return Query(segments: segments)
         }
 
@@ -216,10 +216,10 @@ public enum JSONPath {
 
         mutating func parseShorthandName() throws -> String {
             let start = index
-            guard let first = current else { throw error("expected a member name after \".\"") }
+            guard let first = current else { throw error(L10n.t("jsonpath.expectedName")) }
             guard Self.isNameFirst(first) else {
-                if first.isNumber { throw error("a name cannot start with a digit; use [\(first)…] for an index or ['…'] for the key") }
-                throw error("expected a member name after \".\"; for keys with special characters use ['…']")
+                if first.isNumber { throw error(L10n.t("jsonpath.nameDigit", String(first))) }
+                throw error(L10n.t("jsonpath.expectedNameSpecial"))
             }
             while let character = current, Self.isNameChar(character) { index += 1 }
             // Tireli ad (ör. .content-type): RFC kısayolunda yok; yol göster.
@@ -227,7 +227,7 @@ public enum JSONPath {
                 var end = index
                 while end < chars.count, Self.isNameChar(chars[end]) || chars[end] == "-" { end += 1 }
                 let full = String(chars[start..<end])
-                throw error("\"\(full)\" contains \"-\"; write it as ['\(full)']", at: index)
+                throw error(L10n.t("jsonpath.dash", full), at: index)
             }
             return String(chars[start..<index])
         }
@@ -243,13 +243,13 @@ public enum JSONPath {
                 skipBlank()
                 if current == "," { index += 1; continue }
                 if current == "]" { index += 1; return selectors }
-                if atEnd { throw error("unclosed \"[\"", at: open) }
-                throw error("expected \",\" or \"]\" but found \"\(current!)\"")
+                if atEnd { throw error(L10n.t("jsonpath.unclosedBracket"), at: open) }
+                throw error(L10n.t("jsonpath.expectedCommaBracket", String(current!)))
             }
         }
 
         mutating func parseSelector() throws -> Selector {
-            guard let character = current else { throw error("expected a selector") }
+            guard let character = current else { throw error(L10n.t("jsonpath.expectedSelector")) }
             switch character {
             case "'", "\"":
                 return .name(try parseStringLiteral())
@@ -261,7 +261,7 @@ public enum JSONPath {
                 skipBlank()
                 return .filter(try parseLogicalOr())
             case "(":
-                throw error("script expressions like (@.length-1) are not part of JSONPath (RFC 9535); use [-1] for the last element or [?…] to filter")
+                throw error(L10n.t("jsonpath.script"))
             case ":":
                 return try parseSlice(start: nil)
             default:
@@ -274,9 +274,9 @@ public enum JSONPath {
                     return .index(number)
                 }
                 if Self.isNameFirst(character) {
-                    throw error("names inside [ ] must be quoted: ['\(String(chars[index..<min(chars.count, index + 20)]).prefix { Self.isNameChar($0) })']")
+                    throw error(L10n.t("jsonpath.quoteNames", String(String(chars[index..<min(chars.count, index + 20)]).prefix { Self.isNameChar($0) })))
                 }
-                throw error("unexpected \"\(character)\" in [ ]")
+                throw error(L10n.t("jsonpath.unexpectedInBrackets", String(character)))
             }
         }
 
@@ -299,15 +299,15 @@ public enum JSONPath {
         mutating func parseInteger() throws -> Int {
             let start = index
             if current == "-" { index += 1 }
-            guard let first = current, first.isASCII, first.isNumber else { throw error("expected a number", at: start) }
+            guard let first = current, first.isASCII, first.isNumber else { throw error(L10n.t("jsonpath.expectedNumber"), at: start) }
             if first == "0", let next = peek(1), next.isASCII, next.isNumber {
-                throw error("numbers cannot have leading zeros", at: start)
+                throw error(L10n.t("jsonpath.leadingZero"), at: start)
             }
             while let character = current, character.isASCII, character.isNumber { index += 1 }
             let text = String(chars[start..<index])
-            if text == "-0" { throw error("-0 is not a valid index", at: start) }
+            if text == "-0" { throw error(L10n.t("jsonpath.minusZero"), at: start) }
             guard let value = Int(text), abs(value) <= 9_007_199_254_740_991 else {
-                throw error("the number \(text) is out of range", at: start)
+                throw error(L10n.t("jsonpath.outOfRange", text), at: start)
             }
             return value
         }
@@ -318,11 +318,11 @@ public enum JSONPath {
             index += 1
             var result = ""
             while true {
-                guard let character = current else { throw error("unclosed string", at: open) }
+                guard let character = current else { throw error(L10n.t("json.unclosedString"), at: open) }
                 index += 1
                 if character == quote { return result }
                 if character == "\\" {
-                    guard let escaped = current else { throw error("unfinished escape", at: index - 1) }
+                    guard let escaped = current else { throw error(L10n.t("yaml.halfEscape"), at: index - 1) }
                     index += 1
                     switch escaped {
                     case "b": result.append("\u{08}")
@@ -335,11 +335,11 @@ public enum JSONPath {
                     case "'" where quote == "'": result.append("'")
                     case "\"" where quote == "\"": result.append("\"")
                     case "u": result.unicodeScalars.append(try parseUnicodeEscape())
-                    default: throw error("invalid escape \\\(escaped)", at: index - 2)
+                    default: throw error(L10n.t("json.invalidEscape", "\\\(escaped)"), at: index - 2)
                     }
                 } else {
                     if let scalar = character.unicodeScalars.first, scalar.value < 0x20 {
-                        throw error("control characters must be escaped in strings", at: index - 1)
+                        throw error(L10n.t("json.controlChar"), at: index - 1)
                     }
                     result.append(character)
                 }
@@ -350,24 +350,24 @@ public enum JSONPath {
             let start = index - 2
             func hex4() throws -> UInt32 {
                 guard index + 4 <= chars.count, let value = UInt32(String(chars[index..<index + 4]), radix: 16) else {
-                    throw error("\\u needs four hex digits", at: start)
+                    throw error(L10n.t("jsonpath.fourHex"), at: start)
                 }
                 index += 4
                 return value
             }
             let high = try hex4()
             if (0xD800...0xDBFF).contains(high) {
-                guard current == "\\", peek(1) == "u" else { throw error("unpaired surrogate in \\u escape", at: start) }
+                guard current == "\\", peek(1) == "u" else { throw error(L10n.t("json.missingSurrogate"), at: start) }
                 index += 2
                 let low = try hex4()
                 guard (0xDC00...0xDFFF).contains(low),
                       let scalar = Unicode.Scalar(0x10000 + ((high - 0xD800) << 10) + (low - 0xDC00)) else {
-                    throw error("invalid surrogate pair in \\u escape", at: start)
+                    throw error(L10n.t("json.invalidSurrogate"), at: start)
                 }
                 return scalar
             }
             guard let scalar = Unicode.Scalar(high), !(0xDC00...0xDFFF).contains(high) else {
-                throw error("invalid \\u escape", at: start)
+                throw error(L10n.t("json.invalidUnicode"), at: start)
             }
             return scalar
         }
@@ -379,7 +379,7 @@ public enum JSONPath {
             while true {
                 skipBlank()
                 guard current == "|" else { break }
-                guard peek(1) == "|" else { throw error("use || for \"or\"") }
+                guard peek(1) == "|" else { throw error(L10n.t("jsonpath.useOr")) }
                 index += 2
                 skipBlank()
                 operands.append(try parseLogicalAnd())
@@ -392,7 +392,7 @@ public enum JSONPath {
             while true {
                 skipBlank()
                 guard current == "&" else { break }
-                guard peek(1) == "&" else { throw error("use && for \"and\"") }
+                guard peek(1) == "&" else { throw error(L10n.t("jsonpath.useAnd")) }
                 index += 2
                 skipBlank()
                 operands.append(try parseBasic())
@@ -402,7 +402,7 @@ public enum JSONPath {
 
         mutating func parseBasic() throws -> LogicalExpr {
             skipBlank()
-            guard let character = current else { throw error("the filter expression is incomplete") }
+            guard let character = current else { throw error(L10n.t("jsonpath.filterIncomplete")) }
             if character == "!" , peek(1) != "=" {
                 index += 1
                 skipBlank()
@@ -412,7 +412,7 @@ public enum JSONPath {
                 let start = index
                 let operand = try parseComparable()
                 guard let test = Self.testOperand(operand) else {
-                    throw error("! must be followed by a query, a function or ( … )", at: start)
+                    throw error(L10n.t("jsonpath.notOperand"), at: start)
                 }
                 try checkTestFunction(test, at: start)
                 return .not(.test(test))
@@ -432,7 +432,7 @@ public enum JSONPath {
                 return .comparison(left, op, right)
             }
             guard let test = Self.testOperand(left) else {
-                throw error("a literal value must be compared with something (e.g. @.price < 10)", at: start)
+                throw error(L10n.t("jsonpath.literalAlone"), at: start)
             }
             try checkTestFunction(test, at: start)
             return .test(test)
@@ -444,7 +444,7 @@ public enum JSONPath {
             skipBlank()
             let inner = try parseLogicalOr()
             skipBlank()
-            guard current == ")" else { throw error(atEnd ? "unclosed \"(\"" : "expected \")\"", at: atEnd ? open : nil) }
+            guard current == ")" else { throw error(atEnd ? L10n.t("jsonpath.unclosedParen") : L10n.t("jsonpath.expectedParen"), at: atEnd ? open : nil) }
             index += 1
             return inner
         }
@@ -460,16 +460,16 @@ public enum JSONPath {
         /// Değer döndüren işlev (length, count, value) tek başına doğru/yanlış değildir.
         func checkTestFunction(_ test: TestOperand, at position: Int) throws {
             if case .function(let call) = test, ![.match, .search].contains(call.name) {
-                throw error("\(call.name.rawValue)() returns a value; compare it (e.g. \(call.name.rawValue)(@.items) > 0)", at: position)
+                throw error(L10n.t("jsonpath.compareValue", call.name.rawValue), at: position)
             }
         }
 
         func checkComparable(_ comparable: Comparable, at position: Int) throws {
             switch comparable {
             case .query(let query) where !query.isSingular:
-                throw error("comparisons need a single-value query (no *, .., slices or filters)", at: position)
+                throw error(L10n.t("jsonpath.singular"), at: position)
             case .function(let call) where [.match, .search].contains(call.name):
-                throw error("\(call.name.rawValue)() is true/false; use it on its own, not in a comparison", at: position)
+                throw error(L10n.t("jsonpath.logicalAlone", call.name.rawValue), at: position)
             default:
                 return
             }
@@ -487,7 +487,7 @@ public enum JSONPath {
         }
 
         mutating func parseComparable() throws -> Comparable {
-            guard let character = current else { throw error("expected a value, @ or $") }
+            guard let character = current else { throw error(L10n.t("jsonpath.expectedOperand")) }
             switch character {
             case "@", "$":
                 index += 1
@@ -511,22 +511,22 @@ public enum JSONPath {
                     case "false": return .literal(.bool(false))
                     case "null": return .literal(.null)
                     default:
-                        throw error("unknown word \"\(word)\"; use @.\(word) for a field of the current item, or quote text as '\(word)'", at: start)
+                        throw error(L10n.t("jsonpath.unknownWord", word), at: start)
                     }
                 }
                 if character == "]" || character == ")" || character == "," {
-                    throw error("expected a value here (a number, 'text', true, false, null, @… or $…)")
+                    throw error(L10n.t("jsonpath.expectedValue"))
                 }
-                throw error("unexpected \"\(character)\" in filter")
+                throw error(L10n.t("jsonpath.unexpectedInFilter", String(character)))
             }
         }
 
         mutating func parseNumberLiteral() throws -> JSONValue {
             let start = index
             if current == "-" { index += 1 }
-            guard let first = current, first.isASCII, first.isNumber else { throw error("expected a number", at: start) }
+            guard let first = current, first.isASCII, first.isNumber else { throw error(L10n.t("jsonpath.expectedNumber"), at: start) }
             if first == "0", let next = peek(1), next.isASCII, next.isNumber {
-                throw error("numbers cannot have leading zeros", at: start)
+                throw error(L10n.t("jsonpath.leadingZero"), at: start)
             }
             while let character = current, character.isASCII, character.isNumber { index += 1 }
             if current == ".", let next = peek(1), next.isASCII, next.isNumber {
@@ -536,7 +536,7 @@ public enum JSONPath {
             if current == "e" || current == "E" {
                 index += 1
                 if current == "+" || current == "-" { index += 1 }
-                guard let digit = current, digit.isASCII, digit.isNumber else { throw error("incomplete exponent", at: start) }
+                guard let digit = current, digit.isASCII, digit.isNumber else { throw error(L10n.t("json.missingExponent"), at: start) }
                 while let character = current, character.isASCII, character.isNumber { index += 1 }
             }
             return .number(String(chars[start..<index]))
@@ -544,7 +544,7 @@ public enum JSONPath {
 
         mutating func parseFunction(named word: String, at start: Int) throws -> FunctionCall {
             guard let name = FunctionName(rawValue: word) else {
-                throw error("unknown function \(word)(); supported: length, count, match, search, value", at: start)
+                throw error(L10n.t("jsonpath.unknownFunction", word), at: start)
             }
             index += 1 // (
             var arguments: [FunctionArgument] = []
@@ -572,15 +572,15 @@ public enum JSONPath {
             index += 1 // )
             let expected = (name == .match || name == .search) ? 2 : 1
             guard arguments.count == expected else {
-                throw error("\(word)() takes \(expected) argument\(expected == 1 ? "" : "s"), got \(arguments.count)", at: start)
+                throw error(L10n.t("jsonpath.arguments", word, L10n.plural("jsonpath.argumentCount", count: expected), L10n.number(arguments.count)), at: start)
             }
             if name == .count || name == .value, case .literal = arguments[0] {
-                throw error("\(word)() needs a query such as @.items", at: start)
+                throw error(L10n.t("jsonpath.needsQuery", word), at: start)
             }
             var pattern: NSRegularExpressionBox?
             if name == .match || name == .search, case .literal(.string(let regex)) = arguments[1] {
                 guard let compiled = Self.regex(regex, anchored: name == .match) else {
-                    throw error("invalid regular expression '\(regex)'", at: start)
+                    throw error(L10n.t("jsonpath.badRegex", regex), at: start)
                 }
                 pattern = NSRegularExpressionBox(compiled)
             }
@@ -605,7 +605,7 @@ public enum JSONPath {
         mutating func spend(_ amount: Int = 1) throws {
             work += amount
             if work > JSONPath.workBudget {
-                throw LimitError(message: "The query is too expensive for this input (nested .. and filters). Narrow it, e.g. start from a known path.")
+                throw LimitError(message: L10n.t("jsonpath.tooExpensive"))
             }
         }
 
@@ -622,7 +622,7 @@ public enum JSONPath {
                         try select(segment.selectors, on: node, into: &next)
                     }
                     if next.count > JSONPath.maxMatches {
-                        throw LimitError(message: "More than \(JSONPath.maxMatches.formatted()) matches. Narrow the query.")
+                        throw LimitError(message: L10n.t("jsonpath.tooManyMatches", L10n.number(JSONPath.maxMatches)))
                     }
                 }
                 nodes = next

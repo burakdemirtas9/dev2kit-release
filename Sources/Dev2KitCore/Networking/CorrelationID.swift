@@ -17,10 +17,9 @@ public enum CorrelationID {
     ]
 
     /// Rozetin ipucunda "bu ne" açıklaması; anahtar küçük harfli başlık adı.
-    static let explanations = [
-        "x-b3-traceid": "B3 (Zipkin) izleme kimliği: isteğin geçtiği tüm servislerde aynı kalır. "
-            + "Kibana'da bu değerle arayınca isteğin bütün servislerdeki logları gelir.",
-    ]
+    static var explanations: [String: String] {
+        ["x-b3-traceid": L10n.t("correlation.b3")]
+    }
 
     public struct Match: Sendable, Equatable {
         /// Başlığın yanıttaki hali (kullanıcı hangi başlıktan geldiğini görsün).
@@ -31,7 +30,7 @@ public enum CorrelationID {
         /// Kimliğin ne olduğu, ne işe yaradığı; bilinmeyen başlıkta genel metin.
         public var explanation: String {
             CorrelationID.explanations[headerName.lowercased()]
-                ?? "İzleme kimliği: log sisteminde bu isteği bulmak için kullanılır."
+                ?? L10n.t("correlation.generic")
         }
 
         public init(headerName: String, value: String) {

@@ -56,7 +56,7 @@ public enum YAMLReader {
                 let indent = raw.prefix { $0 == " " }.count
                 let rest = raw.dropFirst(indent)
                 if rest.first == "\t", !rest.trimmingCharacters(in: .whitespaces).isEmpty {
-                    throw WorkbenchIssue(message: "Girintide sekme var: YAML'da girinti yalnızca boşlukla yapılır.",
+                    throw WorkbenchIssue(message: L10n.t("yaml.tab"),
                                          line: offset + 1, column: indent + 1)
                 }
                 return Line(number: offset + 1, indent: indent, text: stripComment(String(rest)), raw: raw)
@@ -106,7 +106,7 @@ public enum YAMLReader {
                 let line = lines[position]
                 if line.indent == 0, line.text == "---" || line.text.hasPrefix("--- ") {
                     if line.text != "---" {
-                        throw issue("`---` satırında içerik desteklenmiyor; değeri alt satıra yaz.", line)
+                        throw issue(L10n.t("yaml.docStartContent"), line)
                     }
                     position += 1
                     continue
@@ -118,7 +118,7 @@ public enum YAMLReader {
                 if position < lines.count {
                     let next = lines[position]
                     if !(next.indent == 0 && (next.text == "---" || next.text == "...")) {
-                        throw issue("Beklenmeyen girinti ya da içerik.", next)
+                        throw issue(L10n.t("yaml.unexpectedIndentContent"), next)
                     }
                 }
             }
@@ -136,7 +136,7 @@ public enum YAMLReader {
         /// Geçerli satırdan başlayan düğüm (girintisi `minIndent` ya da fazlası).
         mutating func node(minIndent: Int, depth: Int) throws -> JSONValue {
             guard depth <= YAMLReader.maxDepth else {
-                throw issue("İç içe derinlik \(YAMLReader.maxDepth)'i aşıyor.", lines[min(position, lines.count - 1)])
+                throw issue(L10n.t("yaml.tooDeep", L10n.number(YAMLReader.maxDepth)), lines[min(position, lines.count - 1)])
             }
             skipBlank()
             guard position < lines.count, lines[position].indent >= minIndent, !isDocumentMarker(lines[position]) else { return .null }
@@ -162,7 +162,7 @@ public enum YAMLReader {
                 let line = lines[position]
                 if isDocumentMarker(line) { break }
                 guard line.indent == indent, isSequenceItem(line.text) else {
-                    if line.indent > indent { throw issue("Beklenmeyen girinti.", line) }
+                    if line.indent > indent { throw issue(L10n.t("yaml.unexpectedIndent"), line) }
                     break
                 }
                 let rest = line.text.dropFirst(1)
@@ -202,15 +202,15 @@ public enum YAMLReader {
                 let line = lines[position]
                 if isDocumentMarker(line) { break }
                 guard line.indent == indent else {
-                    if line.indent > indent { throw issue("Beklenmeyen girinti.", line) }
+                    if line.indent > indent { throw issue(L10n.t("yaml.unexpectedIndent"), line) }
                     break
                 }
                 guard let (key, valueText) = try splitKey(line.text, line: line) else {
-                    if isSequenceItem(line.text) { throw issue("Eşlemenin içinde beklenmeyen liste öğesi; girintiyi kontrol et.", line) }
-                    throw issue("`anahtar: değer` bekleniyordu.", line)
+                    if isSequenceItem(line.text) { throw issue(L10n.t("yaml.listInMap"), line) }
+                    throw issue(L10n.t("yaml.expectedKeyValue"), line)
                 }
-                if key == "<<" { throw issue("Birleştirme anahtarı (`<<`) desteklenmiyor.", line) }
-                guard seen.insert(key).inserted else { throw issue("Yinelenen anahtar: \(key)", line) }
+                if key == "<<" { throw issue(L10n.t("yaml.merge"), line) }
+                guard seen.insert(key).inserted else { throw issue(L10n.t("yaml.duplicateKey", key), line) }
                 position += 1
                 let value: JSONValue
                 if valueText.isEmpty {
@@ -227,7 +227,7 @@ public enum YAMLReader {
         /// `: ` ya da sondaki `:`). Eşleme satırı değilse nil.
         func splitKey(_ text: String, line: Line) throws -> (String, String)? {
             if isSequenceItem(text) { return nil }
-            if text.hasPrefix("? ") { throw issue("Karmaşık anahtar (`? `) desteklenmiyor.", line) }
+            if text.hasPrefix("? ") { throw issue(L10n.t("yaml.complexKey"), line) }
             var keyEnd: String.Index?
             if let first = text.first, first == "\"" || first == "'" {
                 guard let close = closingQuote(in: text, quote: first) else { return nil }
@@ -255,7 +255,7 @@ public enum YAMLReader {
                 key = try quoted(rawKey, line: line)
             } else {
                 if rawKey.hasPrefix("&") || rawKey.hasPrefix("*") || rawKey.hasPrefix("!") {
-                    throw issue("Çapa, takma ad ve etiket desteklenmiyor.", line)
+                    throw issue(L10n.t("yaml.anchorTag"), line)
                 }
                 key = rawKey
             }
@@ -288,9 +288,9 @@ public enum YAMLReader {
             guard let first = text.first else { return .null }
             switch first {
             case "&", "*":
-                throw issue("Çapa ve takma ad (`&`, `*`) desteklenmiyor: güvenlik için açılmıyor.", line)
+                throw issue(L10n.t("yaml.anchor"), line)
             case "!":
-                throw issue("Etiketler (`!!str`, `!Tip`) desteklenmiyor.", line)
+                throw issue(L10n.t("yaml.tags"), line)
             case "|", ">":
                 return .string(try blockScalar(header: text, folded: first == ">", parentIndent: parentIndent, line: line))
             case "[", "{":
@@ -300,14 +300,14 @@ public enum YAMLReader {
                 var full = text
                 // Kapanmamış tırnak: sonraki satırlarla katlanarak devam eder.
                 while closingQuote(in: full, quote: first) == nil {
-                    guard position < lines.count else { throw issue("Tırnak kapanmamış.", line) }
+                    guard position < lines.count else { throw issue(L10n.t("yaml.unclosedQuote"), line) }
                     let next = lines[position].raw.trimmingCharacters(in: .whitespaces)
                     position += 1
                     full += next.isEmpty ? "\n" : " " + next
                 }
-                guard let close = closingQuote(in: full, quote: first) else { throw issue("Tırnak kapanmamış.", line) }
+                guard let close = closingQuote(in: full, quote: first) else { throw issue(L10n.t("yaml.unclosedQuote"), line) }
                 let tail = full[full.index(after: close)...].trimmingCharacters(in: .whitespaces)
-                if !tail.isEmpty { throw issue("Tırnaktan sonra beklenmeyen içerik.", line) }
+                if !tail.isEmpty { throw issue(L10n.t("yaml.afterQuote"), line) }
                 return .string(try quoted(String(full[...close]), line: line))
             default:
                 // Çok satırlı düz değer: daha girintili devam satırları boşlukla katlanır.
@@ -327,7 +327,7 @@ public enum YAMLReader {
             for character in header.dropFirst() {
                 if character == "-" || character == "+" { chomp = character }
                 else if let digit = character.wholeNumberValue, digit > 0 { explicitIndent = digit }
-                else if character != " " { throw issue("Geçersiz `|`/`>` başlığı.", line) }
+                else if character != " " { throw issue(L10n.t("yaml.blockHeader"), line) }
             }
             var collected: [String] = []
             var blockIndent: Int? = explicitIndent.map { parentIndent + $0 }
@@ -372,14 +372,14 @@ public enum YAMLReader {
         }
 
         func quoted(_ text: String, line: Line) throws -> String {
-            guard let quote = text.first, text.count >= 2, text.last == quote else { throw issue("Tırnak kapanmamış.", line) }
+            guard let quote = text.first, text.count >= 2, text.last == quote else { throw issue(L10n.t("yaml.unclosedQuote"), line) }
             let inner = text.dropFirst().dropLast()
             if quote == "'" { return inner.replacingOccurrences(of: "''", with: "'") }
             var out = ""
             var iterator = inner.makeIterator()
             while let character = iterator.next() {
                 guard character == "\\" else { out.append(character); continue }
-                guard let escape = iterator.next() else { throw issue("Yarım kaçış dizisi.", line) }
+                guard let escape = iterator.next() else { throw issue(L10n.t("yaml.halfEscape"), line) }
                 switch escape {
                 case "n": out.append("\n")
                 case "t": out.append("\t")
@@ -391,11 +391,11 @@ public enum YAMLReader {
                     var hex = ""
                     for _ in 0..<count { if let next = iterator.next() { hex.append(next) } }
                     guard hex.count == count, let value = UInt32(hex, radix: 16), let scalar = Unicode.Scalar(value) else {
-                        throw issue("Geçersiz kaçış: \\\(escape)\(hex)", line)
+                        throw issue(L10n.t("yaml.invalidEscape", "\\\(escape)\(hex)"), line)
                     }
                     out.unicodeScalars.append(scalar)
                 default:
-                    throw issue("Bilinmeyen kaçış: \\\(escape)", line)
+                    throw issue(L10n.t("yaml.unknownEscape", "\\\(escape)"), line)
                 }
             }
             return out
@@ -438,16 +438,16 @@ public enum YAMLReader {
         mutating func parseAll() throws -> JSONValue {
             let value = try parse(depth: depth)
             skipSpaces()
-            guard index == characters.count else { throw issue("Akış biçiminden sonra beklenmeyen içerik (çok satırlı akış desteklenmiyor).") }
+            guard index == characters.count else { throw issue(L10n.t("yaml.afterFlow")) }
             return value
         }
 
         mutating func skipSpaces() { while index < characters.count, characters[index] == " " { index += 1 } }
 
         mutating func parse(depth: Int) throws -> JSONValue {
-            guard depth <= YAMLReader.maxDepth else { throw issue("İç içe derinlik \(YAMLReader.maxDepth)'i aşıyor.") }
+            guard depth <= YAMLReader.maxDepth else { throw issue(L10n.t("yaml.tooDeep", L10n.number(YAMLReader.maxDepth))) }
             skipSpaces()
-            guard index < characters.count else { throw issue("Akış biçimi yarım kaldı (çok satırlı akış desteklenmiyor).") }
+            guard index < characters.count else { throw issue(L10n.t("yaml.flowIncomplete")) }
             switch characters[index] {
             case "[":
                 index += 1
@@ -457,10 +457,10 @@ public enum YAMLReader {
                 while true {
                     items.append(try parse(depth: depth + 1))
                     skipSpaces()
-                    guard index < characters.count else { throw issue("`]` eksik.") }
+                    guard index < characters.count else { throw issue(L10n.t("yaml.missing", "`]`")) }
                     if characters[index] == "," { index += 1; skipSpaces(); if index < characters.count, characters[index] == "]" { index += 1; break }; continue }
                     if characters[index] == "]" { index += 1; break }
-                    throw issue("`,` ya da `]` bekleniyordu.")
+                    throw issue(L10n.t("yaml.expectedComma", "`]`"))
                 }
                 return .array(items)
             case "{":
@@ -476,7 +476,7 @@ public enum YAMLReader {
                     case .string(let text), .number(let text): key = text
                     case .bool(let flag): key = flag ? "true" : "false"
                     case .null: key = "null"
-                    default: throw issue("Akış eşlemesinde anahtar metin olmalı.")
+                    default: throw issue(L10n.t("yaml.flowKey"))
                     }
                     skipSpaces()
                     var value = JSONValue.null
@@ -484,13 +484,13 @@ public enum YAMLReader {
                         index += 1
                         value = try parse(depth: depth + 1)
                     }
-                    guard seen.insert(key).inserted else { throw issue("Yinelenen anahtar: \(key)") }
+                    guard seen.insert(key).inserted else { throw issue(L10n.t("yaml.duplicateKey", key)) }
                     members.append((key, value))
                     skipSpaces()
-                    guard index < characters.count else { throw issue("`}` eksik.") }
+                    guard index < characters.count else { throw issue(L10n.t("yaml.missing", "`}`")) }
                     if characters[index] == "," { index += 1; skipSpaces(); if index < characters.count, characters[index] == "}" { index += 1; break }; continue }
                     if characters[index] == "}" { index += 1; break }
-                    throw issue("`,` ya da `}` bekleniyordu.")
+                    throw issue(L10n.t("yaml.expectedComma", "`}`"))
                 }
                 return .object(members)
             case "\"", "'":
@@ -504,12 +504,12 @@ public enum YAMLReader {
                     }
                     end += 1
                 }
-                guard end < characters.count else { throw issue("Tırnak kapanmamış.") }
+                guard end < characters.count else { throw issue(L10n.t("yaml.unclosedQuote")) }
                 let raw = String(characters[index...end])
                 index = end + 1
                 return .string(try Parser(lines: []).quoted(raw, line: line))
             case "&", "*", "!":
-                throw issue("Çapa, takma ad ve etiket desteklenmiyor.")
+                throw issue(L10n.t("yaml.anchorTag"))
             default:
                 var end = index
                 while end < characters.count {

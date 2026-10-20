@@ -86,14 +86,14 @@ public enum MarkdownFormatter {
                 let start = index
                 index += 1
                 while index < lines.count, !lines[index].trimmingCharacters(in: .whitespaces).hasPrefix(fence) { index += 1 }
-                guard index < lines.count else { return issue("kod bloğu (\(fence)) kapatılmamış", line: start) }
+                guard index < lines.count else { return issue(L10n.t("markdown.fence", fence), line: start) }
                 index += 1
                 continue
             }
             if let end = tableBlock(lines, from: index) {
                 let columns = cells(lines[index]).count
                 for row in index..<end where cells(lines[row]).count != columns {
-                    return issue("tablo satırında \(cells(lines[row]).count) sütun var, başlıkta \(columns)", line: row)
+                    return issue(L10n.t("markdown.columns", L10n.number(cells(lines[row]).count), L10n.number(columns)), line: row)
                 }
                 index = end
                 continue

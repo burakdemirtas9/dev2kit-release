@@ -26,7 +26,7 @@ struct TLSSettingsView: View {
         VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text("TLS").font(.title2).bold()
-                Text("Hangi CA'lara güvenileceği ve hangi host'a hangi sertifikanın sunulacağı.")
+                Text(L10n.t("tls.subtitle"))
                     .font(.secondaryText)
                     .foregroundStyle(.secondary)
             }
@@ -44,7 +44,7 @@ struct TLSSettingsView: View {
             HStack(alignment: .bottom) {
                 validationSection
                 Spacer()
-                Button("Kapat") { dismiss() }
+                Button(L10n.t("common.close")) { dismiss() }
                     .keyboardShortcut(.cancelAction)
             }
         }
@@ -63,24 +63,24 @@ struct TLSSettingsView: View {
     private var sidebar: some View {
         VStack(spacing: 0) {
             List(selection: $selection) {
-                Section("Tüm host'lar") {
+                Section(L10n.t("tls.allHosts")) {
                     HStack {
-                        Label("Güven Deposu", systemImage: "shield")
+                        Label(L10n.t("tls.trustStore"), systemImage: "shield")
                         Spacer()
                         Text("\(appState.trustStore.entries.count)")
                             .font(.tinyText.monospacedDigit())
                             .foregroundStyle(appState.trustStore.problems.isEmpty ? AnyShapeStyle(.secondary) : AnyShapeStyle(Theme.down))
-                            .help(appState.trustStore.problems.isEmpty ? "Sertifika sayısı" : "Okunamayan dosya var")
+                            .help(appState.trustStore.problems.isEmpty ? L10n.t("tls.certCount") : L10n.t("tls.unreadableFile"))
                     }
                     .tag(Selection.trustStore)
                 }
-                Section("Host Profilleri") {
+                Section(L10n.t("tls.hostProfiles")) {
                     ForEach(appState.workspace.tlsProfiles) { profile in
                         TLSProfileRow(profile: profile)
                             .tag(Selection.profile(profile.id))
                     }
                     if appState.workspace.tlsProfiles.isEmpty {
-                        Text("Henüz yok. + ile ekle.")
+                        Text(L10n.t("tls.noProfiles"))
                             .font(.secondaryText)
                             .foregroundStyle(.secondary)
                             .selectionDisabled()
@@ -96,16 +96,16 @@ struct TLSSettingsView: View {
                 } label: {
                     Image(systemName: "plus").iconHitTarget()
                 }
-                .help("Yeni host profili")
-                .accessibilityLabel("Yeni host profili")
+                .help(L10n.t("tls.newProfile"))
+                .accessibilityLabel(L10n.t("tls.newProfile"))
                 Button {
                     deleteSelectedProfile()
                 } label: {
                     Image(systemName: "minus").iconHitTarget()
                 }
                 .disabled(selectedProfileID == nil)
-                .help("Seçili profili sil")
-                .accessibilityLabel("Seçili profili sil")
+                .help(L10n.t("tls.deleteProfile"))
+                .accessibilityLabel(L10n.t("tls.deleteProfile"))
                 Spacer()
             }
             .buttonStyle(.borderless)
@@ -147,7 +147,7 @@ struct TLSSettingsView: View {
     private var validationSection: some View {
         let disabled = appState.certificateValidationDisabled
         return VStack(alignment: .leading, spacing: 4) {
-            Toggle("Sertifika doğrulamasını kapat (tüm istekler)", isOn: Binding(
+            Toggle(L10n.t("tls.disableValidation"), isOn: Binding(
                 get: { disabled },
                 set: { newValue in
                     // Kapatmak onay ister; geri açmak (güvenli yön) istemez.
@@ -158,23 +158,23 @@ struct TLSSettingsView: View {
             .controlSize(.small)
             Label(
                 disabled
-                    ? "Doğrulama KAPALI: sunucu sertifikası hiç kontrol edilmiyor. Uygulama yeniden açılınca kendiliğinden açılır."
-                    : "Doğrulama açık. Eklenen CA'lar sistem köklerine EK olarak güvenilir.",
+                    ? L10n.t("tls.validation.off")
+                    : L10n.t("tls.validation.on"),
                 systemImage: disabled ? "exclamationmark.shield.fill" : "lock.shield"
             )
             .font(.secondaryText)
             .foregroundStyle(disabled ? Theme.down : .secondary)
         }
         .confirmationDialog(
-            "Sertifika doğrulaması kapatılsın mı?",
+            L10n.t("tls.disable.title"),
             isPresented: $confirmingDisable
         ) {
-            Button("Doğrulamayı Kapat", role: .destructive) {
+            Button(L10n.t("tls.disable.confirm"), role: .destructive) {
                 appState.certificateValidationDisabled = true
             }
-            Button("Vazgeç", role: .cancel) {}
+            Button(L10n.t("common.cancel"), role: .cancel) {}
         } message: {
-            Text("Tüm isteklerde sunucu sertifikası kontrol edilmez; araya giren biri bağlantıyı devralabilir. Yalnızca sertifikası yanlış yapılandırılmış iç ortamlar için kullan. Uygulama yeniden açılınca doğrulama kendiliğinden açılır.")
+            Text(L10n.t("tls.disable.message"))
         }
     }
 }
@@ -246,7 +246,7 @@ private struct AdvancedSection<Content: View>: View {
                         .font(.tinyText.bold())
                         .rotationEffect(.degrees(isExpanded ? 90 : 0))
                         .foregroundStyle(.secondary)
-                    Text("Gelişmiş").font(.subheadline).bold()
+                    Text(L10n.t("tls.advanced")).font(.subheadline).bold()
                     if let summary, !isExpanded {
                         Text(summary)
                             .font(.tinyText)
@@ -286,18 +286,18 @@ private struct TLSProfileRow: View {
                 if !profile.invalidPatterns.isEmpty {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.tinyText).foregroundStyle(Theme.down)
-                        .help("Geçersiz host kalıbı var")
+                        .help(L10n.t("tls.invalidPattern"))
                 }
                 // Eski dosyalarda CA'sız sabitleme kalmış olabilir; listede de görünsün.
                 if profile.appliesToNothing {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.tinyText).foregroundStyle(Theme.warning)
-                        .help("Host kalıbı yok; profil hiçbir isteğe uygulanmıyor")
+                        .help(L10n.t("tls.noPattern"))
                 }
                 if profile.pinsWithoutCA {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.tinyText).foregroundStyle(Theme.warning)
-                        .help("Sabitleme işaretli ama CA seçilmemiş; uygulanmıyor")
+                        .help(L10n.t("tls.pinWithoutCA"))
                 }
             }
         }
@@ -311,60 +311,60 @@ private struct TLSProfileDetail: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                TextField("Profil adı", text: $profile.name)
+                TextField(L10n.t("tls.profileName"), text: $profile.name)
                     .inputLimit(.name)
                     .textFieldStyle(.input)
                     .font(.headline)
 
-                DetailSection(title: "Host'lar") {
-                    Hint(text: "Satır başına bir kalıp: api.firma.com ya da *.firma.com. Tek başına * olmaz.")
-                    KeyValueFreeList(items: $profile.hostPatterns, placeholder: "api.firma.com")
+                DetailSection(title: L10n.t("tls.hosts")) {
+                    Hint(text: L10n.t("tls.hosts.help"))
+                    KeyValueFreeList(items: $profile.hostPatterns, placeholder: L10n.t("tls.host.placeholder"))
                     if !profile.invalidPatterns.isEmpty {
-                        StatusLine(text: "Geçersiz kalıp: \(profile.invalidPatterns.joined(separator: ", "))", isError: true)
+                        StatusLine(text: L10n.t("tls.invalidPatterns", profile.invalidPatterns.joined(separator: ", ")), isError: true)
                     }
                     if profile.appliesToNothing {
-                        StatusLine(text: "Geçerli kalıp yok; profil hiçbir isteğe uygulanmıyor.")
+                        StatusLine(text: L10n.t("tls.noValidPattern"))
                     }
                 }
 
-                DetailSection(title: "Kurum CA'sı") {
-                    FilePathField(path: $profile.caCertificatePath, prompt: "CA sertifikası (.pem / .crt / .der)", types: caFileTypes)
-                    Hint(text: "Sistem kökleri geçerli kalır; bu CA onlara EK olarak güvenilir.")
+                DetailSection(title: L10n.t("tls.companyCA")) {
+                    FilePathField(path: $profile.caCertificatePath, prompt: L10n.t("tls.caFile"), types: caFileTypes)
+                    Hint(text: L10n.t("tls.companyCA.help"))
                 }
 
-                DetailSection(title: "İstemci sertifikası (mTLS)") {
-                    FilePathField(path: $profile.clientCertificatePath, prompt: "İstemci kimliği (.p12 / .pfx)", types: ["p12", "pfx"])
+                DetailSection(title: L10n.t("tls.clientCertificate")) {
+                    FilePathField(path: $profile.clientCertificatePath, prompt: L10n.t("tls.clientIdentity"), types: ["p12", "pfx"])
                     HStack {
-                        Text("Parola").font(.secondaryText).foregroundStyle(.secondary)
+                        Text(L10n.t("auth.password")).font(.secondaryText).foregroundStyle(.secondary)
                             .frame(width: 60, alignment: .leading)
-                        TemplateTextField(placeholder: "{{secret:isim}} önerilir", text: $profile.clientCertificatePassword, limit: .credential)
+                        TemplateTextField(placeholder: L10n.t("tls.password.placeholder"), text: $profile.clientCertificatePassword, limit: .credential)
                     }
-                    Hint(text: "Dosya kopyalanmaz, yalnızca yolu tutulur; özel anahtar istek anında belleğe alınır. Parolayı Secrets'a ekleyip referans ver.")
+                    Hint(text: L10n.t("tls.clientCertificate.help"))
                 }
 
                 AdvancedSection(isExpanded: $showsAdvanced, summary: advancedSummary) {
                     // CA yokken kapalı: sabitlenecek çıpa olmadan kutu bir
                     // güvenlik özelliği vaat edip veremiyordu.
-                    Toggle("Yalnızca bu CA kabul edilsin (sabitleme)", isOn: $profile.pinToCA)
+                    Toggle(L10n.t("tls.pin"), isOn: $profile.pinToCA)
                         .toggleStyle(.checkbox)
                         .disabled(!profile.hasCA)
-                        .help(profile.hasCA ? "" : "Önce bir CA sertifikası seç")
+                        .help(profile.hasCA ? "" : L10n.t("tls.pin.needsCA"))
                     if profile.pinsWithoutCA {
-                        StatusLine(text: "Sabitleme uygulanmıyor: CA seçilmemiş.")
+                        StatusLine(text: L10n.t("tls.pin.notApplied"))
                     }
                     Hint(text: !profile.hasCA
-                         ? "Sabitleme için önce bir CA sertifikası seç."
+                         ? L10n.t("tls.pin.needsCA.sentence")
                          : (profile.pinToCA
-                            ? "Bu host için sistem kökleri ve güven deposu geçersiz sayılır. Daha sıkı ama CA değişirse istekler durur."
-                            : "Kapalıyken sistem kökleri de geçerli."))
+                            ? L10n.t("tls.pin.on")
+                            : L10n.t("tls.pin.off")))
 
                     Divider().padding(.vertical, 2)
 
-                    Toggle("Uzun geçerlilik süresini kabul et (ömür üst sınırı aranmasın)", isOn: $profile.allowLongValidity)
+                    Toggle(L10n.t("tls.longValidity"), isOn: $profile.allowLongValidity)
                         .toggleStyle(.checkbox)
                     Hint(text: profile.allowLongValidity
-                         ? "Yalnızca ömür üst sınırı gevşer. Zincir, imza, tarih ve host adı kontrolleri AYNEN zorunlu."
-                         : "Apple sunucu sertifikalarına ömür sınırı koyuyor: kurum CA'larında 825, public CA'larda 398 gün. CA güven deposundaysa bunu Güven Deposu'nda host yazmadan açmak daha kolay.")
+                         ? L10n.t("tls.longValidity.on")
+                         : L10n.t("tls.longValidity.off"))
                 }
             }
             .padding(14)
@@ -375,10 +375,10 @@ private struct TLSProfileDetail: View {
     }
 
     private var advancedSummary: String? {
-        if profile.pinsWithoutCA { return "sabitleme uygulanmıyor" }
+        if profile.pinsWithoutCA { return L10n.t("tls.summary.pinNotApplied") }
         var parts: [String] = []
-        if profile.pinToCA { parts.append("sabitleme açık") }
-        if profile.allowLongValidity { parts.append("ömür sınırı muaf") }
+        if profile.pinToCA { parts.append(L10n.t("tls.summary.pinOn")) }
+        if profile.allowLongValidity { parts.append(L10n.t("tls.summary.longValidity")) }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 }
@@ -395,7 +395,7 @@ private struct FilePathField: View {
                 .inputLimit(.path)
                 .textFieldStyle(.input)
                 .font(.secondaryMono)
-            Button("Seç…") {
+            Button(L10n.t("common.choose")) {
                 if let url = chooseFile(types: types) { path = url.path }
             }
             if !path.isEmpty {
@@ -407,8 +407,8 @@ private struct FilePathField: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
-                .help("Temizle")
-                .accessibilityLabel("Temizle")
+                .help(L10n.t("common.clear"))
+                .accessibilityLabel(L10n.t("common.clear"))
             }
         }
     }
@@ -438,14 +438,14 @@ private struct KeyValueFreeList: View {
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(.secondary)
-                    .help("Kalıbı sil")
-                    .accessibilityLabel("Kalıbı sil")
+                    .help(L10n.t("tls.deletePattern"))
+                    .accessibilityLabel(L10n.t("tls.deletePattern"))
                 }
             }
             Button {
                 items.append("")
             } label: {
-                Label("Host Ekle", systemImage: "plus").font(.secondaryText)
+                Label(L10n.t("tls.addHost"), systemImage: "plus").font(.secondaryText)
                     .rowHitTarget(minHeight: 20)
             }
             .buttonStyle(.plain)
@@ -468,25 +468,25 @@ private struct TrustStoreDetail: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Güven Deposu").font(.headline)
-                    Hint(text: "Buradaki CA'lar tüm host'larda EK güven çıpasıdır (Java'daki cacerts gibi).")
+                    Text(L10n.t("tls.trustStore")).font(.headline)
+                    Hint(text: L10n.t("tls.trustStore.help"))
                 }
                 Spacer()
                 Button {
                     appState.reloadTrustStore()
-                    notice = TrustStoreNotice(text: "\(appState.trustStore.entries.count) sertifika yüklendi.", isError: false)
+                    notice = TrustStoreNotice(text: L10n.plural("tls.loaded", count: appState.trustStore.entries.count), isError: false)
                 } label: {
                     Image(systemName: "arrow.clockwise").iconHitTarget()
                 }
                 .buttonStyle(.borderless)
-                .help("Dizinleri yeniden oku (dışarıdan dosya bırakıldıysa)")
-                .accessibilityLabel("Yenile")
+                .help(L10n.t("tls.reload.help"))
+                .accessibilityLabel(L10n.t("common.refresh"))
                 Button {
                     if let url = chooseFile(types: caFileTypes) {
                         notice = appState.installCertificate(from: url)
                     }
                 } label: {
-                    Label("Sertifika Ekle…", systemImage: "plus")
+                    Label(L10n.t("tls.addCertificate"), systemImage: "plus")
                 }
                 .buttonStyle(PrimaryActionButtonStyle())
             }
@@ -502,35 +502,35 @@ private struct TrustStoreDetail: View {
 
             certificateList
 
-            AdvancedSection(isExpanded: $showsAdvanced, summary: appState.trustStoreAllowsLongValidity ? "ömür sınırı muaf" : nil) {
+            AdvancedSection(isExpanded: $showsAdvanced, summary: appState.trustStoreAllowsLongValidity ? L10n.t("tls.summary.longValidity") : nil) {
                 @Bindable var state = appState
-                Toggle("Bu CA'larla imzalı sertifikalarda ömür üst sınırını uygulama (825 gün)", isOn: $state.trustStoreAllowsLongValidity)
+                Toggle(L10n.t("tls.store.longValidity"), isOn: $state.trustStoreAllowsLongValidity)
                     .toggleStyle(.checkbox)
                 Hint(text: appState.trustStoreAllowsLongValidity
-                     ? "Yalnızca zinciri buradaki bir CA'ya çıkan sertifikalarda ömür sınırı aranmaz. Host adı, imza ve tarih kontrolleri AYNEN zorunlu; public sitelerde kural değişmez."
-                     : "Apple, kurum CA'larıyla imzalı sertifikalarda 825 günden uzun ömrü reddeder. PKI'n 3-5 yıllık sertifika basıyorsa aç; kalıcı çözüm daha kısa ömürlü sertifika.")
+                     ? L10n.t("tls.store.longValidity.on")
+                     : L10n.t("tls.store.longValidity.off"))
 
                 Divider().padding(.vertical, 2)
 
-                Text("Dizinler").font(.secondaryText).bold()
-                pathRow("Makine geneli", TrustStore.machineDirectory.path,
-                        hint: "yönetici hakkı gerekir · MDM ile dağıtıma uygun")
+                Text(L10n.t("tls.directories")).font(.secondaryText).bold()
+                pathRow(L10n.t("tls.dir.machine"), TrustStore.machineDirectory.path,
+                        hint: L10n.t("tls.dir.machine.hint"))
                 HStack(alignment: .top) {
-                    pathRow("Kullanıcı", TrustStore.userDirectory.path,
-                            hint: "\"Sertifika Ekle\" buraya kopyalar")
+                    pathRow(L10n.t("tls.dir.user"), TrustStore.userDirectory.path,
+                            hint: L10n.t("tls.dir.user.hint"))
                     Spacer()
                     Button {
                         try? TrustStore.prepareUserDirectory()
                         NSWorkspace.shared.open(TrustStore.userDirectory)
                     } label: {
-                        Label("Dizini Aç", systemImage: "folder")
+                        Label(L10n.t("tls.openFolder"), systemImage: "folder")
                     }
                     .controlSize(.small)
                 }
                 if !TrustStore.environmentDirectories().isEmpty {
                     pathRow(TrustStore.environmentVariable,
                             TrustStore.environmentDirectories().map(\.path).joined(separator: ", "),
-                            hint: "ortam değişkeniyle tanımlı")
+                            hint: L10n.t("tls.dir.env.hint"))
                 }
             }
         }
@@ -543,9 +543,9 @@ private struct TrustStoreDetail: View {
     private var certificateList: some View {
         if appState.trustStore.entries.isEmpty {
             ContentUnavailableView(
-                "Güven deposu boş",
+                L10n.t("tls.store.empty.title"),
                 systemImage: "shield",
-                description: Text("\"Sertifika Ekle\" ile ya da dizine dosya bırakarak kurum CA'sı ekle.")
+                description: Text(L10n.t("tls.store.empty.message"))
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
@@ -558,7 +558,7 @@ private struct TrustStoreDetail: View {
                             .font(.system(.body, design: .monospaced))
                             .lineLimit(1)
                         HStack(spacing: 8) {
-                            Text(entry.source.rawValue)
+                            Text(entry.source.title)
                                 .font(.tinyText)
                                 .padding(.horizontal, 5).padding(.vertical, 1)
                                 .background(Theme.purple.opacity(0.18))
@@ -566,15 +566,15 @@ private struct TrustStoreDetail: View {
                             Text(entry.fileName).font(.tinyText).foregroundStyle(.secondary)
                             if let expiry = entry.expiresAt {
                                 Text(entry.isExpired
-                                     ? "SÜRESİ DOLDU \(expiry.formatted(date: .abbreviated, time: .omitted))"
-                                     : "→ \(expiry.formatted(date: .abbreviated, time: .omitted))")
+                                     ? L10n.t("tls.cert.expired", L10n.date(expiry, time: false))
+                                     : "→ \(L10n.date(expiry, time: false))")
                                     .font(.tinyText)
                                     .foregroundStyle(entry.isExpired ? AnyShapeStyle(Theme.down) : AnyShapeStyle(.tertiary))
                             }
                             if entry.isCertificateAuthority == false {
-                                Label("CA değil", systemImage: "exclamationmark.triangle.fill")
+                                Label(L10n.t("tls.cert.notCA"), systemImage: "exclamationmark.triangle.fill")
                                     .font(.tinyText).foregroundStyle(Theme.warning)
-                                    .help("Bu sertifika CA olmadığı için güven çıpası olarak kullanılamaz.")
+                                    .help(L10n.t("tls.cert.notCA.help"))
                             }
                         }
                     }
@@ -588,8 +588,8 @@ private struct TrustStoreDetail: View {
                         }
                         .buttonStyle(.plain)
                         .foregroundStyle(.secondary)
-                        .help("Güven deposundan kaldır")
-                        .accessibilityLabel("Güven deposundan kaldır")
+                        .help(L10n.t("tls.cert.remove"))
+                        .accessibilityLabel(L10n.t("tls.cert.remove"))
                     }
                 }
                 .padding(.vertical, 2)

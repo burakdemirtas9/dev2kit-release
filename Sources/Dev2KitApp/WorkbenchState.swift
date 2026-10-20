@@ -47,7 +47,7 @@ final class WorkbenchState {
         case text
         case tree
         var id: String { rawValue }
-        var title: String { self == .text ? "Text" : "Tree" }
+        var title: String { self == .text ? L10n.t("body.kind.text") : L10n.t("wb.tree") }
     }
 
     enum Pane { case input, output }
@@ -422,6 +422,15 @@ final class WorkbenchState {
     /// Büyük girdide elle çalıştırma.
     func runNow() {
         schedule(debounced: false, force: true)
+    }
+
+    /// Arayüz dili değişti: doğrulama mesajı ve özet yeni dilde yeniden
+    /// üretilir. Büyük girdi kendiliğinden çalışmadığı için dokunulmaz;
+    /// kalemle düzenlenen çıktı korunur (yalnızca doğrulama tazelenir).
+    func languageChanged() {
+        diff.languageChanged()
+        guard !isLargeInput, !document.input.isEmpty else { return }
+        schedule(debounced: false, refreshOutput: editedOutput == nil && !isEditingOutput)
     }
 
     // MARK: - İç işler

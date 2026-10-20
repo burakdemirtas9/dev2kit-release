@@ -64,7 +64,7 @@ struct WorkbenchToolView: View {
         return HStack(spacing: 12) {
             if tool.actions.count > 4 {
                 // Çok eylemli araç (hash: 6 algoritma): segmentler sığmıyor.
-                Picker("Algorithm", selection: Binding(
+                Picker(L10n.t("wb.algorithm"), selection: Binding(
                     get: { action.id },
                     set: { workbench.select(actionID: $0) }
                 )) {
@@ -72,7 +72,7 @@ struct WorkbenchToolView: View {
                 }
                 .fixedSize()
             } else if tool.actions.count > 1 {
-                Picker("Action", selection: Binding(
+                Picker(L10n.t("wb.action"), selection: Binding(
                     get: { action.id },
                     set: { workbench.select(actionID: $0) }
                 )) {
@@ -86,70 +86,70 @@ struct WorkbenchToolView: View {
                 Divider().frame(height: 16)
             }
             if action.usesIndentation {
-                Picker("Indent", selection: Binding(
+                Picker(L10n.t("wb.indent"), selection: Binding(
                     get: { workbench.options.indentation },
                     set: { var options = workbench.options; options.indentation = $0; workbench.update(options: options) }
                 )) {
                     ForEach(Indentation.allCases, id: \.self) { Text($0.title).tag($0) }
                 }
                 .fixedSize()
-                .help("Indentation")
+                .help(L10n.t("wb.indent.help"))
             }
             if action.usesKeywordCase {
-                Toggle("Uppercase keywords", isOn: Binding(
+                Toggle(L10n.t("wb.uppercase"), isOn: Binding(
                     get: { workbench.options.uppercaseKeywords },
                     set: { var options = workbench.options; options.uppercaseKeywords = $0; workbench.update(options: options) }
                 ))
-                .help("Write SQL keywords (SELECT, FROM…) in upper case")
+                .help(L10n.t("wb.uppercase.help"))
             }
             if action.usesSortKeys {
-                Toggle("Sort keys", isOn: Binding(
+                Toggle(L10n.t("wb.sortKeys"), isOn: Binding(
                     get: { workbench.options.sortKeys },
                     set: { var options = workbench.options; options.sortKeys = $0; workbench.update(options: options) }
                 ))
-                .help("Sort object keys alphabetically at every level. Comments are dropped when sorting.")
+                .help(L10n.t("wb.sortKeys.help"))
             }
             if action.usesDelimiter {
-                Picker("Delimiter", selection: Binding(
+                Picker(L10n.t("wb.delimiter"), selection: Binding(
                     get: { workbench.options.csvDelimiter },
                     set: { var options = workbench.options; options.csvDelimiter = $0; workbench.update(options: options) }
                 )) {
                     ForEach(CSVDelimiter.allCases, id: \.self) { Text($0.title).tag($0) }
                 }
                 .fixedSize()
-                .help("Semicolon is what Excel expects in Turkish and most European locales")
+                .help(L10n.t("wb.delimiter.help"))
             }
             if action.usesRootName {
                 HStack(spacing: 6) {
-                    Text("Root").foregroundStyle(.secondary)
+                    Text(L10n.t("wb.root")).foregroundStyle(.secondary)
                     TextField(XMLConverter.defaultRootName, text: Binding(
                         get: { workbench.options.xmlRootName },
                         set: { var options = workbench.options; options.xmlRootName = $0; workbench.update(options: options) }
                     ))
                     .textFieldStyle(.input)
-                    .inputLimit(.short, english: true)
+                    .inputLimit(.short)
                     .frame(width: 120)
                 }
-                .help("Name of the root element. Invalid XML names are made safe.")
+                .help(L10n.t("wb.root.help"))
             }
             if action.usesURLSafe {
                 Toggle("URL-safe", isOn: optionBinding(\.base64URLSafe))
-                    .help("Encode with - and _ instead of + and /, without = padding (as in JWT). Decode accepts both.")
+                    .help(L10n.t("wb.urlSafe.help"))
             }
             if action.usesFormEncoding {
-                Toggle("Form encoding (+ = space)", isOn: optionBinding(\.formEncoding))
-                    .help("application/x-www-form-urlencoded: spaces become + (HTML forms, many query strings)")
+                Toggle(L10n.t("wb.formEncoding"), isOn: optionBinding(\.formEncoding))
+                    .help(L10n.t("wb.formEncoding.help"))
             }
             if action.usesCount {
-                Picker("Count", selection: optionBinding(\.generateCount)) {
+                Picker(L10n.t("wb.count"), selection: optionBinding(\.generateCount)) {
                     ForEach([1, 5, 10, 50, 100, 1_000], id: \.self) { Text("\($0)").tag($0) }
                 }
                 .fixedSize()
-                Button("Regenerate") { workbench.runNow() }
-                    .help("Generate new values")
+                Button(L10n.t("wb.regenerate")) { workbench.runNow() }
+                    .help(L10n.t("wb.regenerate.help"))
             }
             if action.usesHashOutput {
-                Picker("Output", selection: optionBinding(\.hashOutput)) {
+                Picker(L10n.t("wb.output"), selection: optionBinding(\.hashOutput)) {
                     ForEach(HashTool.Output.allCases, id: \.self) { Text($0.rawValue).tag($0) }
                 }
                 .pickerStyle(.segmented)
@@ -157,13 +157,13 @@ struct WorkbenchToolView: View {
             }
             if action.usesHMACKey {
                 HStack(spacing: 6) {
-                    Text("Key").foregroundStyle(.secondary)
+                    Text(L10n.t("wb.key")).foregroundStyle(.secondary)
                     SecureField("secret", text: optionBinding(\.hmacKey))
                         .textFieldStyle(.input)
-                        .inputLimit(.credential, english: true)
+                        .inputLimit(.credential)
                         .frame(width: 160)
                 }
-                .help("HMAC key (UTF-8). Kept in memory only, cleared with the tab.")
+                .help(L10n.t("wb.hmacKey.help"))
             }
             Spacer(minLength: 0)
             outputControls
@@ -179,7 +179,7 @@ struct WorkbenchToolView: View {
         let showsTree = workbench.showsTree
         HStack(spacing: 4) {
             if workbench.action.supportsTree {
-                Picker("View", selection: Binding(
+                Picker(L10n.t("wb.view"), selection: Binding(
                     get: { workbench.document.outputMode },
                     set: { workbench.select(outputMode: $0) }
                 )) {
@@ -189,12 +189,12 @@ struct WorkbenchToolView: View {
                 .labelsHidden()
                 .fixedSize()
                 .controlSize(.small)
-                .help("Show the output as text or as a tree of the input")
+                .help(L10n.t("wb.view.help"))
                 .padding(.trailing, 6)
             }
             if !showsTree {
                 if !workbench.outputHiddenFromEditor {
-                    SearchToggleButton(search: outputSearch, strings: .english)
+                    SearchToggleButton(search: outputSearch)
                 }
                 // Kalem yalnızca biçimlendiricilerde (kullanıcı kararı, 2026-10-20).
                 if workbench.tool.allowsOutputEditing {
@@ -207,9 +207,9 @@ struct WorkbenchToolView: View {
                     .foregroundStyle(workbench.isEditingOutput ? AnyShapeStyle(Theme.accent) : AnyShapeStyle(.secondary))
                     .disabled(workbench.displayedOutput.isEmpty || workbench.outputHiddenFromEditor)
                     .help(workbench.isEditingOutput
-                          ? "Stop editing. Edits are replaced when the input or options change."
-                          : "Edit output")
-                    .accessibilityLabel("Edit output")
+                          ? L10n.t("wb.stopEditing")
+                          : L10n.t("wb.editOutput"))
+                    .accessibilityLabel(L10n.t("wb.editOutput"))
                 }
                 Button {
                     workbench.useOutputAsInput()
@@ -219,9 +219,9 @@ struct WorkbenchToolView: View {
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
                 .disabled(workbench.displayedOutput.isEmpty)
-                .help("Use output as input (chain another action)")
-                .accessibilityLabel("Use output as input")
-                CopyButton(text: workbench.displayedOutput, help: "Copy output")
+                .help(L10n.t("wb.useAsInput.help"))
+                .accessibilityLabel(L10n.t("wb.useAsInput"))
+                CopyButton(text: workbench.displayedOutput, help: L10n.t("wb.copyOutput"))
             }
         }
     }
@@ -236,7 +236,7 @@ struct WorkbenchToolView: View {
 
     private var queryBar: some View {
         HStack(spacing: 8) {
-            Text("Query")
+            Text(L10n.t("wb.query"))
                 .font(.secondaryText.weight(.semibold))
                 .foregroundStyle(.secondary)
             TextField("$.store.book[?@.price < 10].title", text: Binding(
@@ -245,15 +245,15 @@ struct WorkbenchToolView: View {
             ))
             .textFieldStyle(.input)
             .font(.system(.body, design: .monospaced))
-            .inputLimit(.headerValue, english: true)
+            .inputLimit(.headerValue)
             .onSubmit { workbench.runNow() }
-            .accessibilityLabel("JSONPath query")
+            .accessibilityLabel(L10n.t("wb.query.accessibility"))
             queryStatus
                 .frame(minWidth: 96, alignment: .trailing)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
-        .help("JSONPath (RFC 9535): $ root, .name or ['name'], [0] [-1], *, .., [start:end:step], [?@.price < 10], length() count() match() search() value()")
+        .help(L10n.t("wb.query.help"))
     }
 
     /// Sorgunun durumu: çalışıyor, hata (kırmızı) ya da eşleşme sayısı (nötr).
@@ -262,12 +262,12 @@ struct WorkbenchToolView: View {
         if workbench.isRunning {
             HStack(spacing: 6) {
                 ProgressView().controlSize(.small)
-                Text("Running…")
+                Text(L10n.t("wb.running"))
             }
             .font(.secondaryText)
             .foregroundStyle(.secondary)
         } else if queryIssue != nil {
-            Label("Query error", systemImage: MessageKind.error.symbol)
+            Label(L10n.t("wb.queryError"), systemImage: MessageKind.error.symbol)
                 .font(.secondaryText)
                 .foregroundStyle(Theme.down)
         } else if let summary = workbench.outputSummary {
@@ -294,12 +294,12 @@ struct WorkbenchToolView: View {
         }()
         let canUndo = workbench.clearedInput?.documentID == workbench.document.id
         return VStack(spacing: 0) {
-            paneHeader("Input") {
+            paneHeader(L10n.t("wb.input")) {
                 // Boş girdide örneği gerçekten yükler (soluk ipucu yalnızca gösterir).
                 if workbench.input.isEmpty, !workbench.tool.sampleInput.isEmpty {
-                    Button("Load sample") { workbench.loadSample() }
+                    Button(L10n.t("wb.loadSample")) { workbench.loadSample() }
                         .controlSize(.small)
-                        .help("Fill the input with a sample to try the tool")
+                        .help(L10n.t("wb.loadSample.help"))
                 }
                 if workbench.tool.inputFormatter != nil {
                     Button {
@@ -310,18 +310,18 @@ struct WorkbenchToolView: View {
                     .buttonStyle(.plain)
                     .foregroundStyle(.secondary)
                     .disabled(workbench.input.isEmpty || workbench.inputHiddenFromEditor)
-                    .help("Format input JSON")
-                    .accessibilityLabel("Format input")
+                    .help(L10n.t("wb.formatInput.help"))
+                    .accessibilityLabel(L10n.t("wb.formatInput"))
                 }
                 if canUndo {
-                    Button("Undo Clear") { workbench.undoClear() }
+                    Button(L10n.t("wb.undoClear")) { workbench.undoClear() }
                         .controlSize(.small)
-                        .help("Restore the cleared input")
+                        .help(L10n.t("wb.undoClear.help"))
                 }
                 // Editör yokken (gizli girdi) arayacak/katlayacak bir şey yok.
                 if !workbench.inputHiddenFromEditor {
-                    FoldButtons(folding: inputFolding, english: true)
-                    SearchToggleButton(search: inputSearch, strings: .english)
+                    FoldButtons(folding: inputFolding)
+                    SearchToggleButton(search: inputSearch)
                 }
                 Button {
                     workbench.clearInput()
@@ -331,19 +331,19 @@ struct WorkbenchToolView: View {
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
                 .disabled(workbench.input.isEmpty)
-                .help("Clear input (can be undone for a few seconds)")
-                .accessibilityLabel("Clear input")
+                .help(L10n.t("wb.clearInput.help"))
+                .accessibilityLabel(L10n.t("wb.clearInput"))
             }
             if inputSearch.isPresented {
-                EditorSearchBar(search: inputSearch, strings: .english, mode: .workbench)
+                EditorSearchBar(search: inputSearch, mode: .workbench)
             }
             if workbench.inputHiddenFromEditor {
                 OversizedTextNotice(
-                    title: "Input not shown: \(TextStats.size(workbench.inputStats.bytes))",
-                    detail: oversizedDetail(limit: WorkbenchLimits.maxInputBytes) + " The input is kept and the tools work on it: run an action (e.g. Format) and use its output."
+                    title: L10n.t("wb.inputHidden.title", TextStats.size(workbench.inputStats.bytes)),
+                    detail: oversizedDetail(limit: WorkbenchLimits.maxInputBytes) + L10n.t("wb.inputHidden.detail")
                 ) {
-                    CopyButton(text: workbench.input, help: "Copy input")
-                    Button("Clear") { workbench.clearInput() }.controlSize(.small)
+                    CopyButton(text: workbench.input, help: L10n.t("wb.copyInput"))
+                    Button(L10n.t("common.clear")) { workbench.clearInput() }.controlSize(.small)
                 }
             } else {
                 CodeEditor(
@@ -356,7 +356,7 @@ struct WorkbenchToolView: View {
                     errorOffset: issueOffset,
                     onFocus: { workbench.focus(.input) },
                     limits: EditorLimits(
-                        onRejected: { workbench.reportLimit($0.english) },
+                        onRejected: { workbench.reportLimit($0.localized) },
                         onLongLine: { workbench.acceptInputHiddenFromEditor($0) }
                     ),
                     onCursorChange: { workbench.updateInputCursor(line: $0, column: $1) },
@@ -367,7 +367,7 @@ struct WorkbenchToolView: View {
                     if workbench.input.isEmpty {
                         SampleInputHint(
                             sample: workbench.tool.sampleInput,
-                            note: "Paste or type here. Kept in memory only — never written to disk or history.",
+                            note: L10n.t("wb.input.note"),
                             leading: inputFolding.gutterWidth
                         )
                     }
@@ -389,14 +389,14 @@ struct WorkbenchToolView: View {
                 .foregroundStyle(Theme.down)
                 .help(notice)
         } else if workbench.saveNotice {
-            Label("Kept in memory only — nothing is written to disk.", systemImage: "memorychip")
+            Label(L10n.t("wb.memoryOnly"), systemImage: "memorychip")
         } else if let cursor = workbench.inputCursor, !workbench.input.isEmpty {
-            Text("Ln \(cursor.line), Col \(cursor.column)")
+            Text(L10n.t("editor.cursor", L10n.number(cursor.line), L10n.number(cursor.column)))
         }
     }
 
     private func oversizedDetail(limit: Int) -> String {
-        "Text over \(TextStats.size(limit)) or with a line longer than \(TextStats.size(WorkbenchLimits.maxEditorLineBytes)) (minified JSON is one line) would freeze dev2kit in the editor."
+        L10n.t("wb.oversized", TextStats.size(limit), TextStats.size(WorkbenchLimits.maxEditorLineBytes))
     }
 
     // MARK: Çıktı
@@ -405,16 +405,16 @@ struct WorkbenchToolView: View {
         let showsTree = workbench.showsTree
         let outputSyntax = workbench.action.outputSyntax ?? workbench.tool.syntax
         return VStack(spacing: 0) {
-            paneHeader(showsTree ? "Tree" : "Output") {
+            paneHeader(showsTree ? L10n.t("wb.tree") : L10n.t("wb.outputPane")) {
                 if !showsTree, !workbench.outputHiddenFromEditor {
-                    FoldButtons(folding: outputFolding, english: true)
+                    FoldButtons(folding: outputFolding)
                 }
                 Text(outputStatus)
                     .font(.secondaryMono)
                     .foregroundStyle(.tertiary)
             }
             if !showsTree, outputSearch.isPresented {
-                EditorSearchBar(search: outputSearch, strings: .english, mode: .workbench)
+                EditorSearchBar(search: outputSearch, mode: .workbench)
             }
             Group {
                 if showsTree {
@@ -423,19 +423,19 @@ struct WorkbenchToolView: View {
                             workbench.editTreeValue(at: steps, text: text)
                         }
                     } else {
-                        placeholder(workbench.input.isEmpty ? "" : "The input must be valid JSON to show a tree.")
+                        placeholder(workbench.input.isEmpty ? "" : L10n.t("wb.treeNeedsJSON"))
                     }
                 } else if let issue = workbench.actionIssue, workbench.displayedOutput.isEmpty {
                     placeholder(issue.localizedDescription, isError: true)
                 } else if workbench.action.usesQuery, workbench.output == "[]" {
                     // Eşleşme yok ≠ hata: nötr renk, sorgu geçerli.
-                    placeholder("No matches. The query is valid but selects nothing in this JSON.")
+                    placeholder(L10n.t("wb.noMatches"))
                 } else if workbench.outputHiddenFromEditor {
                     OversizedTextNotice(
-                        title: "Output not shown: \(TextStats.size(workbench.outputStats.bytes))",
-                        detail: oversizedDetail(limit: WorkbenchLimits.maxOutputBytes) + " Copy it, or pick an action with multi-line output (e.g. Format)."
+                        title: L10n.t("wb.outputHidden.title", TextStats.size(workbench.outputStats.bytes)),
+                        detail: oversizedDetail(limit: WorkbenchLimits.maxOutputBytes) + L10n.t("wb.outputHidden.detail")
                     ) {
-                        CopyButton(text: workbench.output, help: "Copy output")
+                        CopyButton(text: workbench.output, help: L10n.t("wb.copyOutput"))
                     }
                 } else {
                     CodeEditor(
@@ -447,7 +447,7 @@ struct WorkbenchToolView: View {
                         onFocus: { workbench.focus(.output) },
                         limits: EditorLimits(
                             maxDisplayBytes: WorkbenchLimits.maxOutputBytes,
-                            onRejected: { workbench.reportLimit($0.english) },
+                            onRejected: { workbench.reportLimit($0.localized) },
                             onLongLine: { _ in workbench.reportLimit(WorkbenchLimits.longLineEditMessage) }
                         ),
                         onCursorChange: { workbench.updateOutputCursor(line: $0, column: $1) }
@@ -466,25 +466,25 @@ struct WorkbenchToolView: View {
 
     /// Çıktı başlığındaki durum: "Ready", "Running…", "Editing"…
     private var outputStatus: String {
-        if workbench.isRunning { return "Running…" }
+        if workbench.isRunning { return L10n.t("wb.running") }
         // Sorgulu araçta özet sorgu satırında; burada tekrar edilmez.
         if !workbench.action.usesQuery, let summary = workbench.outputSummary, !workbench.isStale { return summary }
-        if workbench.isLargeInput, workbench.isStale { return "Waiting for Run" }
-        if workbench.isEditingOutput { return "Editing" }
-        return "Ready"
+        if workbench.isLargeInput, workbench.isStale { return L10n.t("wb.waitingForRun") }
+        if workbench.isEditingOutput { return L10n.t("wb.editing") }
+        return L10n.t("wb.ready")
     }
 
     /// Çıktı alt bilgisinin sağı: büyük girdide "Run", değilse süre ve boyut.
     @ViewBuilder
     private var outputFooterTrailing: some View {
         if workbench.isLargeInput {
-            Text("Large input: not run automatically")
-            Button("Run") { workbench.runNow() }
+            Text(L10n.t("wb.largeInput"))
+            Button(L10n.t("wb.run")) { workbench.runNow() }
                 .controlSize(.mini)
                 .disabled(!workbench.isStale)
         } else {
             if let cursor = workbench.outputCursor, !workbench.output.isEmpty, !workbench.showsTree {
-                Text("Ln \(cursor.line), Col \(cursor.column)")
+                Text(L10n.t("editor.cursor", L10n.number(cursor.line), L10n.number(cursor.column)))
             }
             if !workbench.outputStats.summary.isEmpty, !workbench.showsTree {
                 Text(workbench.outputStats.summary)
@@ -536,15 +536,15 @@ struct WorkbenchToolView: View {
         case .empty:
             Text(" ").font(.secondaryText)
         case .valid:
-            Label("Valid \(workbench.tool.inputName)", systemImage: "checkmark.circle.fill")
+            Label(L10n.t("wb.valid", workbench.tool.inputName), systemImage: "checkmark.circle.fill")
                 .font(.secondaryText)
                 .foregroundStyle(Theme.up)
         case .structurallyValid:
             // Alt bilgi dar: kısa hali, açıklama ipucunda.
-            Label("Structure OK", systemImage: "checkmark.circle")
+            Label(L10n.t("wb.structureOK"), systemImage: "checkmark.circle")
                 .font(.secondaryText)
                 .foregroundStyle(.secondary)
-                .help("Brackets, quotes and comments are balanced; the full syntax was not checked.")
+                .help(L10n.t("wb.structureOK.help"))
         case .invalid(let issue):
             Label(issue.localizedDescription, systemImage: "exclamationmark.octagon.fill")
                 .font(.secondaryText)
@@ -593,23 +593,23 @@ struct DocumentTabBar: View {
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
             .padding(.horizontal, 8)
-            .help("New tab")
-            .accessibilityLabel("New tab")
+            .help(L10n.t("wb.newTab"))
+            .accessibilityLabel(L10n.t("wb.newTab"))
         }
         .frame(height: 30)
         .background(.bar)
         .confirmationDialog(
-            "Close \"\(pendingClose?.title ?? "")\"?",
+            L10n.t("wb.closeTab.title", pendingClose?.title ?? ""),
             isPresented: Binding(get: { pendingClose != nil }, set: { if !$0 { pendingClose = nil } }),
             titleVisibility: .visible
         ) {
-            Button("Close and Discard", role: .destructive) {
+            Button(L10n.t("wb.closeTab.confirm"), role: .destructive) {
                 if let item = pendingClose { onClose(item.id) }
                 pendingClose = nil
             }
-            Button("Cancel", role: .cancel) { pendingClose = nil }
+            Button(L10n.t("common.cancel"), role: .cancel) { pendingClose = nil }
         } message: {
-            Text("Its content isn't saved anywhere and will be lost.")
+            Text(L10n.t("wb.closeTab.message"))
         }
     }
 }
@@ -633,8 +633,8 @@ private struct WorkbenchTab: View {
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
             .opacity(hovering || isSelected ? 1 : 0)
-            .help("Close tab")
-            .accessibilityLabel("Close \(title)")
+            .help(L10n.t("wb.closeTab"))
+            .accessibilityLabel(L10n.t("wb.closeNamed", title))
         }
         .padding(.horizontal, 12)
         .frame(height: 28)
@@ -650,7 +650,7 @@ private struct WorkbenchTab: View {
 /// kullanıcı basınca yazılır (README: pano kuralı).
 struct CopyButton: View {
     let text: String
-    var help = "Copy"
+    var help = L10n.t("common.copy")
     @State private var copied = false
 
     var body: some View {
@@ -716,7 +716,7 @@ struct JSONTreeView: View {
                                 }
                                 .buttonStyle(.plain)
                                 .foregroundStyle(.secondary)
-                                .accessibilityLabel(expanded.contains(row.node.id) ? "Collapse" : "Expand")
+                                .accessibilityLabel(expanded.contains(row.node.id) ? L10n.t("collection.collapse") : L10n.t("collection.expand"))
                             } else {
                                 Color.clear.frame(width: 18, height: 1)
                             }
@@ -736,7 +736,7 @@ struct JSONTreeView: View {
         HStack(spacing: 4) {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 2) {
-                    Button("root") {
+                    Button(L10n.t("wb.tree.root")) {
                         selection = nil
                         if let first = root.children?.first { proxy.scrollTo(first.id, anchor: .top) }
                     }
@@ -761,10 +761,10 @@ struct JSONTreeView: View {
                 .font(.secondaryMono)
             }
             if let selected, !selected.path.isEmpty {
-                CopyButton(text: selected.path, help: "Copy path: \(selected.path)")
+                CopyButton(text: selected.path, help: L10n.t("wb.tree.copyPath", selected.path))
             }
             if limitNotice {
-                Text("Expanded first \(JSONTreeNode.expandAllLimit) branches")
+                Text(L10n.t("wb.tree.expandedFirst", L10n.number(JSONTreeNode.expandAllLimit)))
                     .font(.tinyText)
                     .foregroundStyle(.secondary)
             }
@@ -777,8 +777,8 @@ struct JSONTreeView: View {
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
             .disabled(expanded.isEmpty)
-            .help("Collapse all")
-            .accessibilityLabel("Collapse all")
+            .help(L10n.t("fold.collapseAll"))
+            .accessibilityLabel(L10n.t("fold.collapseAll"))
             Button {
                 let result = root.expandableIDs()
                 expanded = result.ids
@@ -789,8 +789,8 @@ struct JSONTreeView: View {
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
             .disabled(!(root.children ?? []).contains(where: \.isExpandable))
-            .help("Expand all (up to \(JSONTreeNode.expandAllLimit) branches)")
-            .accessibilityLabel("Expand all")
+            .help(L10n.t("wb.tree.expandAll.help", L10n.number(JSONTreeNode.expandAllLimit)))
+            .accessibilityLabel(L10n.t("fold.expandAll"))
         }
         .padding(.horizontal, 10)
         .frame(height: 28)
@@ -824,8 +824,8 @@ private struct JSONTreeRow: View {
                     .foregroundStyle(Color(nsColor: Theme.syntaxKey))
             }
             if isEditing {
-                TextField("Value", text: $draft)
-                    .inputLimit(.treeValue, english: true)
+                TextField(L10n.t("kv.column.value"), text: $draft)
+                    .inputLimit(.treeValue)
                     .textFieldStyle(.input)
                     .font(.system(.callout, design: .monospaced))
                     .focused($focused)
@@ -836,8 +836,8 @@ private struct JSONTreeRow: View {
                         .foregroundStyle(Theme.down)
                         .help(error)
                 }
-                Button("Save", action: commit).controlSize(.small)
-                Button("Cancel", action: cancel).controlSize(.small)
+                Button(L10n.t("common.save"), action: commit).controlSize(.small)
+                Button(L10n.t("common.cancel"), action: cancel).controlSize(.small)
             } else {
                 Text(node.summary)
                     .font(.system(.callout, design: .monospaced))
@@ -856,20 +856,20 @@ private struct JSONTreeRow: View {
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(.secondary)
-                    .help("Edit value (⏎ saves, Esc cancels)")
-                    .accessibilityLabel("Edit value")
+                    .help(L10n.t("wb.tree.edit.help"))
+                    .accessibilityLabel(L10n.t("wb.tree.edit"))
                 }
                 if node.hiddenSiblings == 0 {
-                    CopyButton(text: JSONTreeView.copyValue(node), help: "Copy value")
+                    CopyButton(text: JSONTreeView.copyValue(node), help: L10n.t("variable.copyValue"))
                 }
             }
         }
         .help(node.path)
         .contextMenu {
             if node.hiddenSiblings == 0 {
-                Button("Copy Value") { copy(JSONTreeView.copyValue(node)) }
+                Button(L10n.t("wb.tree.copyValueMenu")) { copy(JSONTreeView.copyValue(node)) }
                 if !node.path.isEmpty {
-                    Button("Copy Path (\(node.path))") { copy(node.path) }
+                    Button(L10n.t("wb.tree.copyPathMenu", node.path)) { copy(node.path) }
                 }
             }
         }

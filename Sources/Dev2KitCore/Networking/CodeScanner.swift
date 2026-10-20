@@ -91,7 +91,7 @@ struct CodeScanner {
         }
         if next == "*" {
             guard let end = position(of: "*/", from: index + 2) else {
-                throw BeautifyError.invalid(language, "/* yorumu */ ile kapatılmamış.")
+                throw BeautifyError.invalid(language, L10n.t("beautify.unclosedComment"))
             }
             let text = String(chars[index...end])
             index = end + 1
@@ -262,13 +262,13 @@ public struct BeautifyError: Error, LocalizedError, Equatable {
 
     /// "Geçersiz JSON: …" biçiminde mesaj.
     static func invalid(_ language: String, _ detail: String) -> BeautifyError {
-        BeautifyError(message: "Geçersiz \(language): \(detail)")
+        BeautifyError(message: L10n.t("beautify.invalid", language, detail))
     }
 
     /// Baştaki/sondaki boşlukları atılmış içerik; boşsa hata.
     static func requireContent(_ text: String, language: String) throws -> String {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { throw invalid(language, "içerik boş") }
+        guard !trimmed.isEmpty else { throw invalid(language, L10n.t("beautify.empty")) }
         return trimmed
     }
 }

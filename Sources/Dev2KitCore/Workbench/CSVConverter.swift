@@ -41,14 +41,14 @@ public enum CSVConverter {
         case .array(let items):
             records = try items.enumerated().map { index, item in
                 guard case .object(let members) = item else {
-                    throw WorkbenchIssue(message: "CSV için her eleman nesne olmalı; [\(index)] \(kindName(item))")
+                    throw WorkbenchIssue(message: L10n.t("csv.itemNotObject", String(index), kindName(item)))
                 }
                 return members
             }
         case .object(let members):
             records = [members]
         case let other:
-            throw WorkbenchIssue(message: "CSV için nesne dizisi ([{…}, {…}]) ya da tek nesne gerekli; girdi \(kindName(other))")
+            throw WorkbenchIssue(message: L10n.t("csv.needObjects", kindName(other)))
         }
 
         var columns: [String] = []
@@ -106,10 +106,10 @@ public enum CSVConverter {
 
     static func kindName(_ value: JSONValue) -> String {
         switch value {
-        case .object: return "nesne"
-        case .array: return "dizi"
-        case .string: return "metin"
-        case .number: return "sayı"
+        case .object: return L10n.t("kind.object")
+        case .array: return L10n.t("kind.array")
+        case .string: return L10n.t("kind.string")
+        case .number: return L10n.t("kind.number")
         case .bool: return "boolean"
         case .null: return "null"
         }

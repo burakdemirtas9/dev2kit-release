@@ -2,6 +2,9 @@ import XCTest
 @testable import Dev2KitCore
 
 final class KeyValueBulkCoderTests: XCTestCase {
+    /// Beklenen mesajlar Türkçe.
+    override func invokeTest() { withLanguage(.turkish) { super.invokeTest() } }
+
     func testEncodesEntries() {
         let text = KeyValueBulkCoder.encode([
             KeyValueEntry(key: "Content-Type", value: "application/json"),

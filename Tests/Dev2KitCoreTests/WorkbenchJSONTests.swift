@@ -2,6 +2,9 @@ import XCTest
 @testable import Dev2KitCore
 
 final class JSONDocumentTests: XCTestCase {
+    /// Beklenen mesajlar Türkçe.
+    override func invokeTest() { withLanguage(.turkish) { super.invokeTest() } }
+
     func testKeepsKeyOrderAndNumbersVerbatim() throws {
         let value = try JSONDocument.parse(#"{"z":1,"a":12345678901234567890,"m":1.10,"e":-2E+3}"#)
         XCTAssertEqual(value.compact(), #"{"z":1,"a":12345678901234567890,"m":1.10,"e":-2E+3}"#)
@@ -58,6 +61,9 @@ final class JSONDocumentTests: XCTestCase {
 }
 
 final class JSONToolTests: XCTestCase {
+    /// Beklenen mesajlar İngilizce.
+    override func invokeTest() { withLanguage(.english) { super.invokeTest() } }
+
     func testFormatUsesTheExistingFormatterAndIndentation() throws {
         XCTAssertEqual(try JSONTool.format(#"{"a":[1,2]}"#, options: .init(indentation: .fourSpaces)),
                        "{\n    \"a\": [\n        1,\n        2\n    ]\n}")
@@ -101,7 +107,7 @@ final class JSONToolTests: XCTestCase {
 
     func testUnescapeExplainsUnescapedQuotes() {
         XCTAssertThrowsError(try JSONTool.unescape(#"{"a": 1, bozuk"#, options: .init())) { error in
-            XCTAssertTrue(error.localizedDescription.contains("kaçışlı bir JSON string değil"), error.localizedDescription)
+            XCTAssertTrue(error.localizedDescription.contains("isn’t an escaped JSON string"), error.localizedDescription)
         }
     }
 
@@ -191,6 +197,9 @@ final class WorkbenchCatalogTests: XCTestCase {
 }
 
 final class TextStatsTests: XCTestCase {
+    /// Beklenen mesajlar İngilizce.
+    override func invokeTest() { withLanguage(.english) { super.invokeTest() } }
+
     func testCountsBytesLinesAndCharacters() {
         XCTAssertEqual(TextStats(""), .empty)
         XCTAssertEqual(TextStats("a"), TextStats(bytes: 1, lines: 1, characters: 1))

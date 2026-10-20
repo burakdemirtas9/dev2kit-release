@@ -45,7 +45,7 @@ public enum OpenAPIDiscovery {
         public var errorDescription: String? {
             switch self {
             case .notFound(let tried):
-                return "Bu adreste OpenAPI dokümanı bulunamadı. Denenen adresler: \(tried.joined(separator: ", "))"
+                return L10n.t("openapi.notFound", tried.joined(separator: ", "))
             }
         }
     }

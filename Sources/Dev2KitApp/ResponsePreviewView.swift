@@ -19,10 +19,10 @@ struct ResponsePreviewView: View {
         Group {
             if !ResponsePreview.isWithinLimit(payload) {
                 unavailable(
-                    "Önizleme için çok büyük",
-                    detail: "Yanıt \(ByteCountFormatter.string(fromByteCount: Int64(payload.count), countStyle: .binary)); "
-                        + "sınır \(ByteCountFormatter.string(fromByteCount: Int64(ResponsePreview.sizeLimit), countStyle: .binary)). "
-                        + "Gövde sekmesinden okuyabilir ya da dosyaya kaydedebilirsin."
+                    L10n.t("preview.tooLarge.title"),
+                    detail: L10n.t("preview.tooLarge.detail",
+                                   ByteCountFormatter.string(fromByteCount: Int64(payload.count), countStyle: .binary),
+                                   ByteCountFormatter.string(fromByteCount: Int64(ResponsePreview.sizeLimit), countStyle: .binary))
                 )
             } else {
                 switch kind {
@@ -30,7 +30,7 @@ struct ResponsePreviewView: View {
                     if let text {
                         IsolatedWebView(html: text)
                     } else {
-                        unavailable("HTML okunamadı", detail: "Gövde metne çevrilemedi.")
+                        unavailable(L10n.t("preview.html.failed"), detail: L10n.t("preview.html.failed.detail"))
                     }
                 case .image:
                     imagePreview
@@ -53,7 +53,7 @@ struct ResponsePreviewView: View {
                     .padding(12)
             }
         } else {
-            unavailable("Görsel çözülemedi", detail: "Biçim desteklenmiyor ya da veri bozuk.")
+            unavailable(L10n.t("preview.image.failed"), detail: L10n.t("preview.image.failed.detail"))
         }
     }
 
@@ -62,7 +62,7 @@ struct ResponsePreviewView: View {
         if let document = PDFDocument(data: payload) {
             PDFPreview(document: document)
         } else {
-            unavailable("PDF açılamadı", detail: "Belge okunamadı ya da bozuk.")
+            unavailable(L10n.t("preview.pdf.failed"), detail: L10n.t("preview.pdf.failed.detail"))
         }
     }
 
@@ -151,11 +151,10 @@ enum IsolatedWeb {
         }
     }
 
-    static let blockedNotice = """
-    <html><body style="font: -apple-system-body; color: #888; padding: 24px">
-    Önizleme güvenlik filtresi kurulamadı, içerik gösterilmiyor.
-    </body></html>
-    """
+    static var blockedNotice: String {
+        "<html><body style=\"font: -apple-system-body; color: #888; padding: 24px\">"
+            + L10n.t("preview.blocked") + "</body></html>"
+    }
 
     @MainActor
     final class Coordinator: NSObject, WKNavigationDelegate {

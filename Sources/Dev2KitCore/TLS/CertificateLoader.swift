@@ -15,10 +15,10 @@ public enum CertificateLoader {
     public static func loadCertificates(atPath path: String) throws -> [SecCertificate] {
         let expanded = (path as NSString).expandingTildeInPath
         guard FileManager.default.fileExists(atPath: expanded) else {
-            throw LoadError(message: "Sertifika dosyası bulunamadı: \(path)")
+            throw LoadError(message: L10n.t("cert.notFound", path))
         }
         guard let data = FileManager.default.contents(atPath: expanded) else {
-            throw LoadError(message: "Sertifika dosyası okunamadı: \(path)")
+            throw LoadError(message: L10n.t("cert.unreadable", path))
         }
 
         let blocks = pemBlocks(in: data)
@@ -26,7 +26,7 @@ public enum CertificateLoader {
         let certificates = sources.compactMap { SecCertificateCreateWithData(nil, $0 as CFData) }
 
         guard !certificates.isEmpty else {
-            throw LoadError(message: "Dosya geçerli bir sertifika içermiyor (PEM veya DER bekleniyor).")
+            throw LoadError(message: L10n.t("cert.invalid"))
         }
         return certificates
     }
@@ -64,10 +64,10 @@ public enum CertificateLoader {
     public static func loadIdentity(atPath path: String, password: String) throws -> SecIdentity {
         let expanded = (path as NSString).expandingTildeInPath
         guard FileManager.default.fileExists(atPath: expanded) else {
-            throw LoadError(message: "İstemci sertifikası bulunamadı: \(path)")
+            throw LoadError(message: L10n.t("cert.client.notFound", path))
         }
         guard let data = FileManager.default.contents(atPath: expanded) else {
-            throw LoadError(message: "İstemci sertifikası okunamadı: \(path)")
+            throw LoadError(message: L10n.t("cert.client.unreadable", path))
         }
 
         let options = [kSecImportExportPassphrase as String: password] as CFDictionary
@@ -78,28 +78,28 @@ public enum CertificateLoader {
         case errSecSuccess:
             break
         case errSecAuthFailed:
-            throw LoadError(message: "İstemci sertifikası parolası hatalı.")
+            throw LoadError(message: L10n.t("cert.client.password"))
         case errSecDecode:
-            throw LoadError(message: "İstemci sertifikası çözümlenemedi (geçerli bir .p12 mi?).")
+            throw LoadError(message: L10n.t("cert.client.decode"))
         default:
-            throw LoadError(message: "İstemci sertifikası yüklenemedi (OSStatus \(status)).")
+            throw LoadError(message: L10n.t("cert.client.status", String(status)))
         }
 
         guard let entries = items as? [[String: Any]],
               let first = entries.first,
               let identityRef = first[kSecImportItemIdentity as String] else {
-            throw LoadError(message: "Dosyada istemci kimliği bulunamadı.")
+            throw LoadError(message: L10n.t("cert.client.noIdentity"))
         }
         // SecIdentity CFTypeRef olarak gelir; tip güvenli dönüşüm.
         guard CFGetTypeID(identityRef as CFTypeRef) == SecIdentityGetTypeID() else {
-            throw LoadError(message: "Dosyadaki öğe bir istemci kimliği değil.")
+            throw LoadError(message: L10n.t("cert.client.notIdentity"))
         }
         return unsafeBitCast(identityRef as CFTypeRef, to: SecIdentity.self)
     }
 
     /// Sertifikanın okunabilir adı (arayüzde göstermek için).
     public static func summary(of certificate: SecCertificate) -> String {
-        (SecCertificateCopySubjectSummary(certificate) as String?) ?? "(isimsiz sertifika)"
+        (SecCertificateCopySubjectSummary(certificate) as String?) ?? L10n.t("cert.unnamed")
     }
 
     /// Sertifikanın künyesi: CN, sağlayıcı CN ve son geçerlilik tarihi.

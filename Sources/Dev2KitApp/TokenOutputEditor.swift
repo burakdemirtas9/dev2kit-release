@@ -28,7 +28,7 @@ struct TokenOutputEditor: View {
             VStack(alignment: .leading, spacing: 12) {
                 Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
                     GridRow {
-                        Text("Yanıttaki alan").gridColumnAlignment(.trailing)
+                        Text(L10n.t("token.field")).gridColumnAlignment(.trailing)
                         TextField(TokenOutput.defaultResponseField, text: output.responseField)
                             .inputLimit(.short)
                             .textFieldStyle(.input)
@@ -36,11 +36,11 @@ struct TokenOutputEditor: View {
                     }
                     GridRow {
                         Text("")
-                        Text("Yanıt gövdesindeki yol: access_token, data.token, items[0].jwt")
+                        Text(L10n.t("token.field.help"))
                             .font(.secondaryText).foregroundStyle(.secondary)
                     }
                     GridRow {
-                        Text("Değişken")
+                        Text(L10n.t("token.variable"))
                         HStack(spacing: 2) {
                             Text("{{").foregroundStyle(.secondary)
                             TextField(TokenOutput.defaultVariableName, text: output.variableName)
@@ -53,7 +53,7 @@ struct TokenOutputEditor: View {
                     GridRow {
                         Text("Environment")
                         Picker("", selection: output.environmentID) {
-                            Text("Tüm environment'lar").tag(UUID?.none)
+                            Text(L10n.t("token.allEnvironments")).tag(UUID?.none)
                             ForEach(appState.workspace.environments) { env in
                                 Text(env.name).tag(UUID?.some(env.id))
                             }
@@ -73,14 +73,14 @@ struct TokenOutputEditor: View {
                 }
                 ForEach(shadowed, id: \.self) { name in
                     Label(
-                        "Aktif environment'ta \"\(name)\" adlı bir değişken zaten var. İsteklerde onun yerine bu token kullanılır.",
+                        L10n.t("token.shadowed", name),
                         systemImage: "exclamationmark.triangle.fill"
                     )
                     .font(.secondaryText)
                     .foregroundStyle(Theme.warning)
                 }
 
-                Text("Kullanım: isteklerde {{\(current.trimmedVariableName)}} yaz, ör. Authorization: Bearer {{\(current.trimmedVariableName)}}. Token yalnızca bellekte tutulur; JWT ise süresinin bitmesine 10 sn kala kendiliğinden yenilenir.")
+                Text(L10n.t("token.usage", current.trimmedVariableName))
                     .font(.secondaryText)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -97,29 +97,29 @@ struct TokenOutputEditor: View {
             case .fetching:
                 HStack(spacing: 6) {
                     ProgressView().controlSize(.small)
-                    Text("Token alınıyor…").font(.secondaryText)
+                    Text(L10n.t("token.fetching")).font(.secondaryText)
                 }
             case .valid(let expiresAt):
                 Label(
-                    expiresAt.map { "Token geçerli, \($0.formatted(date: .omitted, time: .standard))'e kadar." }
-                        ?? "Token alındı (süresi bilinmiyor; hata alınırsa yenilenir).",
+                    expiresAt.map { L10n.t("token.validUntil", $0.formatted(Date.FormatStyle(date: .omitted, time: .standard).locale(L10n.language.locale))) }
+                        ?? L10n.t("token.fetchedNoExpiry"),
                     systemImage: "checkmark.circle.fill"
                 )
                 .font(.secondaryText)
                 .foregroundStyle(Theme.up)
             case .failed(let message):
-                Label("Token alınamadı: \(message)", systemImage: "xmark.octagon.fill")
+                Label(L10n.t("token.failed", message), systemImage: "xmark.octagon.fill")
                     .font(.secondaryText)
                     .foregroundStyle(Theme.down)
                     .textSelection(.enabled)
             case nil:
-                Label("Henüz token alınmadı. Bu isteği gönder ya da {{\(source.variable)}} kullanan bir istek gönder.",
+                Label(L10n.t("token.notFetched", source.variable),
                       systemImage: "circle.dashed")
                     .font(.secondaryText)
                     .foregroundStyle(.secondary)
             }
         } else if !output.applies(to: environment) {
-            Label("Bu token isteği aktif environment'ta etkin değil.", systemImage: "moon.zzz")
+            Label(L10n.t("token.inactive"), systemImage: "moon.zzz")
                 .font(.secondaryText)
                 .foregroundStyle(.secondary)
         }
@@ -135,7 +135,7 @@ struct TokenFactoryBanner: View {
         HStack(spacing: 8) {
             Image(systemName: "key.viewfinder")
             Text("TOKEN FACTORY").font(.secondaryText.weight(.bold))
-            Text("Bu istek {{\(variable)}} değişkenini üretir. Gönderdiğinde token güncellenir.")
+            Text(L10n.t("token.banner", variable))
                 .font(.secondaryText)
                 .lineLimit(1)
             Spacer(minLength: 0)
@@ -186,7 +186,7 @@ struct TokenAlertToast: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
-            .accessibilityLabel("Bildirimi kapat")
+            .accessibilityLabel(L10n.t("token.alert.dismiss"))
         }
         .padding(12)
         .frame(maxWidth: 560)
@@ -229,10 +229,10 @@ struct TokenRetryBanner: View {
         case .offerRefresh(let status, _):
             MessageBanner(
                 kind: .warning,
-                title: "Token geçersiz olabilir (HTTP \(status))",
-                message: "Bu istek \(names) kullanıyor; token sunucuda geçersiz kılınmış olabilir."
+                title: L10n.t("token.retry.title", String(status)),
+                message: L10n.t("token.retry.message", names)
             ) {
-                Button("Token'ı Yenile ve Tekrar Gönder") {
+                Button(L10n.t("token.retry.action")) {
                     appState.refreshTokensAndResend(requestID)
                 }
                 .buttonStyle(PrimaryActionButtonStyle())
@@ -241,11 +241,11 @@ struct TokenRetryBanner: View {
         case .checkTokenContent(let status, let variables):
             MessageBanner(
                 kind: .warning,
-                title: "Yeni token'la da HTTP \(status)",
-                message: "Sorun büyük ihtimalle token'ın içeriğinde: doğru müşteri, scope ya da environment mı?"
+                title: L10n.t("token.content.title", String(status)),
+                message: L10n.t("token.content.message")
             ) {
                 if let first = variables.first {
-                    Button("Token İsteğini Aç") {
+                    Button(L10n.t("token.content.action")) {
                         appState.openTokenRequest(producing: first)
                     }
                     .buttonStyle(PrimaryActionButtonStyle())
@@ -268,10 +268,10 @@ struct SendWithoutTokenButton: View {
 
     var body: some View {
         let names = variables.map { "{{\($0)}}" }.joined(separator: ", ")
-        Button("Yine de Gönder (token olmadan)") {
+        Button(L10n.t("token.sendWithout")) {
             appState.sendWithoutTokens(requestID)
         }
         .controlSize(.small)
-        .help("İstek Token Factory'ye gidilmeden gönderilir. \(names) aktif environment'ta aynı adlı değişken varsa onun değerini, yoksa boş değer alır.")
+        .help(L10n.t("token.sendWithout.help", names))
     }
 }

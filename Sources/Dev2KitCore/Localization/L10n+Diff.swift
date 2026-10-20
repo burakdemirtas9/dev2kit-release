@@ -1,0 +1,38 @@
+// Metinler: anahtar → (Türkçe, English). Bkz. L10n.swift, docs/LOCALIZATION.md.
+
+extension L10nTable {
+    static let diff: [String: L10nEntry] = [
+        "diff.language": L10nEntry("Dil", "Language"),
+        "diff.language.help": L10nEntry("Karşılaştırmadan önce iki taraf bu dile göre biçimlendirilir", "Both sides are formatted with this language before comparing"),
+        "diff.normalize": L10nEntry("Biçimi normalleştir", "Normalize formatting"),
+        "diff.normalize.help": L10nEntry("Önce iki tarafı biçimlendir (JSON anahtarları sıralı); girinti ve anahtar sırası fark sayılmaz", "Format both sides first (JSON keys sorted), so indentation and key order don’t count as differences"),
+        "diff.ignoreWhitespace": L10nEntry("Boşlukları yok say", "Ignore whitespace"),
+        "diff.ignoreCase": L10nEntry("Büyük/küçük harfi yok say", "Ignore case"),
+        "diff.swap": L10nEntry("Sol ve sağı değiştir", "Swap left and right"),
+        "diff.showInputs": L10nEntry("Girdileri göster", "Show inputs"),
+        "diff.hideInputs.help": L10nEntry("Sonuca yer açmak için girdileri gizle", "Hide inputs to give the result more room"),
+        "diff.hideInputs": L10nEntry("Girdileri gizle", "Hide inputs"),
+        "diff.left": L10nEntry("Sol", "Left"),
+        "diff.right": L10nEntry("Sağ", "Right"),
+        "diff.comparedAsIs": L10nEntry("Olduğu gibi karşılaştırıldı: %1$@", "Compared as-is: %1$@"),
+        "diff.hidden.title": L10nEntry("Gösterilmiyor: %1$@", "Not shown: %1$@"),
+        "diff.hidden.detail": L10nEntry("%1$@'tan uzun bir satır editörde dev2kit'i dondurur. Metin saklanır ve karşılaştırılır.", "A line longer than %1$@ would freeze dev2kit in the editor. It’s kept and compared."),
+        "diff.pasteLeft": L10nEntry("Sol tarafı buraya yapıştır.", "Paste the left side here."),
+        "diff.pasteRight": L10nEntry("Sağ tarafı buraya yapıştır.", "Paste the right side here."),
+        "diff.empty": L10nEntry("Karşılaştırmak için iki metin yapıştır. Girdiler yalnızca bellekte kalır.", "Paste two texts to compare. Inputs stay in memory only."),
+        "diff.identical": L10nEntry("Aynı", "Identical"),
+        "diff.valueChanges.one": L10nEntry("%1$@ değer değişikliği", "%1$@ value change"),
+        "diff.valueChanges.other": L10nEntry("%1$@ değer değişikliği", "%1$@ value changes"),
+        "diff.tooMany": L10nEntry("Bir blokta çok fazla fark var; değiştirilmiş olarak gösterildi", "Too many differences in a block; shown as replaced"),
+        "diff.result": L10nEntry("Sonuç", "Result"),
+        "diff.previous": L10nEntry("Önceki fark", "Previous difference"),
+        "diff.next": L10nEntry("Sonraki fark", "Next difference"),
+        "diff.root": L10nEntry("(kök)", "(root)"),
+        "diff.copyPath": L10nEntry("Yolu Kopyala", "Copy Path"),
+        "diff.copyNew": L10nEntry("Yeni Değeri Kopyala", "Copy New Value"),
+        "diff.copyOld": L10nEntry("Eski Değeri Kopyala", "Copy Old Value"),
+        "diff.mode.changes": L10nEntry("Değişiklikler", "Changes"),
+        "diff.mode.lines": L10nEntry("Satırlar", "Lines"),
+        "diff.noValueChanges": L10nEntry("Değer farkı yok", "No value differences"),
+    ]
+}

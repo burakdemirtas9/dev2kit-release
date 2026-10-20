@@ -105,7 +105,7 @@ public enum XMLConverter {
         case .null, .object, .array: return nil
         }
         if let bad = text.unicodeScalars.first(where: { !isXMLChar($0) }) {
-            throw WorkbenchIssue(message: "XML 1.0'da yazılamayan karakter: U+\(String(format: "%04X", bad.value))")
+            throw WorkbenchIssue(message: L10n.t("xml.badChar", "U+" + String(format: "%04X", bad.value)))
         }
         return text
     }

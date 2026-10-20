@@ -27,35 +27,35 @@ public enum ImportFile {
 
     public static func kind(of data: Data) -> Result<Kind, Rejection> {
         guard data.count <= maxBytes else {
-            return .failure(Rejection(message: "Dosya çok büyük (\(TextStats.size(data.count))); en fazla \(maxSizeText)."))
+            return .failure(Rejection(message: L10n.t("file.tooLarge", TextStats.size(data.count), maxSizeText)))
         }
-        guard !data.isEmpty else { return .failure(Rejection(message: "Dosya boş.")) }
+        guard !data.isEmpty else { return .failure(Rejection(message: L10n.t("file.empty"))) }
         let head = [UInt8](data.prefix(8))
         func starts(_ bytes: [UInt8]) -> Bool { head.starts(with: bytes) }
 
         if starts([0x25, 0x50, 0x44, 0x46, 0x2D]) { return .success(.pdf) } // %PDF-
         if starts([0x50, 0x4B, 0x03, 0x04]) {
             guard let zip = try? ZipReader(data) else {
-                return .failure(Rejection(message: "Arşiv okunamadı ya da açılınca çok büyük (zip bombası olabilir)."))
+                return .failure(Rejection(message: L10n.t("file.badArchive")))
             }
             if zip.contains("word/document.xml") { return .success(.word) }
             if zip.contains("xl/workbook.xml") { return .success(.excel) }
-            return .failure(Rejection(message: "ZIP arşivi desteklenmiyor; yalnızca Word (.docx) ve Excel (.xlsx)."))
+            return .failure(Rejection(message: L10n.t("file.zipUnsupported")))
         }
         if starts([0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1]) {
-            return .failure(Rejection(message: "Eski Office biçimi (.doc/.xls) desteklenmiyor; dosyayı .docx ya da .xlsx olarak kaydedip tekrar dene."))
+            return .failure(Rejection(message: L10n.t("file.legacyOffice")))
         }
         if starts([0xCF, 0xFA, 0xED, 0xFE]) || starts([0xCE, 0xFA, 0xED, 0xFE]) || starts([0xCA, 0xFE, 0xBA, 0xBE]) || starts([0x4D, 0x5A]) {
-            return .failure(Rejection(message: "Çalıştırılabilir dosya; içe aktarılmaz."))
+            return .failure(Rejection(message: L10n.t("file.executable")))
         }
         if starts([0x89, 0x50, 0x4E, 0x47]) || starts([0xFF, 0xD8, 0xFF]) || starts([0x47, 0x49, 0x46, 0x38]) {
-            return .failure(Rejection(message: "Resim dosyası; içinden istek çıkarılamaz."))
+            return .failure(Rejection(message: L10n.t("file.image")))
         }
         // Metin: geçerli UTF-8 ve NUL bayt yok (ikili dosya değil).
         if !data.contains(0), String(data: data, encoding: .utf8) != nil {
             return .success(.text)
         }
-        return .failure(Rejection(message: "Tanınmayan dosya türü; Word, Excel, PDF ya da metin dosyası ver."))
+        return .failure(Rejection(message: L10n.t("file.unknown")))
     }
 
     /// Word ve Excel'in metni (PDF arayüzde PDFKit ile çıkarılır).
@@ -71,7 +71,7 @@ public enum ImportFile {
             guard zip.contains("xl/sharedStrings.xml") else { return "" }
             return OfficeText.excelSharedStrings(try zip.contents(of: "xl/sharedStrings.xml"))
         case .pdf:
-            throw Rejection(message: "PDF metni arayüz katmanında çıkarılır.")
+            throw Rejection(message: L10n.t("file.pdfInUI"))
         }
     }
 }

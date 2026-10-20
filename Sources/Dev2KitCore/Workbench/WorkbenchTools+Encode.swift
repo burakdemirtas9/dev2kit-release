@@ -27,7 +27,7 @@ extension WorkbenchTools {
             },
             WorkbenchAction(id: "decode", title: "Decode", usesURLSafe: true, outputSyntax: .plain) { input, _ in
                 guard let data = Base64Codec.decode(input) else {
-                    throw WorkbenchIssue(message: "Base64 olarak çözülemedi (geçersiz karakter ya da uzunluk)")
+                    throw WorkbenchIssue(message: L10n.t("base64.invalid"))
                 }
                 return DecodedText.text(data)
             },

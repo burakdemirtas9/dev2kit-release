@@ -10,6 +10,28 @@ final class WorkbenchStateTests: XCTestCase {
         }
     }
 
+    /// Dil değişince hesaplanmış doğrulama mesajı yeni dilde yeniden üretilir;
+    /// kullanıcının girdisi aynen kalır (2026-10-20).
+    func testLanguageChangeRefreshesTheValidationMessage() async {
+        let saved = Localizer.shared.language
+        defer { Localizer.shared.language = saved }
+        Localizer.shared.language = .turkish
+        let state = WorkbenchState()
+        state.input = #"{"a": }"#
+        func message() -> String? {
+            if case .invalid(let issue) = state.validation { return issue.message }
+            return nil
+        }
+        await settle(state) { message() != nil }
+        XCTAssertTrue(message()?.hasPrefix("Geçersiz JSON") == true, message() ?? "")
+
+        Localizer.shared.language = .english
+        state.languageChanged()
+        await settle(state) { message()?.hasPrefix("Invalid JSON") == true }
+        XCTAssertTrue(message()?.hasPrefix("Invalid JSON") == true, message() ?? "")
+        XCTAssertEqual(state.input, #"{"a": }"#)
+    }
+
     func testTypingProducesFormattedOutputAndStats() async {
         let state = WorkbenchState()
         state.input = #"{"a":[1,2]}"#

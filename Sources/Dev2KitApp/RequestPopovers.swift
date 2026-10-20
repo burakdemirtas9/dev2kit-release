@@ -20,7 +20,7 @@ struct CurlPopover: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("cURL Komutu")
+            Text(L10n.t("curl.title"))
                 .font(.headline)
 
             ScrollView {
@@ -34,10 +34,10 @@ struct CurlPopover: View {
             .background(Theme.editorBackground)
             .clipShape(RoundedRectangle(cornerRadius: 6))
 
-            Toggle("Secret değerlerini çöz", isOn: $includeSecrets)
+            Toggle(L10n.t("curl.resolveSecrets"), isOn: $includeSecrets)
                 .toggleStyle(.checkbox)
             if includeSecrets {
-                Label("Dikkat: kopyalanan komut gerçek secret değerlerini içerecek.",
+                Label(L10n.t("curl.resolveSecrets.warning"),
                       systemImage: "exclamationmark.triangle.fill")
                     .font(.secondaryText)
                     .foregroundStyle(Theme.warning)
@@ -50,7 +50,7 @@ struct CurlPopover: View {
                     NSPasteboard.general.setString(curlText, forType: .string)
                     copied = true
                 } label: {
-                    Label(copied ? "Kopyalandı" : "Kopyala",
+                    Label(copied ? L10n.t("common.copied") : L10n.t("common.copy"),
                           systemImage: copied ? "checkmark" : "doc.on.doc")
                 }
             }
@@ -67,34 +67,34 @@ struct RequestOptionsPopover: View {
 
     var body: some View {
         Form {
-            Section("Zaman Aşımı") {
+            Section(L10n.t("options.timeout")) {
                 HStack {
                     TextField("", value: $options.timeout, format: .number)
                         .textFieldStyle(.input)
                         .frame(width: 60)
-                    Stepper("saniye", value: $options.timeout, in: RequestOptions.timeoutRange, step: 5)
+                    Stepper(L10n.t("options.seconds"), value: $options.timeout, in: RequestOptions.timeoutRange, step: 5)
                 }
             }
 
-            Section("Yönlendirme") {
-                Toggle("Yönlendirmeleri izle", isOn: $options.redirect.follow)
+            Section(L10n.t("options.redirects")) {
+                Toggle(L10n.t("options.followRedirects"), isOn: $options.redirect.follow)
                 if options.redirect.follow {
                     Stepper(
-                        "En fazla \(options.redirect.maxRedirects) yönlendirme",
+                        L10n.plural("options.maxRedirects", count: options.redirect.maxRedirects),
                         value: $options.redirect.maxRedirects,
                         in: 1...20
                     )
-                    Toggle("https → http düşüşüne izin ver", isOn: $options.redirect.allowInsecureDowngrade)
+                    Toggle(L10n.t("options.allowDowngrade"), isOn: $options.redirect.allowInsecureDowngrade)
                     if options.redirect.allowInsecureDowngrade {
                         Label(
-                            "Trafik şifresiz hale gelebilir; yalnızca bilinçli test için aç.",
+                            L10n.t("options.allowDowngrade.warning"),
                             systemImage: "exclamationmark.triangle.fill"
                         )
                         .font(.secondaryText)
                         .foregroundStyle(Theme.warning)
                     }
                     Label(
-                        "Farklı bir host'a yönlendirmede Authorization ve Cookie başlıkları otomatik düşürülür.",
+                        L10n.t("options.crossHostNote"),
                         systemImage: "lock.shield"
                     )
                     .font(.secondaryText)
@@ -102,10 +102,10 @@ struct RequestOptionsPopover: View {
                 }
             }
 
-            Section("Çerezler") {
-                Toggle("Oturum çerezlerini kullan", isOn: $options.sendCookies)
+            Section(L10n.t("options.cookies")) {
+                Toggle(L10n.t("options.useCookies"), isOn: $options.sendCookies)
                 Label(
-                    "Çerezler yalnızca bellekte ve environment başına ayrı tutulur; diske yazılmaz.",
+                    L10n.t("options.cookiesNote"),
                     systemImage: "info.circle"
                 )
                 .font(.secondaryText)

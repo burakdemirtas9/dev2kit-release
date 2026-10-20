@@ -21,10 +21,10 @@ public enum OAuth2Client {
     ) throws -> URL {
         guard var components = URLComponents(string: config.authorizationURL.trimmingCharacters(in: .whitespaces)),
               components.scheme != nil, components.host != nil else {
-            throw FlowError(message: "Geçersiz yetkilendirme adresi.")
+            throw FlowError(message: L10n.t("oauth.flow.badAuthURL"))
         }
         guard !config.clientID.trimmingCharacters(in: .whitespaces).isEmpty else {
-            throw FlowError(message: "Client ID boş.")
+            throw FlowError(message: L10n.t("oauth.flow.noClientID"))
         }
 
         var items = components.queryItems ?? []
@@ -46,7 +46,7 @@ public enum OAuth2Client {
         components.queryItems = items
 
         guard let url = components.url else {
-            throw FlowError(message: "Yetkilendirme adresi kurulamadı.")
+            throw FlowError(message: L10n.t("oauth.flow.buildAuthURL"))
         }
         return url
     }
@@ -60,7 +60,7 @@ public enum OAuth2Client {
     /// kullandırıp hesabını kendi hesabına bağlayabilir (kod enjeksiyonu).
     public static func authorizationCode(from callback: URL, expectedState: String) throws -> String {
         guard let components = URLComponents(url: callback, resolvingAgainstBaseURL: false) else {
-            throw FlowError(message: "Callback adresi çözümlenemedi.")
+            throw FlowError(message: L10n.t("oauth.flow.badCallback"))
         }
         let items = components.queryItems ?? []
         func value(_ name: String) -> String? {
@@ -69,18 +69,18 @@ public enum OAuth2Client {
 
         if let error = value("error") {
             let description = value("error_description") ?? ""
-            throw FlowError(message: "Sağlayıcı reddetti: \(error)\(description.isEmpty ? "" : " — \(description)")")
+            throw FlowError(message: L10n.t("oauth.flow.denied", description.isEmpty ? error : "\(error) — \(description)"))
         }
         guard let state = value("state") else {
-            throw FlowError(message: "Callback'te state yok; istek reddedildi.")
+            throw FlowError(message: L10n.t("oauth.flow.noState"))
         }
         // Sabit zamanlı karşılaştırma gerekmez (state gizli değil, tahmin
         // edilemez olması yeterli) ama eşitlik şart.
         guard state == expectedState else {
-            throw FlowError(message: "state eşleşmedi; istek reddedildi.")
+            throw FlowError(message: L10n.t("oauth.flow.stateMismatch"))
         }
         guard let code = value("code"), !code.isEmpty else {
-            throw FlowError(message: "Callback'te yetkilendirme kodu yok.")
+            throw FlowError(message: L10n.t("oauth.flow.noCode"))
         }
         return code
     }
@@ -130,11 +130,11 @@ public enum OAuth2Client {
     private static func tokenRequest(tokenURL: String, fields: [String: String]) throws -> URLRequest {
         let trimmed = tokenURL.trimmingCharacters(in: .whitespaces)
         guard let url = URL(string: trimmed), url.scheme != nil, url.host != nil else {
-            throw FlowError(message: "Geçersiz token adresi.")
+            throw FlowError(message: L10n.t("oauth.flow.badTokenURL"))
         }
         // Token uç noktası kimlik bilgisi taşır; şifresiz kanal kabul edilmez.
         guard url.scheme?.lowercased() == "https" || url.host == "localhost" || url.host == "127.0.0.1" else {
-            throw FlowError(message: "Token adresi https olmalı (yerel geliştirme adresleri hariç).")
+            throw FlowError(message: L10n.t("oauth.flow.tokenNotHTTPS"))
         }
 
         var components = URLComponents()
@@ -156,12 +156,12 @@ public enum OAuth2Client {
         if statusCode >= 400 {
             if let failure = try? JSONDecoder().decode(OAuth2ErrorResponse.self, from: data) {
                 let detail = failure.error_description.map { " — \($0)" } ?? ""
-                throw FlowError(message: "Token alınamadı: \(failure.error)\(detail)")
+                throw FlowError(message: L10n.t("oauth.flow.tokenFailed", "\(failure.error)\(detail)"))
             }
-            throw FlowError(message: "Token alınamadı: HTTP \(statusCode)")
+            throw FlowError(message: L10n.t("oauth.flow.tokenFailed", "HTTP \(statusCode)"))
         }
         guard let response = try? JSONDecoder().decode(OAuth2TokenResponse.self, from: data) else {
-            throw FlowError(message: "Token yanıtı çözümlenemedi.")
+            throw FlowError(message: L10n.t("oauth.flow.badTokenResponse"))
         }
         return OAuth2Token(
             accessToken: response.access_token,

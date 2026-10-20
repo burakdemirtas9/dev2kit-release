@@ -23,13 +23,13 @@ public struct PostmanAPIClient: Sendable {
         public var errorDescription: String? {
             switch self {
             case .blockedByPolicy(let reason):
-                return "Postman API'sine bağlanılmadı: \(reason)"
+                return L10n.t("postmanAPI.connection", reason)
             case .unauthorized:
-                return "Postman API anahtarı geçersiz (401). Anahtarı kontrol et: postman.co → Settings → API Keys."
+                return L10n.t("postmanAPI.unauthorized")
             case .http(let code):
-                return "Postman API hatası: HTTP \(code)"
+                return L10n.t("postmanAPI.http", String(code))
             case .invalidResponse:
-                return "Postman API'den beklenmeyen yanıt alındı."
+                return L10n.t("postmanAPI.unexpected")
             }
         }
     }
