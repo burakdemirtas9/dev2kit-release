@@ -45,16 +45,18 @@ struct TemplateTextField: View {
                     field.padding(.horizontal, 8)
                 }
                 .frame(height: 28)
-                .background(Theme.editorBackground.opacity(0.6), in: RoundedRectangle(cornerRadius: 8))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .strokeBorder(isFocused ? Theme.accent.opacity(0.8) : Color(nsColor: .separatorColor),
-                                      lineWidth: isFocused ? 1.5 : 1)
-                )
-            } else {
+                .inputChrome(cornerRadius: 8, isFocused: isFocused)
+            } else if bordered {
                 field
+            } else {
+                // Tablo hücresi: dinlenmede çerçevesiz, odakta lila zemin.
+                field
+                    .padding(.horizontal, Self.cellInset)
+                    .padding(.vertical, 4)
+                    .inputChrome(cornerRadius: 5, onlyWhenFocused: true, isFocused: isFocused)
             }
             suggestionList
+                .padding(.horizontal, bordered ? 0 : Self.cellInset)
         }
     }
 
@@ -109,8 +111,11 @@ struct TemplateTextField: View {
         }
     }
 
-    /// Yazının alan kenarından uzaklığı (ekran dışında çizilip ölçüldü).
-    static let borderedInset: CGFloat = 6
+    /// Yazının alan kenarından uzaklığı (`.input` stiliyle aynı).
+    static let borderedInset: CGFloat = InputFieldStyle.textInset
+    /// Tablo hücresinde yazının hücre kenarına uzaklığı (`KeyValueEditor`'ün
+    /// anahtar sütunuyla aynı).
+    static let cellInset: CGFloat = 8
     static let plainInset: CGFloat = 0
 
     /// Kapsülde alanın kendi çerçevesi yok.
@@ -124,7 +129,7 @@ struct TemplateTextField: View {
     @ViewBuilder
     private func styled(_ field: TextField<Text>) -> some View {
         if isBordered {
-            field.textFieldStyle(.roundedBorder)
+            field.textFieldStyle(.input)
         } else {
             field.textFieldStyle(.plain)
         }

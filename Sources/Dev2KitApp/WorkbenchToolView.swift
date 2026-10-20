@@ -120,7 +120,7 @@ struct WorkbenchToolView: View {
                         get: { workbench.options.xmlRootName },
                         set: { var options = workbench.options; options.xmlRootName = $0; workbench.update(options: options) }
                     ))
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(.input)
                     .inputLimit(.short, english: true)
                     .frame(width: 120)
                 }
@@ -153,7 +153,7 @@ struct WorkbenchToolView: View {
                 HStack(spacing: 6) {
                     Text("Key").foregroundStyle(.secondary)
                     SecureField("secret", text: optionBinding(\.hmacKey))
-                        .textFieldStyle(.roundedBorder)
+                        .textFieldStyle(.input)
                         .inputLimit(.credential, english: true)
                         .frame(width: 160)
                 }
@@ -746,7 +746,7 @@ private struct JSONTreeRow: View {
             if isEditing {
                 TextField("Value", text: $draft)
                     .inputLimit(.treeValue, english: true)
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(.input)
                     .font(.system(.callout, design: .monospaced))
                     .focused($focused)
                     .onSubmit(commit)

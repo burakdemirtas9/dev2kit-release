@@ -48,7 +48,7 @@ struct SecretsView: View {
                 Button("Ekle") { add() }
                     .disabled(newName.trimmingCharacters(in: .whitespaces).isEmpty || newValue.isEmpty)
             }
-            .textFieldStyle(.roundedBorder)
+            .textFieldStyle(.input)
 
             if let errorMessage {
                 Text(errorMessage).foregroundStyle(.red).font(.secondaryText)

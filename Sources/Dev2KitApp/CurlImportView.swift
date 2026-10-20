@@ -56,7 +56,7 @@ struct CurlImportView: View {
                 Spacer()
                 TextField("İstek adı", text: $name)
                     .inputLimit(.name)
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(.input)
                     .frame(width: 200)
                     .onChange(of: name) { reparse() }
             }

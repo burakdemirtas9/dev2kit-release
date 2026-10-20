@@ -50,8 +50,7 @@ struct WorkbenchSidebar: View {
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 5)
-            .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
-            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(searchFocused ? Theme.accent.opacity(0.6) : Color.primary.opacity(0.08)))
+            .inputChrome(isFocused: searchFocused)
             .padding(8)
             .background {
                 // Görünmez düğme: ⌘K arama kutusuna odaklar.

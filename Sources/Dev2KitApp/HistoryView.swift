@@ -92,7 +92,7 @@ struct HistoryView: View {
         HStack {
             TextField("Ara: istek adı veya adres", text: $searchText)
                 .inputLimit(.search)
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(.input)
                 .frame(maxWidth: 280)
             Picker("", selection: $statusFilter) {
                 ForEach(StatusFilter.allCases, id: \.self) { Text($0.rawValue).tag($0) }

@@ -217,8 +217,10 @@ struct KeyValueEditor: View {
                 .textFieldStyle(.plain)
                 .font(.system(.body, design: .monospaced))
                 .inputLimit(.key)
-                .padding(.horizontal, 8)
+                .padding(.horizontal, TemplateTextField.cellInset)
                 .padding(.trailing, note == nil ? 0 : 18)
+                .padding(.vertical, 4)
+                .inputChrome(cornerRadius: 5, onlyWhenFocused: true)
                 .frame(width: keyWidth, alignment: .leading)
                 .overlay(alignment: .trailing) {
                     if let note {
@@ -231,7 +233,6 @@ struct KeyValueEditor: View {
                 }
             TemplateTextField(placeholder: isDraft ? valuePlaceholder : "", text: binding(row, \.value),
                               limit: valueLimit, bordered: false)
-                .padding(.horizontal, 8)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Button {
                 entries.removeAll { $0.id == row.id }

@@ -95,7 +95,7 @@ private struct EnvironmentDetail: View {
             HStack {
                 TextField("Environment adı", text: $environment.name)
                     .inputLimit(.name)
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(.input)
                     .font(.headline)
                 if isActive {
                     Label("Aktif", systemImage: "checkmark.circle.fill")

@@ -70,6 +70,7 @@ struct RequestOptionsPopover: View {
             Section("Zaman Aşımı") {
                 HStack {
                     TextField("", value: $options.timeout, format: .number)
+                        .textFieldStyle(.input)
                         .frame(width: 60)
                     Stepper("saniye", value: $options.timeout, in: RequestOptions.timeoutRange, step: 5)
                 }

@@ -57,7 +57,7 @@ struct EditorSearchBar: View {
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
-        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+        .inputChrome(isFocused: focused)
         .onAppear { focused = true }
         .onChange(of: search.focusRequest) { focused = true }
     }

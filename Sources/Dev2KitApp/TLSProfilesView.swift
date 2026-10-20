@@ -171,7 +171,7 @@ private struct TLSProfileDetail: View {
             VStack(alignment: .leading, spacing: 12) {
                 TextField("Profil adı", text: $profile.name)
                     .inputLimit(.name)
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(.input)
                     .font(.headline)
 
                 section("Host'lar") {
@@ -255,7 +255,7 @@ private struct TLSProfileDetail: View {
         HStack {
             TextField(prompt, text: path)
                 .inputLimit(.path)
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(.input)
                 .font(.secondaryMono)
             Button("Seç…") {
                 let panel = NSOpenPanel()
@@ -293,7 +293,7 @@ private struct KeyValueFreeList: View {
                         get: { index < items.count ? items[index] : "" },
                         set: { if index < items.count { items[index] = $0 } }
                     ))
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(.input)
                     .font(.system(.body, design: .monospaced))
                     .inputLimit(.short)
                     Button {

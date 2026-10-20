@@ -31,7 +31,7 @@ struct TokenOutputEditor: View {
                         Text("Yanıttaki alan").gridColumnAlignment(.trailing)
                         TextField(TokenOutput.defaultResponseField, text: output.responseField)
                             .inputLimit(.short)
-                            .textFieldStyle(.roundedBorder)
+                            .textFieldStyle(.input)
                             .font(.system(.body, design: .monospaced))
                     }
                     GridRow {
@@ -45,7 +45,7 @@ struct TokenOutputEditor: View {
                             Text("{{").foregroundStyle(.secondary)
                             TextField(TokenOutput.defaultVariableName, text: output.variableName)
                                 .inputLimit(.short)
-                                .textFieldStyle(.roundedBorder)
+                                .textFieldStyle(.input)
                                 .font(.system(.body, design: .monospaced))
                             Text("}}").foregroundStyle(.secondary)
                         }

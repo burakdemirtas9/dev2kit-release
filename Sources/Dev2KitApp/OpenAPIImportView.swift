@@ -120,7 +120,7 @@ struct OpenAPIImportView: View {
             HStack {
                 TextField("http://localhost:8080/v3/api-docs", text: $address)
                     .inputLimit(.url)
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(.input)
                     .onSubmit(fetch)
                 Button(action: fetch) {
                     if loading { ProgressView().controlSize(.small) } else { Text("Getir") }
@@ -184,7 +184,7 @@ struct OpenAPIImportView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     TextField("https://gateway.ornek.com/servis", text: $serverAddress)
                         .inputLimit(.url)
-                        .textFieldStyle(.roundedBorder)
+                        .textFieldStyle(.input)
                         .font(.system(.callout, design: .monospaced))
                     if document.serverURL == nil {
                         Text("Dokümanda mutlak sunucu adresi yok; isteklerin gideceği adresi gir.")
@@ -198,7 +198,7 @@ struct OpenAPIImportView: View {
                     Text("{{").foregroundStyle(.secondary)
                     TextField("değişken", text: $variableName)
                         .inputLimit(.short)
-                        .textFieldStyle(.roundedBorder)
+                        .textFieldStyle(.input)
                         .frame(width: 220)
                     Text("}}/yol").foregroundStyle(.secondary)
                 }

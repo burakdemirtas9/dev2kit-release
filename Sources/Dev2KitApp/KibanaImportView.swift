@@ -205,7 +205,7 @@ struct KibanaImportView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     TextField("Gateway adresi, ör. https://gateway.ornek.com", text: $gatewayAddress)
                         .inputLimit(.url)
-                        .textFieldStyle(.roundedBorder)
+                        .textFieldStyle(.input)
                         .frame(maxWidth: 420)
                     Text("{{\(entry.variableName)}} \"\(environment.name)\" environment'ına eklenir. Boş bırakırsan gönderirken tanımsız değişken uyarısı alırsın.")
                         .foregroundStyle(.secondary)
@@ -364,7 +364,7 @@ struct KibanaImportView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     TextField("Koleksiyon adı", text: $newCollectionName)
                         .inputLimit(.name)
-                        .textFieldStyle(.roundedBorder)
+                        .textFieldStyle(.input)
                         .frame(width: 170)
                     if appState.existingCollection(named: newCollectionName) != nil {
                         Text("Bu adla bir koleksiyon var; ona eklenir.")

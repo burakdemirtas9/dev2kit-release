@@ -21,9 +21,15 @@ enum Theme {
     /// dinamik renkte o çağrı rengi çözüp sabitliyor ve mod değişince yanlış
     /// tonda kalıyor.
     private static func dynamicColor(light: String, dark: String, alpha: CGFloat = 1) -> NSColor {
+        dynamicColor(light: light, lightAlpha: alpha, dark: dark, darkAlpha: alpha)
+    }
+
+    /// Saydamlığı moda göre farklı olan renk (ör. koyuda yarı saydam lila
+    /// kenarlık, açıkta dolu lila).
+    private static func dynamicColor(light: String, lightAlpha: CGFloat, dark: String, darkAlpha: CGFloat) -> NSColor {
         NSColor(name: nil) { appearance in
             let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-            return NSColor(hex: isDark ? dark : light).withAlphaComponent(alpha)
+            return NSColor(hex: isDark ? dark : light).withAlphaComponent(isDark ? darkAlpha : lightAlpha)
         }
     }
 
@@ -43,8 +49,10 @@ enum Theme {
     static let syntaxComment = dynamicColor(light: "#959595", dark: "#959595")
     /// Varsayılan metin: gf-ink / gf-dark-text.
     static let editorText = dynamicColor(light: "#0e0e0e", dark: "#f3f0fe")
-    /// Editör zemini: gf-bg-soft / gf-dark-bg-2.
-    static let editorBackgroundNS = dynamicColor(light: "#fafafa", dark: "#130d2e")
+    /// Editör zemini: gf-bg-soft / input'larla aynı orta gri. Koyu modda
+    /// editör de bir yazı alanı; kullanıcı isteğiyle (2026-10-20) mor
+    /// gf-dark-bg-2 (#130d2e) yerine `inputBackground`'un grisi.
+    static let editorBackgroundNS = dynamicColor(light: "#fafafa", dark: "#2a2a2e")
 
     // MARK: Arama vurgusu
     /// Bulunan tüm eşleşmeler. Saydam mor ton: altındaki sözdizimi rengi
@@ -73,6 +81,29 @@ enum Theme {
     static let primaryFill = Color(nsColor: NSColor(hex: "#5d3ebc"))
     /// Alandaki `{{değişken}}`: tanımlıysa mor, tanımsızsa `down`.
     static let variable = purple
+
+    // MARK: Input alanları
+    //
+    // Kullanıcı seçimi (2026-10-20): tüm yazı alanları aynı zemin, kenarlık
+    // ve odak renklerini kullanır. Açık mod lila zemin (gf-lilac-50); koyu
+    // mod nötr "orta gri" (editör zemini de aynı gri): mor yalnızca odakta
+    // kalsın. Koyu griler palette yok (paletin koyu tonları mor), türetildi.
+    // Uygulayan: `InputChrome`.
+
+    /// Zemin: gf-lilac-50 / orta gri.
+    static let inputBackground = Color(nsColor: dynamicColor(light: "#f9f7ff", dark: "#2a2a2e"))
+    /// Kenarlık: gf-lilac-200 / gri.
+    static let inputBorder = Color(nsColor: dynamicColor(light: "#e6e1f5", dark: "#3f3f45"))
+    /// Üzerine gelince kenarlık: gf-lilac-300 / açık gri.
+    static let inputBorderHover = Color(nsColor: dynamicColor(light: "#aa9cd5", dark: "#5a5a62"))
+    /// Odak kenarlığı: gf-purple / gf-lilac-300 (accent ile aynı).
+    static let inputFocus = accent
+    /// Odak kenarlığının dışındaki yumuşak halka.
+    static let inputFocusRing = Color(nsColor: dynamicColor(light: "#5d3ebc", lightAlpha: 0.18, dark: "#aa9cd5", darkAlpha: 0.25))
+    /// Kapalı alan zemini: gf-bg-soft / koyu gri.
+    static let inputDisabledBackground = Color(nsColor: dynamicColor(light: "#fafafa", dark: "#222225"))
+    /// Kapalı alan kenarlığı: gf-line / koyu gri.
+    static let inputDisabledBorder = Color(nsColor: dynamicColor(light: "#e8e8e8", dark: "#303035"))
 }
 
 private extension NSColor {
