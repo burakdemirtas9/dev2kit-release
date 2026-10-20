@@ -24,5 +24,7 @@ extension L10nTable {
         "approvals.reset.failed": L10nEntry("Güvenlik onayları sıfırlanamadı", "Couldn’t reset security approvals"),
         "approvals.reset.failedDetail": L10nEntry("%1$@\n\nOnayların değişmedi.", "%1$@\n\nYour approvals are unchanged."),
         "toolbar.mode": L10nEntry("Mod", "Mode"),
+        "settings.title": L10nEntry("Ayarlar", "Settings"),
+        "settings.close": L10nEntry("Ayarları Kapat", "Close Settings"),
     ]
 }

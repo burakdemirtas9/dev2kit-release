@@ -14,7 +14,6 @@ extension L10nTable {
         "common.add": L10nEntry("Ekle", "Add"),
         "common.revealInFinder": L10nEntry("Finder'da Göster", "Show in Finder"),
         "common.language": L10nEntry("Dil", "Language"),
-        "common.language.help": L10nEntry("Arayüz dili", "Interface language"),
         "search.prompt": L10nEntry("Ara", "Find"),
         "search.caseSensitive": L10nEntry("Büyük/küçük harfe duyarlı", "Match case"),
         "search.regex": L10nEntry("Düzenli ifade — ⏎ ile çalışır", "Regular expression — runs on ⏎"),

@@ -1,0 +1,135 @@
+import XCTest
+import SwiftUI
+import AppKit
+@testable import Dev2KitApp
+@testable import Dev2KitCore
+
+/// Dairesel menünün zamanlaması: sıra, yön değişimi, hızlı tekrar ve iptal.
+/// Animasyon tamamlanması gerçek bir çizim döngüsü ister; menü ekran
+/// dışındaki bir pencerede çizilir (kullanıcının ekranına dokunulmaz).
+@MainActor
+final class RadialMenuModelTests: XCTestCase {
+    private var window: NSWindow?
+
+    override func tearDown() {
+        window?.orderOut(nil)
+        window = nil
+        super.tearDown()
+    }
+
+    private func host(_ model: RadialMenuModel, count: Int = 6, style: RadialMenuStyle) {
+        let items = (1..<count).map { index in
+            RadialMenuItem(id: "\(index)", title: "\(index)", closesMenu: false, icon: AnyView(Image(systemName: "circle")), action: {})
+        }
+        let view = RadialMenuView(model: model, items: items, style: style, triggerTitle: "S", closeTitle: "C",
+                                  triggerIcon: "gearshape", closeIcon: "xmark")
+        let window = NSWindow(contentRect: NSRect(x: -5000, y: -5000, width: 300, height: 300),
+                              styleMask: [.borderless], backing: .buffered, defer: false)
+        window.contentView = NSHostingView(rootView: view)
+        window.orderBack(nil)
+        self.window = window
+        model.prepare(count: count)
+    }
+
+    private func wait(_ seconds: Double) async {
+        let end = Date().addingTimeInterval(seconds)
+        while Date() < end { try? await Task.sleep(for: .milliseconds(10)) }
+    }
+
+    private func settle(_ model: RadialMenuModel, until condition: () -> Bool) async {
+        for _ in 0..<200 where !condition() { try? await Task.sleep(for: .milliseconds(10)) }
+    }
+
+    private let fast = RadialMenuStyle(stagger: .milliseconds(30), springResponse: 0.12, springDamping: 1)
+    private var timing: RadialMenuTiming { RadialMenuTiming(style: fast, reduceMotion: false) }
+
+    func testOpensItemByItemClockwiseAndSettlesOpen() async {
+        let model = RadialMenuModel()
+        host(model, style: fast)
+        model.open(RadialMenuTiming(style: RadialMenuStyle(stagger: .milliseconds(150), springResponse: 0.12, springDamping: 1), reduceMotion: false))
+        XCTAssertEqual(model.phase, .opening)
+        XCTAssertEqual(model.progress, [1, 1, 0, 0, 0, 0], "yalnızca ilk öğe hemen başlar")
+        await wait(0.2)
+        XCTAssertEqual(model.progress[2], 1)
+        XCTAssertEqual(model.progress[5], 0, "sonraki öğeler sırasını bekler")
+        await settle(model) { model.phase == .open }
+        XCTAssertEqual(model.phase, .open)
+        XCTAssertEqual(model.progress, [1, 1, 1, 1, 1, 1])
+    }
+
+    func testClosesInReverseOrderAndReportsFullyClosedOnce() async {
+        let model = RadialMenuModel()
+        host(model, style: fast)
+        var closedCount = 0
+        model.onFullyClosed = { closedCount += 1 }
+        model.open(timing)
+        await settle(model) { model.phase == .open }
+        model.close(RadialMenuTiming(style: RadialMenuStyle(stagger: .milliseconds(150), springResponse: 0.12, springDamping: 1), reduceMotion: false))
+        XCTAssertEqual(model.progress, [1, 1, 1, 1, 1, 0], "son açılan ilk kapanır")
+        await settle(model) { model.phase == .closed }
+        XCTAssertEqual(model.progress, [1, 0, 0, 0, 0, 0])
+        XCTAssertEqual(closedCount, 1)
+    }
+
+    /// Açılırken kapat: başlamamış öğeler hiç açılmaz, eski açılma görevi
+    /// kapanıştan sonra çalışıp öğeleri geri getirmez.
+    func testClosingMidOpenCancelsPendingSteps() async {
+        let model = RadialMenuModel()
+        host(model, style: fast)
+        model.open(RadialMenuTiming(style: RadialMenuStyle(stagger: .milliseconds(120), springResponse: 0.12, springDamping: 1), reduceMotion: false))
+        await wait(0.05)
+        model.close(timing)
+        XCTAssertEqual(model.phase, .closing)
+        await settle(model) { model.phase == .closed }
+        await wait(0.6) // eski gecikmeler dolsa bile
+        XCTAssertEqual(model.phase, .closed)
+        XCTAssertEqual(model.progress, [1, 0, 0, 0, 0, 0])
+    }
+
+    /// Kapanırken yeniden aç: yön değişir, menü açık biter.
+    func testReopeningMidCloseEndsOpen() async {
+        let model = RadialMenuModel()
+        host(model, style: fast)
+        model.open(timing)
+        await settle(model) { model.phase == .open }
+        model.close(timing)
+        await wait(0.04)
+        model.open(timing)
+        await settle(model) { model.phase == .open }
+        XCTAssertEqual(model.phase, .open)
+        XCTAssertEqual(model.progress, [1, 1, 1, 1, 1, 1])
+    }
+
+    func testRapidTogglesStayConsistent() async {
+        let model = RadialMenuModel()
+        host(model, style: fast)
+        var closedCount = 0
+        model.onFullyClosed = { closedCount += 1 }
+        for _ in 0..<7 {
+            model.toggle(timing)
+            await wait(0.015)
+        }
+        // 7 tıklama: son hedef açık.
+        XCTAssertTrue(model.isExpanded)
+        await settle(model) { model.phase == .open }
+        XCTAssertEqual(model.progress, [1, 1, 1, 1, 1, 1])
+        model.toggle(timing)
+        await settle(model) { model.phase == .closed }
+        XCTAssertEqual(model.progress, [1, 0, 0, 0, 0, 0])
+        XCTAssertLessThanOrEqual(closedCount, 1, "ara kapanışlar 'tamamen kapandı' saymaz")
+    }
+
+    func testResetClosesImmediatelyWithoutAnimation() async {
+        let model = RadialMenuModel()
+        host(model, style: fast)
+        var closed = false
+        model.onFullyClosed = { closed = true }
+        model.open(timing)
+        await wait(0.04)
+        model.reset()
+        XCTAssertEqual(model.phase, .closed)
+        XCTAssertTrue(closed)
+        await wait(0.3)
+        XCTAssertEqual(model.progress, [1, 0, 0, 0, 0, 0], "iptal edilen görev öğe açmaz")
+    }
+}

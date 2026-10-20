@@ -28,6 +28,53 @@ struct ContentView: View {
         }
     }
 
+    @ToolbarContentBuilder
+    private var settingsToolbarItem: some ToolbarContent {
+        if #available(macOS 26.0, *) {
+            ToolbarItem(placement: .automatic) { settingsButton }
+                .sharedBackgroundVisibility(.hidden)
+        } else {
+            ToolbarItem(placement: .automatic) { settingsButton }
+        }
+    }
+
+    /// Ayarlar menüsünün öğeleri: tetikleyiciden sonra saat yönünde.
+    /// Geçmiş, çerez ve secrets yalnızca API Client'ta anlamlı.
+    private var settingsButton: some View {
+        SettingsMenuButton(items: {
+            var items = [
+                RadialMenuItem(
+                    id: "appearance", title: L10n.t("toolbar.appearance"),
+                    value: appState.appearanceMode.label, closesMenu: false,
+                    icon: AnyView(Image(systemName: appState.appearanceMode.icon))
+                ) {
+                    let all = AppearanceMode.allCases
+                    let next = all[((all.firstIndex(of: appState.appearanceMode) ?? 0) + 1) % all.count]
+                    appState.appearanceMode = next
+                },
+                RadialMenuItem(
+                    id: "language", title: L10n.t("common.language"),
+                    value: L10n.language.displayName, closesMenu: false,
+                    icon: AnyView(Text(L10n.language == .turkish ? "TR" : "EN")
+                        .font(.system(size: 11, weight: .bold, design: .rounded)))
+                ) {
+                    Localizer.shared.language = L10n.language == .turkish ? .english : .turkish
+                },
+            ]
+            if toolbarShowsAPIClient ?? appState.isAPIClient {
+                items += [
+                    RadialMenuItem(id: "history", title: L10n.t("toolbar.history"),
+                                   icon: AnyView(Image(systemName: "clock.arrow.circlepath"))) { showingHistory = true },
+                    RadialMenuItem(id: "cookies", title: L10n.t("toolbar.cookies"),
+                                   icon: AnyView(CookieIcon().frame(width: 14, height: 14))) { showingCookies = true },
+                    RadialMenuItem(id: "secrets", title: L10n.t("toolbar.secrets"),
+                                   icon: AnyView(Image(systemName: "key.fill"))) { showingSecrets = true },
+                ]
+            }
+            return items
+        })
+    }
+
     /// Pencerenin üst ortasındaki mod seçici: sistemin segmentli kontrolü
     /// (cam başparmak, sürüklenebilir) + seçili modda yeşil nokta
     /// (`ModeSegmentedControl`, TASARIM §1 istisnası).
@@ -99,51 +146,10 @@ struct ContentView: View {
                 }
                 toolbarGroupBreak
             }
-            ToolbarItem(placement: .automatic) {
-                // Picker olarak kurulur: araç çubuğu "simge ve metin" modunda
-                // Menu'nun başlığını göstermiyordu (Label da, Menu(_:systemImage:)
-                // de denendi); Picker'ın başlığı etiket olarak çıkıyor.
-                Picker(selection: $state.appearanceMode) {
-                    ForEach(AppearanceMode.allCases, id: \.self) { mode in
-                        Label(mode.label, systemImage: mode.icon).tag(mode)
-                    }
-                } label: {
-                    Label(L10n.t("toolbar.appearance"), systemImage: appState.appearanceMode.icon)
-                }
-                .pickerStyle(.menu)
-                // Diğer araç çubuğu düğmeleri gibi dar kalsın: seçenekler
-                // zaten tıklayınca açılan listede.
-                .menuIndicator(.hidden)
-                .frame(width: 36)
-                .help(L10n.t("toolbar.appearance.help"))
-            }
-            ToolbarItem(placement: .automatic) {
-                LanguagePicker()
-            }
-            APIClientOnly(isVisible: toolbarShowsAPIClient ?? appState.isAPIClient) {
-                toolbarGroupBreak
-                ToolbarItem(placement: .automatic) {
-                    Button {
-                        showingHistory = true
-                    } label: {
-                        Label(L10n.t("toolbar.history"), systemImage: "clock.arrow.circlepath")
-                    }
-                    .help(L10n.t("toolbar.history.help"))
-                    .keyboardShortcut("y", modifiers: .command)
-                }
-                ToolbarItem(placement: .automatic) {
-                    Button {
-                        showingCookies = true
-                    } label: {
-                        Label {
-                            Text(L10n.t("toolbar.cookies"))
-                        } icon: {
-                            CookieIcon().frame(width: 15, height: 15)
-                        }
-                    }
-                    .help(L10n.t("toolbar.cookies.help"))
-                }
-            }
+            // Görünüm, dil, geçmiş, çerez ve secrets tek Ayarlar düğmesinde:
+            // dairesel menü (SettingsMenuButton). Kendi camını çizer; macOS
+            // 26'nın ortak cam kapsülü kapatılır.
+            settingsToolbarItem
             // Güvenlik durumu her modda görünür (docs/TASARIM.md §1): Workbench'e
             // geçince açık kalan doğrulama gizlenmesin.
             // Doğrulama kapalıyken her an görünür olmalı: açık unutulursa
@@ -174,15 +180,15 @@ struct ContentView: View {
                     }
                     .help(L10n.t("toolbar.tls.help"))
                 }
-                ToolbarItem(placement: .automatic) {
-                    Button {
-                        showingSecrets = true
-                    } label: {
-                        Label(L10n.t("toolbar.secrets"), systemImage: "key.fill")
-                    }
-                    .help(L10n.t("toolbar.secrets.help"))
-                }
             }
+        }
+        // ⌘Y: Geçmiş düğmesi Ayarlar menüsüne taşındı; kısayol yerinde kalsın.
+        .background {
+            Button("") { showingHistory = true }
+                .keyboardShortcut(KeyboardShortcut("y", modifiers: .command), onlyIn: .apiClient)
+                .opacity(0)
+                .frame(width: 0, height: 0)
+                .accessibilityHidden(true)
         }
         .sheet(isPresented: $showingSecrets) {
             SecretsView()
