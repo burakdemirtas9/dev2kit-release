@@ -23,6 +23,17 @@ enum AppearanceMode: String, CaseIterable {
         }
     }
 
+    /// Ayarlar menüsünde tıklama: yalnızca Koyu ↔ Açık (kullanıcı isteği,
+    /// 2026-10-20; "Sistem" sağ tıkla seçilir). Sistemdeyken ekranda görünenin
+    /// tersine geçer: tıklama her zaman görünür bir değişiklik yapsın.
+    func toggled(systemIsDark: Bool) -> AppearanceMode {
+        switch self {
+        case .dark: return .light
+        case .light: return .dark
+        case .system: return systemIsDark ? .light : .dark
+        }
+    }
+
     /// Seçimi uygulamaya uygular (`nil` = sistemi izle).
     func apply() {
         switch self {

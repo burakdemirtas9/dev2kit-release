@@ -12,8 +12,20 @@ struct RadialMenuItem: Identifiable {
     /// Seçilince menü kapansın mı (sheet açan öğeler kapatır; görünüm/dil
     /// gibi yerinde değişen ayarlar menüyü açık bırakır).
     var closesMenu = true
+    /// Fareyle üstüne gelince (ya da klavye odağında) menünün ortasında
+    /// görünen kısa ad ("Tema", "Dil"); yoksa gösterilmez.
+    var shortTitle: String?
+    /// Sağ tık menüsü (ör. temada "Sistem Varsayılanı"); boşsa yok.
+    var secondaryActions: [SecondaryAction] = []
     let icon: AnyView
     let action: () -> Void
+
+    struct SecondaryAction: Identifiable {
+        var id: String { title }
+        let title: String
+        var isSelected = false
+        let action: () -> Void
+    }
 }
 
 /// Boyutlar ve zamanlama; hepsi dışarıdan ayarlanabilir.
@@ -244,6 +256,8 @@ struct RadialMenuView: View {
     let closeIcon: String
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// Fareyle üstünde durulan öğe (ortadaki kısa ad için).
+    @State private var hoveredID: String?
 
     /// Panelin boyutu ve tetikleyicinin içindeki yeri.
     static func canvas(count: Int, style: RadialMenuStyle) -> (size: CGSize, anchor: CGPoint) {
@@ -264,12 +278,17 @@ struct RadialMenuView: View {
         let canvas = Self.canvas(count: items.count + 1, style: style)
         let layout = layout
         ZStack(alignment: .topLeading) {
-            ForEach(Array(items.enumerated()), id: \.element.id) { offset, item in
+            // Tuple'lı `enumerated()` ForEach yerine indeks: release derlemesinde
+            // Swift 6.3 iyileştiricisi bu gövdede çöküyordu (2026-10-20).
+            ForEach(items.indices, id: \.self) { offset in
+                let item = items[offset]
                 let index = offset + 1
                 let progress = model.progress.indices.contains(index) ? model.progress[index] : 0
                 // Yarıdan fazla yerleşmeden etkileşim yok; kapanırken de hemen kesilir.
                 let interactive = model.isExpanded && progress > 0.5
-                itemButton(item, index: index, interactive: interactive)
+                RadialItemButton(item: item, interactive: interactive,
+                                 isFocused: interactive && model.focusedIndex == index,
+                                 style: style, hoveredID: $hoveredID) { model.reset() }
                     .modifier(RadialPlacement(layout: layout, index: index, progress: progress, anchor: canvas.anchor))
                     .zIndex(Double(items.count - offset))
             }
@@ -278,7 +297,20 @@ struct RadialMenuView: View {
                 .zIndex(Double(items.count + 1))
         }
         .frame(width: canvas.size.width, height: canvas.size.height, alignment: .topLeading)
+        // Ortadaki kısa ad ZStack'in üçüncü çocuğu DEĞİL, üst katman: öyleyken
+        // release derlemesinde Swift 6.3 iyileştiricisi çöküyordu (signal
+        // 11, CSE; 2026-10-20). Görünüm aynı.
+        .overlay(alignment: .topLeading) {
+            RadialCenterLabel(items: items, hoveredID: hoveredID,
+                              focusedIndex: model.focusedIndex, isExpanded: model.isExpanded,
+                              center: Self.center(of: canvas.anchor, radius: style.effectiveRadius(count: items.count + 1)))
+        }
         .onAppear { model.prepare(count: items.count + 1) }
+    }
+
+    /// Çemberin merkezi, panel içinde (tetikleyicinin `radius` altı).
+    static func center(of anchor: CGPoint, radius: CGFloat) -> CGPoint {
+        CGPoint(x: anchor.x, y: anchor.y + radius)
     }
 
     private var trigger: some View {
@@ -294,27 +326,6 @@ struct RadialMenuView: View {
         .buttonStyle(RadialItemButtonStyle(isFocused: model.focusedIndex == 0))
         .help(model.isExpanded ? closeTitle : triggerTitle)
         .accessibilityLabel(model.isExpanded ? closeTitle : triggerTitle)
-    }
-
-    private func itemButton(_ item: RadialMenuItem, index: Int, interactive: Bool) -> some View {
-        Button {
-            // Sheet açan öğe menüyü hemen kapatır: sheet menünün altında açılmasın.
-            if item.closesMenu { model.reset() }
-            item.action()
-        } label: {
-            item.icon
-                .font(.system(size: style.iconSize, weight: .medium))
-                .frame(width: style.itemDiameter, height: style.itemDiameter)
-                .contentShape(Circle())
-        }
-        .buttonStyle(RadialItemButtonStyle(isFocused: interactive && model.focusedIndex == index))
-        .allowsHitTesting(interactive)
-        // `.disabled` klavye odağını da keser; gizli öğe Tab ile seçilemez.
-        .disabled(!interactive)
-        .accessibilityHidden(!interactive)
-        .help(item.title)
-        .accessibilityLabel(item.title)
-        .accessibilityValue(item.value ?? "")
     }
 
     // Cam öğeler ortak `GlassEffectContainer`'da DEĞİL: kap camları tek
@@ -419,6 +430,116 @@ private struct RadialItemChrome: View {
             .shadow(color: Theme.purple.opacity(0.55), radius: 8)
             .allowsHitTesting(false)
             .transition(.opacity)
+        }
+    }
+}
+
+/// Menüdeki bir öğe. Ayrı görünüm (gövdeye gömülü işlev değil): release
+/// derlemesinde Swift 6.3 iyileştiricisi (CSE) tek büyük gövdede çöküyordu
+/// (signal 11, 2026-10-20).
+private struct RadialItemButton: View {
+    let item: RadialMenuItem
+    let interactive: Bool
+    let isFocused: Bool
+    let style: RadialMenuStyle
+    @Binding var hoveredID: String?
+    /// Sheet açan öğe menüyü hemen kapatır (sheet menünün altında açılmasın).
+    let closeMenu: () -> Void
+
+    var body: some View {
+        Button {
+            if item.closesMenu { closeMenu() }
+            item.action()
+        } label: {
+            item.icon
+                .font(.system(size: style.iconSize, weight: .medium))
+                .frame(width: style.itemDiameter, height: style.itemDiameter)
+                .contentShape(Circle())
+        }
+        .buttonStyle(RadialItemButtonStyle(isFocused: isFocused))
+        .onHover { inside in
+            if inside { hoveredID = item.id } else if hoveredID == item.id { hoveredID = nil }
+        }
+        .modifier(SecondaryActionsMenu(actions: item.secondaryActions))
+        .allowsHitTesting(interactive)
+        // `.disabled` klavye odağını da keser; gizli öğe Tab ile seçilemez.
+        .disabled(!interactive)
+        .accessibilityHidden(!interactive)
+        .help(item.title)
+        .accessibilityLabel(item.title)
+        .accessibilityValue(item.value ?? "")
+    }
+}
+
+/// Ortadaki kısa ad: fareyle üstünde durulan, yoksa klavyeyle odaklanan
+/// öğenin. Arkası bulanık cam kapsül, metin okunur kalsın.
+private struct RadialCenterLabel: View {
+    let items: [RadialMenuItem]
+    let hoveredID: String?
+    let focusedIndex: Int?
+    let isExpanded: Bool
+    let center: CGPoint
+
+    private var title: String? {
+        guard isExpanded else { return nil }
+        if let hoveredID, let item = items.first(where: { $0.id == hoveredID }) { return item.shortTitle }
+        if let index = focusedIndex, index > 0, items.indices.contains(index - 1) { return items[index - 1].shortTitle }
+        return nil
+    }
+
+    var body: some View {
+        ZStack {
+            if let title {
+                Text(title)
+                    .font(.system(size: 12, weight: .semibold))
+                    .lineLimit(1)
+                    .fixedSize()
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .modifier(CenterLabelBackground())
+                    .id(title)
+                    .transition(.opacity.combined(with: .scale(scale: 0.92)))
+            }
+        }
+        .animation(.easeOut(duration: 0.15), value: title)
+        .position(center)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
+/// Sağ tık menüsü; seçenek yoksa hiç eklenmez (boş menü açılmasın).
+private struct SecondaryActionsMenu: ViewModifier {
+    let actions: [RadialMenuItem.SecondaryAction]
+
+    func body(content: Content) -> some View {
+        if actions.isEmpty {
+            content
+        } else {
+            content.contextMenu {
+                ForEach(actions) { secondary in
+                    Button {
+                        secondary.action()
+                    } label: {
+                        if secondary.isSelected {
+                            Label(secondary.title, systemImage: "checkmark")
+                        } else {
+                            Text(secondary.title)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Ortadaki kısa adın zemini: arkasını bulanıklaştıran cam kapsül.
+private struct CenterLabelBackground: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(macOS 26.0, *) {
+            content.glassEffect(.regular, in: .capsule)
+        } else {
+            content.background(.ultraThinMaterial, in: Capsule())
         }
     }
 }

@@ -26,5 +26,12 @@ extension L10nTable {
         "toolbar.mode": L10nEntry("Mod", "Mode"),
         "settings.title": L10nEntry("Ayarlar", "Settings"),
         "settings.close": L10nEntry("Ayarları Kapat", "Close Settings"),
+        "settings.short.theme": L10nEntry("Tema", "Theme"),
+        "settings.short.language": L10nEntry("Dil", "Language"),
+        "settings.short.certificate": L10nEntry("Sertifika", "Certificate"),
+        "settings.short.cookies": L10nEntry("Cookies", "Cookies"),
+        "settings.short.secrets": L10nEntry("Secrets", "Secrets"),
+        "settings.theme.help": L10nEntry("Tema: Koyu / Açık (sağ tık: Sistem Varsayılanı)", "Theme: Dark / Light (right-click: System Default)"),
+        "settings.theme.system": L10nEntry("Sistem Varsayılanı", "System Default"),
     ]
 }

@@ -111,18 +111,25 @@ struct ContentView: View {
     private var settingsButton: some View {
         SettingsMenuButton(items: {
             var items = [
+                // Tema: tıklama Koyu ↔ Açık; "Sistem Varsayılanı" sağ tıkla.
                 RadialMenuItem(
-                    id: "appearance", title: L10n.t("toolbar.appearance"),
+                    id: "appearance", title: L10n.t("settings.theme.help"),
                     value: appState.appearanceMode.label, closesMenu: false,
+                    shortTitle: L10n.t("settings.short.theme"),
+                    secondaryActions: [
+                        .init(title: L10n.t("settings.theme.system"), isSelected: appState.appearanceMode == .system) {
+                            appState.appearanceMode = .system
+                        },
+                    ],
                     icon: AnyView(Image(systemName: appState.appearanceMode.icon))
                 ) {
-                    let all = AppearanceMode.allCases
-                    let next = all[((all.firstIndex(of: appState.appearanceMode) ?? 0) + 1) % all.count]
-                    appState.appearanceMode = next
+                    let systemIsDark = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+                    appState.appearanceMode = appState.appearanceMode.toggled(systemIsDark: systemIsDark)
                 },
                 RadialMenuItem(
                     id: "language", title: L10n.t("common.language"),
                     value: L10n.language.displayName, closesMenu: false,
+                    shortTitle: L10n.t("settings.short.language"),
                     // Metin simgeden optik olarak hafif: aynı oranda büyür (11 → 13).
                     icon: AnyView(Text(L10n.language == .turkish ? "TR" : "EN")
                         .font(.system(size: 13, weight: .bold, design: .rounded)))
@@ -138,10 +145,13 @@ struct ContentView: View {
                     // uyarı araç çubuğunda her an görünür kalır).
                     RadialMenuItem(id: "tls", title: L10n.t("toolbar.tls"),
                                    value: appState.certificateValidationDisabled ? L10n.t("toolbar.validationOff") : nil,
+                                   shortTitle: L10n.t("settings.short.certificate"),
                                    icon: AnyView(TLSMenuIcon(validationOff: appState.certificateValidationDisabled))) { showingTLS = true },
                     RadialMenuItem(id: "cookies", title: L10n.t("toolbar.cookies"),
+                                   shortTitle: L10n.t("settings.short.cookies"),
                                    icon: AnyView(CookieIcon().frame(width: 16, height: 16))) { showingCookies = true },
                     RadialMenuItem(id: "secrets", title: L10n.t("toolbar.secrets"),
+                                   shortTitle: L10n.t("settings.short.secrets"),
                                    icon: AnyView(Image(systemName: "key.fill"))) { showingSecrets = true },
                 ]
             }
