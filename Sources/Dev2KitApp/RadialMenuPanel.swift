@@ -18,6 +18,12 @@ final class RadialMenuPanel {
 
     /// Esc, dışarı tıklama: animasyonlu kapat.
     var onDismissRequest: (() -> Void)?
+    /// Menü açık mı (açılıyor ya da açık). Kapanırken dışarı tıklama
+    /// engellenmez: menü zaten gidiyor, tıklama hedefine ulaşsın.
+    var isBlocking: (() -> Bool)?
+    /// Menü açıkken klavye (Tab, oklar, Return, Boşluk). `true`: tuş
+    /// menüde kullanıldı, arkadaki pencereye gitmez.
+    var onKey: ((NSEvent) -> Bool)?
     /// Pencere yeniden boyutlandı/kapandı, uygulama arka plana geçti:
     /// düğmenin yeri belirsiz, hemen kapat.
     var onForceClose: (() -> Void)?
@@ -87,14 +93,21 @@ final class RadialMenuPanel {
     private func install(parent: NSWindow) {
         removeMonitors()
         monitors.append(NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self, self.isShown, event.keyCode == 53 else { return event } // Esc
+            guard let self, self.isShown else { return event }
+            if event.keyCode == 53 { // Esc
+                self.onDismissRequest?()
+                return nil
+            }
+            return self.onKey?(event) == true ? nil : event
+        } as Any)
+        // Menü açıkken arkadaki hiçbir şey tıklanmaz: dışarı tıklama yalnızca
+        // menüyü kapatır, olay yutulur (kullanıcı isteği, 2026-10-20: menü
+        // açıkken Geçmiş'e tıklayınca geçmiş de açılıyordu).
+        monitors.append(NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak self] event in
+            guard let self, let panel = self.panel, self.isShown, event.window !== panel,
+                  self.isBlocking?() ?? true else { return event }
             self.onDismissRequest?()
             return nil
-        } as Any)
-        monitors.append(NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
-            guard let self, let panel = self.panel, self.isShown, event.window !== panel else { return event }
-            self.onDismissRequest?()
-            return event
         } as Any)
         let center = NotificationCenter.default
         for name in [NSWindow.didResizeNotification, NSWindow.willCloseNotification,

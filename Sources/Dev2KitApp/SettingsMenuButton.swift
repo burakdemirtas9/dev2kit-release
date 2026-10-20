@@ -56,6 +56,8 @@ struct SettingsMenuButton: View {
         }
         panel.onDismissRequest = { model.close(RadialMenuTiming(style: style, reduceMotion: reduceMotion)) }
         panel.onForceClose = { dismissImmediately() }
+        panel.onKey = { handleKey($0) }
+        panel.isBlocking = { model.isExpanded }
 
         let canvas = RadialMenuView.canvas(count: count, style: style)
         let menu = SettingsMenuContent(model: model, items: items, style: style)
@@ -67,6 +69,34 @@ struct SettingsMenuButton: View {
         }
     }
 
+    /// Klavyeyle gezinme: Tab / → / ↓ saat yönünde, ⇧Tab / ← / ↑ tersine;
+    /// Return / Boşluk odaktaki öğeyi çalıştırır. Diğer tuşlar geçer.
+    private func handleKey(_ event: NSEvent) -> Bool {
+        let timing = RadialMenuTiming(style: style, reduceMotion: reduceMotion)
+        switch event.keyCode {
+        case 48: // Tab
+            model.moveFocus(by: event.modifierFlags.contains(.shift) ? -1 : 1)
+        case 124, 125: // → ↓
+            model.moveFocus(by: 1)
+        case 123, 126: // ← ↑
+            model.moveFocus(by: -1)
+        case 36, 76, 49: // Return, Enter, Boşluk
+            guard let index = model.focusedIndex else { return false }
+            if index == 0 {
+                model.close(timing)
+            } else {
+                let items = items()
+                guard items.indices.contains(index - 1) else { return false }
+                let item = items[index - 1]
+                if item.closesMenu { model.reset() }
+                item.action()
+            }
+        default:
+            return false
+        }
+        return true
+    }
+
     private func dismissImmediately() {
         guard isPresented || model.phase != .closed else { return }
         model.reset()
@@ -76,7 +106,8 @@ struct SettingsMenuButton: View {
 }
 
 /// Araç çubuğundaki kapalı düğmenin camı (menüdeki tetikleyiciyle aynı görünüm).
-private struct ToolbarGlassCircle: ViewModifier {
+/// Geçmiş düğmesi de aynısını kullanır.
+struct ToolbarGlassCircle: ViewModifier {
     func body(content: Content) -> some View {
         if #available(macOS 26.0, *) {
             content.glassEffect(.regular.interactive(), in: .circle)

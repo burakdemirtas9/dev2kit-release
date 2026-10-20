@@ -169,3 +169,86 @@ final class RadialMenuGeometryTests: XCTestCase {
         XCTAssertEqual(clamped.maxY, 600)
     }
 }
+
+/// Klavye odağı: saat yönünde ilerler, uçlarda döner, kapanınca silinir.
+@MainActor
+final class RadialMenuFocusTests: XCTestCase {
+    private func openModel(count: Int) -> RadialMenuModel {
+        let model = RadialMenuModel()
+        model.prepare(count: count)
+        model.open(RadialMenuTiming(style: RadialMenuStyle(), reduceMotion: true))
+        return model
+    }
+
+    func testNoFocusUntilAKeyIsUsed() {
+        XCTAssertNil(openModel(count: 6).focusedIndex, "fareyle açınca odak halkası yok")
+    }
+
+    func testForwardStartsAtTheFirstItemAndWraps() {
+        let model = openModel(count: 4)
+        model.moveFocus(by: 1)
+        XCTAssertEqual(model.focusedIndex, 1)
+        model.moveFocus(by: 1); model.moveFocus(by: 1)
+        XCTAssertEqual(model.focusedIndex, 3)
+        model.moveFocus(by: 1)
+        XCTAssertEqual(model.focusedIndex, 0, "son öğeden tetikleyiciye döner")
+    }
+
+    func testBackwardStartsAtTheLastItemAndWraps() {
+        let model = openModel(count: 4)
+        model.moveFocus(by: -1)
+        XCTAssertEqual(model.focusedIndex, 3)
+        model.moveFocus(by: -1); model.moveFocus(by: -1); model.moveFocus(by: -1)
+        XCTAssertEqual(model.focusedIndex, 0)
+        model.moveFocus(by: -1)
+        XCTAssertEqual(model.focusedIndex, 3)
+    }
+
+    func testClosingClearsFocusAndAClosedMenuIgnoresKeys() {
+        let model = openModel(count: 4)
+        model.moveFocus(by: 1)
+        model.reset()
+        XCTAssertNil(model.focusedIndex)
+        model.moveFocus(by: 1)
+        XCTAssertNil(model.focusedIndex, "kapalı menüde odak yok")
+    }
+}
+
+/// 2026-10-20 hatası: kapanırken ikinci kapatma (dışarı tıklama) menüyü
+/// kapanışta takılı bırakıyordu.
+@MainActor
+final class RadialMenuInterruptTests: XCTestCase {
+    func testSecondCloseWhileClosingStillFinishes() async {
+        let model = RadialMenuModel()
+        let items = (1..<6).map { RadialMenuItem(id: "\($0)", title: "\($0)", closesMenu: false, icon: AnyView(Image(systemName: "circle")), action: {}) }
+        let window = NSWindow(contentRect: NSRect(x: -5000, y: -5000, width: 300, height: 300), styleMask: [.borderless], backing: .buffered, defer: false)
+        window.contentView = NSHostingView(rootView: RadialMenuView(model: model, items: items, style: RadialMenuStyle(), triggerTitle: "S", closeTitle: "C", triggerIcon: "gearshape", closeIcon: "xmark"))
+        window.orderBack(nil)
+        defer { window.orderOut(nil) }
+        model.prepare(count: 6)
+        let timing = RadialMenuTiming(style: RadialMenuStyle(stagger: .milliseconds(30), springResponse: 0.15, springDamping: 1), reduceMotion: false)
+        var closed = 0
+        model.onFullyClosed = { closed += 1 }
+        model.open(timing)
+        for _ in 0..<200 where model.phase != .open { try? await Task.sleep(for: .milliseconds(10)) }
+        model.close(timing)
+        try? await Task.sleep(for: .milliseconds(60))
+        model.close(timing) // kapanırken dışarı tıklama
+        model.close(timing)
+        for _ in 0..<300 where model.phase != .closed { try? await Task.sleep(for: .milliseconds(10)) }
+        XCTAssertEqual(model.phase, .closed, "kapanış takılmamalı")
+        XCTAssertEqual(closed, 1)
+        XCTAssertEqual(model.progress, [1, 0, 0, 0, 0, 0])
+    }
+
+    func testSecondOpenWhileOpeningDoesNotRestart() {
+        let model = RadialMenuModel()
+        model.prepare(count: 6)
+        let timing = RadialMenuTiming(style: RadialMenuStyle(), reduceMotion: true)
+        model.open(timing)
+        let progress = model.progress
+        model.open(timing)
+        XCTAssertEqual(model.progress, progress)
+        XCTAssertEqual(model.phase, .opening)
+    }
+}

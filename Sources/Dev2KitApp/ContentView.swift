@@ -41,6 +41,41 @@ struct ContentView: View {
         }
     }
 
+    /// Geçmiş: çarkın solunda, aynı boşlukla (kullanıcı isteği, 2026-10-20).
+    /// Çarkla aynı görünüm (28 pt cam daire); ortak kapsül kapalı, boşluk
+    /// camın dışında. Yalnızca API Client'ta.
+    @ToolbarContentBuilder
+    private var historyToolbarItem: some ToolbarContent {
+        APIClientOnly(isVisible: toolbarShowsAPIClient ?? appState.isAPIClient) {
+            if #available(macOS 26.0, *) {
+                ToolbarItem(placement: .automatic) { historyButton }
+                    .sharedBackgroundVisibility(.hidden)
+            } else {
+                ToolbarItem(placement: .automatic) { historyButton }
+            }
+        }
+    }
+
+    private var historyButton: some View {
+        let style = RadialMenuStyle()
+        return Button {
+            showingHistory = true
+        } label: {
+            Image(systemName: "clock.arrow.circlepath")
+                .font(.system(size: style.iconSize, weight: .semibold))
+                .frame(width: style.itemDiameter, height: style.itemDiameter)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .modifier(ToolbarGlassCircle())
+        .keyboardShortcut(KeyboardShortcut("y", modifiers: .command), onlyIn: .apiClient)
+        .help(L10n.t("toolbar.history"))
+        .accessibilityLabel(L10n.t("toolbar.history"))
+        // Çarkla seçici arasındaki boşluk: camlar arası mesafe iki yanda eşit
+        // (ölçüldü: 28.5 pt; çarkın halesi kendi çerçevesinde).
+        .padding(.trailing, Self.settingsSpacing)
+    }
+
     /// Çark ile environment seçicinin camı arasındaki ek boşluk (pt). 8'de
     /// seçici açılırken (etkileşimli cam basınca büyüyor) çarkın üstüne
     /// biniyordu (kullanıcı geri bildirimi, 2026-10-20).
@@ -104,8 +139,6 @@ struct ContentView: View {
                     RadialMenuItem(id: "tls", title: L10n.t("toolbar.tls"),
                                    value: appState.certificateValidationDisabled ? L10n.t("toolbar.validationOff") : nil,
                                    icon: AnyView(TLSMenuIcon(validationOff: appState.certificateValidationDisabled))) { showingTLS = true },
-                    RadialMenuItem(id: "history", title: L10n.t("toolbar.history"),
-                                   icon: AnyView(Image(systemName: "clock.arrow.circlepath"))) { showingHistory = true },
                     RadialMenuItem(id: "cookies", title: L10n.t("toolbar.cookies"),
                                    icon: AnyView(CookieIcon().frame(width: 16, height: 16))) { showingCookies = true },
                     RadialMenuItem(id: "secrets", title: L10n.t("toolbar.secrets"),
@@ -200,16 +233,9 @@ struct ContentView: View {
             // araç çubuğunu yeniden kurmak ~90 ms). Görünüm, dil,
             // environment'lar, TLS, geçmiş, çerez ve secrets dairesel menüde
             // (SettingsMenuButton).
+            historyToolbarItem
             settingsToolbarItem
             environmentToolbarItem
-        }
-        // ⌘Y: Geçmiş düğmesi Ayarlar menüsüne taşındı; kısayol yerinde kalsın.
-        .background {
-            Button("") { showingHistory = true }
-                .keyboardShortcut(KeyboardShortcut("y", modifiers: .command), onlyIn: .apiClient)
-                .opacity(0)
-                .frame(width: 0, height: 0)
-                .accessibilityHidden(true)
         }
         .sheet(isPresented: $showingSecrets) {
             SecretsView()

@@ -43,9 +43,6 @@ struct RadialMenuStyle {
     /// ~600 ms'de oturur, çok hafif aşma, titreşim yok.
     var springResponse: Double = 0.6
     var springDamping: Double = 0.82
-    /// Yakın cam öğeler bu mesafede kısa bir sıvı bağ kurar (ayrılırken);
-    /// son durumda öğeler arası boşluk bundan büyük olduğu için ayrı görünür.
-    var glassSpacing: CGFloat = 10
     /// Panel kenarında gölge/ışıma payı.
     var margin: CGFloat = 8
 }
@@ -81,6 +78,22 @@ final class RadialMenuModel {
 
     var isExpanded: Bool { phase == .opening || phase == .open }
 
+    /// Klavyeyle odaklanan öğe (0 tetikleyici). Yalnızca klavye kullanılınca
+    /// dolar: fareyle açan kullanıcı odak halkası görmez (focus-visible).
+    private(set) var focusedIndex: Int?
+
+    /// Odağı saat yönünde (`+1`) ya da tersine (`-1`) taşır; uçlarda döner.
+    /// İlk tuşta odak, ileri için ilk öğeye, geri için sondakine gelir.
+    func moveFocus(by step: Int) {
+        let count = progress.count
+        guard isExpanded, count > 0 else { return }
+        guard let current = focusedIndex else {
+            focusedIndex = step >= 0 ? min(1, count - 1) : count - 1
+            return
+        }
+        focusedIndex = ((current + step) % count + count) % count
+    }
+
     /// Öğe sayısı (tetikleyici dahil). Yalnızca kapalıyken değişir.
     func prepare(count: Int) {
         guard phase == .closed, progress.count != count else { return }
@@ -94,6 +107,9 @@ final class RadialMenuModel {
     }
 
     func open(_ timing: RadialMenuTiming) {
+        // Zaten açılıyorsa/açıksa tekrar başlatılmaz (gecikmeler sıfırlanmasın).
+        guard !isExpanded else { return }
+        focusedIndex = nil
         let layout = RadialMenuLayout(count: progress.count, radius: 1)
         // Kapanmakta olanlar hemen geri döner (görsel konumundan), henüz
         // başlamamış ya da tamamen kapanmış olanlar sırayla.
@@ -103,6 +119,11 @@ final class RadialMenuModel {
     }
 
     func close(_ timing: RadialMenuTiming) {
+        // Kapanırken ikinci kapatma yok sayılır. Eskiden kapanış yeniden
+        // başlıyor, süren animasyonların bitişi "eski" sayılıp atılıyor ve
+        // menü kapanışta takılı kalıyordu (kapanırken dışarı tıklama).
+        guard phase == .opening || phase == .open else { return }
+        focusedIndex = nil
         let layout = RadialMenuLayout(count: progress.count, radius: 1)
         // Son açılan ilk kapanır; hiç başlamamış öğeye dokunulmaz.
         let started = layout.closingOrder.filter { targets[$0] == 1 }
@@ -112,6 +133,7 @@ final class RadialMenuModel {
     /// Animasyonsuz, hemen kapalı (pencere kapandı, mod değişti, uygulama
     /// arka plana geçti). Bekleyen her şey iptal.
     func reset() {
+        focusedIndex = nil
         task?.cancel()
         generation += 1
         inFlight = []
@@ -164,9 +186,12 @@ final class RadialMenuModel {
         withAnimation(timing.animation, completionCriteria: criteria) {
             progress[index] = target
         } completion: { [weak self] in
-            guard let self, self.generation == generation, self.targets[index] == target else { return }
+            // Bitiş her zaman kaydedilir (yalnızca hedef hâlâ buysa); kuşak
+            // değişse bile: aksi halde öğe "sürüyor" sayılı kalıp menüyü
+            // kapanışta/açılışta takılı bırakabilirdi.
+            guard let self, self.targets[index] == target else { return }
             self.inFlight.remove(index)
-            self.finishIfSettled(generation: generation)
+            self.finishIfSettled(generation: self.generation)
         }
     }
 
@@ -219,7 +244,6 @@ struct RadialMenuView: View {
     let closeIcon: String
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Namespace private var glassNamespace
 
     /// Panelin boyutu ve tetikleyicinin içindeki yeri.
     static func canvas(count: Int, style: RadialMenuStyle) -> (size: CGSize, anchor: CGPoint) {
@@ -239,23 +263,21 @@ struct RadialMenuView: View {
     var body: some View {
         let canvas = Self.canvas(count: items.count + 1, style: style)
         let layout = layout
-        glassContainer {
-            ZStack(alignment: .topLeading) {
-                ForEach(Array(items.enumerated()), id: \.element.id) { offset, item in
-                    let index = offset + 1
-                    let progress = model.progress.indices.contains(index) ? model.progress[index] : 0
-                    // Yarıdan fazla yerleşmeden etkileşim yok; kapanırken de hemen kesilir.
-                    let interactive = model.isExpanded && progress > 0.5
-                    itemButton(item, interactive: interactive)
-                        .modifier(RadialPlacement(layout: layout, index: index, progress: progress, anchor: canvas.anchor))
-                        .zIndex(Double(items.count - offset))
-                }
-                trigger
-                    .position(canvas.anchor)
-                    .zIndex(Double(items.count + 1))
+        ZStack(alignment: .topLeading) {
+            ForEach(Array(items.enumerated()), id: \.element.id) { offset, item in
+                let index = offset + 1
+                let progress = model.progress.indices.contains(index) ? model.progress[index] : 0
+                // Yarıdan fazla yerleşmeden etkileşim yok; kapanırken de hemen kesilir.
+                let interactive = model.isExpanded && progress > 0.5
+                itemButton(item, index: index, interactive: interactive)
+                    .modifier(RadialPlacement(layout: layout, index: index, progress: progress, anchor: canvas.anchor))
+                    .zIndex(Double(items.count - offset))
             }
-            .frame(width: canvas.size.width, height: canvas.size.height, alignment: .topLeading)
+            trigger
+                .position(canvas.anchor)
+                .zIndex(Double(items.count + 1))
         }
+        .frame(width: canvas.size.width, height: canvas.size.height, alignment: .topLeading)
         .onAppear { model.prepare(count: items.count + 1) }
     }
 
@@ -269,13 +291,12 @@ struct RadialMenuView: View {
                 .frame(width: style.itemDiameter, height: style.itemDiameter)
                 .contentShape(Circle())
         }
-        .buttonStyle(.plain)
-        .modifier(GlassCircle(id: "trigger", namespace: glassNamespace))
+        .buttonStyle(RadialItemButtonStyle(isFocused: model.focusedIndex == 0))
         .help(model.isExpanded ? closeTitle : triggerTitle)
         .accessibilityLabel(model.isExpanded ? closeTitle : triggerTitle)
     }
 
-    private func itemButton(_ item: RadialMenuItem, interactive: Bool) -> some View {
+    private func itemButton(_ item: RadialMenuItem, index: Int, interactive: Bool) -> some View {
         Button {
             // Sheet açan öğe menüyü hemen kapatır: sheet menünün altında açılmasın.
             if item.closesMenu { model.reset() }
@@ -286,8 +307,7 @@ struct RadialMenuView: View {
                 .frame(width: style.itemDiameter, height: style.itemDiameter)
                 .contentShape(Circle())
         }
-        .buttonStyle(.plain)
-        .modifier(GlassCircle(id: item.id, namespace: glassNamespace))
+        .buttonStyle(RadialItemButtonStyle(isFocused: interactive && model.focusedIndex == index))
         .allowsHitTesting(interactive)
         // `.disabled` klavye odağını da keser; gizli öğe Tab ile seçilemez.
         .disabled(!interactive)
@@ -297,14 +317,10 @@ struct RadialMenuView: View {
         .accessibilityValue(item.value ?? "")
     }
 
-    @ViewBuilder
-    private func glassContainer<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
-        if #available(macOS 26.0, *) {
-            GlassEffectContainer(spacing: style.glassSpacing) { content() }
-        } else {
-            content()
-        }
-    }
+    // Cam öğeler ortak `GlassEffectContainer`'da DEĞİL: kap camları tek
+    // geçişte çizip öğeye uygulanan ölçeği ve üst katmanları camla birlikte
+    // taşımıyordu; hover'da cam ile simge ayrı büyüyüp yamuk görünüyordu
+    // (2026-10-20). Her öğe kendi camıyla; açılıştaki kısa sıvı bağ yok.
 }
 
 /// Öğenin o anki yeri, ölçeği ve görünürlüğü. `Animatable`: ilerleme
@@ -330,17 +346,89 @@ private struct RadialPlacement: ViewModifier, Animatable {
     }
 }
 
-/// Dairesel cam: macOS 26'da native Liquid Glass (etkileşimli, ortak
-/// namespace ile kararlı kimlik), öncesinde sade bir material.
-private struct GlassCircle: ViewModifier {
-    let id: String
-    let namespace: Namespace.ID
+/// Menü öğesinin durumları (kullanıcı isteği, 2026-10-20):
+/// - **Hover:** tek başına %10 büyür, mor kenar vurgusu (rim), yumuşak
+///   derinlik gölgesi.
+/// - **Basılı:** yaylanarak içeri gömülür (%94), iç gölge, hafif saydamlaşma.
+/// - **Klavye odağı:** 2 pt siyah ayrım + 4.5 pt mor halka + yumuşak ışıma.
+///
+/// Cam da burada: ölçek camla birlikte uygulanır (yalnızca simge değil).
+/// Cam etkileşimsiz (`.regular`): basma/hover tepkisi bu stilde, cam kendi
+/// tepkisini eklerse iki kez büyürdü.
+struct RadialItemButtonStyle: ButtonStyle {
+    let isFocused: Bool
 
+    func makeBody(configuration: Configuration) -> some View {
+        RadialItemChrome(configuration: configuration, isFocused: isFocused)
+    }
+}
+
+private struct RadialItemChrome: View {
+    let configuration: ButtonStyleConfiguration
+    let isFocused: Bool
+
+    @State private var isHovered = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var isPressed: Bool { configuration.isPressed }
+
+    private var scale: CGFloat {
+        if isPressed { return 0.94 }
+        return isHovered ? 1.1 : 1
+    }
+
+    var body: some View {
+        configuration.label
+            // Kenar vurgusu ve iç gölge camın İÇİNDE (simgeyle aynı katman):
+            // camın üstüne bindirilen katman camın altında kalıp görünmüyordu
+            // (kullanıcı geri bildirimi, 2026-10-20).
+            // Basılıyken iç gölge: kenardan içe doğru koyulaşır, "gömülme".
+            .background {
+                Circle()
+                    .fill(Color.white.opacity(0.001).shadow(.inner(color: .black.opacity(0.45), radius: 3, y: 1.5)))
+                    .opacity(isPressed ? 1 : 0)
+            }
+            // Hover: mor kenar vurgusu (gfPurple = Theme.purple).
+            .overlay {
+                Circle()
+                    .strokeBorder(Theme.purple.opacity(isHovered && !isPressed ? 0.95 : 0), lineWidth: 1.5)
+                    .allowsHitTesting(false)
+            }
+            .modifier(GlassCircle())
+            .overlay { focusRing }
+            .opacity(isPressed ? 0.85 : 1)
+            .scaleEffect(scale)
+            .shadow(color: .black.opacity(isHovered && !isPressed ? (colorScheme == .dark ? 0.5 : 0.25) : 0),
+                    radius: 8, y: 4)
+            // Taktil yaylanma; Reduce Motion'da kısa ve düz.
+            .animation(reduceMotion ? .easeOut(duration: 0.12) : .spring(response: 0.26, dampingFraction: 0.55), value: isPressed)
+            .animation(reduceMotion ? .easeOut(duration: 0.12) : .spring(response: 0.3, dampingFraction: 0.75), value: isHovered)
+            .onHover { isHovered = $0 }
+    }
+
+    /// Yüksek kontrastlı odak halkası: önce 2 pt siyah ayrım, dışında 4.5 pt
+    /// mor halka, en dışta yumuşak mor ışıma.
+    @ViewBuilder
+    private var focusRing: some View {
+        if isFocused {
+            ZStack {
+                Circle().stroke(Color.black, lineWidth: 2).padding(-1)
+                Circle().stroke(Theme.purple, lineWidth: 4.5).padding(-(2 + 2.25))
+            }
+            .shadow(color: Theme.purple.opacity(0.55), radius: 8)
+            .allowsHitTesting(false)
+            .transition(.opacity)
+        }
+    }
+}
+
+/// Dairesel cam: macOS 26'da native Liquid Glass, öncesinde sade material.
+private struct GlassCircle: ViewModifier {
     func body(content: Content) -> some View {
         if #available(macOS 26.0, *) {
             content
-                .glassEffect(.regular.interactive(), in: .circle)
-                .glassEffectID(id, in: namespace)
+                .glassEffect(.regular, in: .circle)
         } else {
             content
                 .background(.regularMaterial, in: Circle())
