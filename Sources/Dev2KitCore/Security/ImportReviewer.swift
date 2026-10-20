@@ -198,6 +198,7 @@ public enum ImportReviewer {
         case .basic(_, let password) where isLiteral(password): places.append(L10n.t("review.place.basic"))
         case .bearer(let token) where isLiteral(token): places.append("Bearer token")
         case .apiKey(let key, let value, _) where isLiteral(value): places.append(L10n.t("review.place.apiKey", key))
+        case .oauth2(let config) where isLiteral(config.clientSecret): places.append("OAuth2 client secret")
         default: break
         }
         for entry in request.headers where entry.enabled && isLiteral(entry.value) {
@@ -218,7 +219,7 @@ public enum ImportReviewer {
         case .none:
             break
         }
-        if containsTokenPattern(request.url) { places.append("adres") }
+        if containsTokenPattern(request.url) { places.append(L10n.t("review.place.url")) }
         return places
     }
 

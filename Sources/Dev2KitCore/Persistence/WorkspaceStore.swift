@@ -41,6 +41,7 @@ public struct WorkspaceStore: Sendable {
             attempt += 1
         }
         try FileManager.default.copyItem(at: fileURL, to: backup)
+        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: backup.path)
         return backup
     }
 
@@ -48,11 +49,15 @@ public struct WorkspaceStore: Sendable {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys] // git diff'leri stabil kalsın
         let data = try encoder.encode(workspace)
-        try FileManager.default.createDirectory(
-            at: fileURL.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
+        let directory = fileURL.deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        // Workspace düz metin kimlik bilgisi içerebilir: dizin yalnızca
+        // kullanıcıya açık (0700), dosya ve yedeği 0600. Önceden dosya 0644
+        // yazılıyordu (güvenlik incelemesi, 2026-10-20). Atomik yazımın geçici
+        // dosyası bir an varsayılan izinle oluşur; dizin izni onu da korur.
+        try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
         // Atomik yazım: yarım dosya kalmasın.
         try data.write(to: fileURL, options: .atomic)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: fileURL.path)
     }
 }

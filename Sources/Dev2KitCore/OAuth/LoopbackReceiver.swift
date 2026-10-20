@@ -82,29 +82,33 @@ public final class LoopbackReceiver: @unchecked Sendable {
     }
 
     /// İlk callback isteğini bekler ve çağrılan adresi döner.
+    ///
+    /// Süre sınırı bekleme döngüsünün içinde: eskiden zamanlayıcı ile
+    /// engelleyen `accept` AYNI seri kuyruktaydı, `accept` kuyruğu tuttuğu
+    /// için zamanlayıcı hiç çalışmıyordu; hiç bağlantı gelmezse ya da yerel
+    /// bir süreç bağlanıp sessiz kalırsa bekleme bitmiyordu (güvenlik
+    /// incelemesi, 2026-10-20). Görev iptal edilirse soket kapanır.
     public func waitForCallback(timeout: TimeInterval = 300) async throws -> URL {
-        try await withCheckedThrowingContinuation { continuation in
-            let state = ContinuationBox(continuation)
-
-            queue.asyncAfter(deadline: .now() + timeout) { [weak self] in
-                guard state.finish() else { return }
-                self?.closeSocket()
-                state.resume(throwing: ReceiverError(message: L10n.t("loopback.timeout")))
-            }
-
-            queue.async { [weak self] in
-                guard let self else { return }
-                do {
-                    let url = try self.acceptOne()
-                    guard state.finish() else { return }
-                    self.closeSocket()
-                    state.resume(returning: url)
-                } catch {
-                    guard state.finish() else { return }
-                    self.closeSocket()
-                    state.resume(throwing: error)
+        let deadline = Date().addingTimeInterval(timeout)
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                let state = ContinuationBox(continuation)
+                queue.async { [weak self] in
+                    guard let self else { return }
+                    do {
+                        let url = try self.acceptOne(deadline: deadline)
+                        guard state.finish() else { return }
+                        self.closeSocket()
+                        state.resume(returning: url)
+                    } catch {
+                        guard state.finish() else { return }
+                        self.closeSocket()
+                        state.resume(throwing: error)
+                    }
                 }
             }
+        } onCancel: { [weak self] in
+            self?.closeSocket()
         }
     }
 
@@ -116,13 +120,29 @@ public final class LoopbackReceiver: @unchecked Sendable {
 
     /// Callback yolunu taşıyan ilk isteği kabul eder. Tarayıcının gönderdiği
     /// favicon gibi alakasız istekler yanıtlanıp atlanır.
-    private func acceptOne() throws -> URL {
+    private func acceptOne(deadline: Date) throws -> URL {
         while true {
-            let client = accept(descriptor, nil, nil)
-            guard client >= 0 else {
+            guard !isClosed else { throw ReceiverError(message: L10n.t("loopback.closed")) }
+            let remaining = deadline.timeIntervalSinceNow
+            guard remaining > 0 else { throw ReceiverError(message: L10n.t("loopback.timeout")) }
+            // Kısa dilimlerle bekle: süre ve kapatma isteği her dilimde denetlenir.
+            var poller = pollfd(fd: descriptor, events: Int16(POLLIN), revents: 0)
+            let ready = poll(&poller, 1, Int32(min(remaining, 0.25) * 1000))
+            if ready == 0 { continue }
+            if ready < 0 {
+                if errno == EINTR { continue }
                 throw ReceiverError(message: L10n.t("loopback.closed"))
             }
+            let client = accept(descriptor, nil, nil)
+            guard client >= 0 else {
+                if isClosed { throw ReceiverError(message: L10n.t("loopback.closed")) }
+                continue
+            }
             defer { close(client) }
+            // Bağlanıp hiçbir şey göndermeyen istemci beklemeyi kilitlemesin:
+            // okuma kalan süreyle sınırlı.
+            var limit = timeval(tv_sec: Int(max(remaining, 0.1)), tv_usec: Int32((max(remaining, 0.1).truncatingRemainder(dividingBy: 1)) * 1_000_000))
+            setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, &limit, socklen_t(MemoryLayout<timeval>.size))
 
             var buffer = [UInt8](repeating: 0, count: 16 * 1024)
             let count = read(client, &buffer, buffer.count)
@@ -161,6 +181,11 @@ public final class LoopbackReceiver: @unchecked Sendable {
                 written += result
             }
         }
+    }
+
+    private var isClosed: Bool {
+        lock.lock(); defer { lock.unlock() }
+        return closed
     }
 
     private func closeSocket() {

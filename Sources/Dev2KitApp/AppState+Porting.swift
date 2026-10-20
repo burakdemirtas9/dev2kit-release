@@ -221,12 +221,7 @@ extension AppState {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             try CollectionPorting.exportData(collection).write(to: url)
-            portingMessage = ResultMessage(
-                kind: .success,
-                title: L10n.t("result.exported"),
-                message: "“\(collection.name)” · \(url.lastPathComponent)",
-                lines: [MessageLine(.info, L10n.t("result.exported.secrets"))]
-            )
+            portingMessage = Self.exportMessage(collection: collection, fileName: url.lastPathComponent)
         } catch {
             portingMessage = ResultMessage(
                 kind: .error,
@@ -234,6 +229,24 @@ extension AppState {
                 message: L10n.t("result.exportFailed.message", error.localizedDescription)
             )
         }
+    }
+
+    /// Dışa aktarma sonucu, dosyanın gerçek içeriğine göre: düz metin kimlik
+    /// bilgisi varsa uyarı ve yerleri; yoksa "yalnızca referans" bilgisi.
+    static func exportMessage(collection: CollectionModel, fileName: String) -> ResultMessage {
+        let subtitle = "“\(collection.name)” · \(fileName)"
+        let found = CollectionPorting.plaintextCredentials(in: collection)
+        guard !found.isEmpty else {
+            return ResultMessage(kind: .success, title: L10n.t("result.exported"), message: subtitle,
+                                 lines: [MessageLine(.info, L10n.t("result.exported.secrets"))])
+        }
+        let shown = found.prefix(8).map { MessageLine(.warning, "“\($0.requestName)”: \($0.places.joined(separator: ", "))") }
+        var lines = Array(shown)
+        if found.count > shown.count {
+            lines.append(MessageLine(.warning, L10n.plural("result.exported.more", count: found.count - shown.count)))
+        }
+        lines.append(MessageLine(.info, L10n.t("result.exported.plaintextAdvice")))
+        return ResultMessage(kind: .warning, title: L10n.t("result.exported.plaintextTitle"), message: subtitle, lines: lines)
     }
 
     func existingCollection(named name: String) -> CollectionModel? {

@@ -222,5 +222,8 @@ extension L10nTable {
         "review.place.header": L10nEntry("\"%1$@\" header'ı", "the \"%1$@\" header"),
         "review.place.body": L10nEntry("body", "body"),
         "porting.folder": L10nEntry("Klasör", "Folder"),
+        "curl.export.unsafeHeader": L10nEntry("\"%1$@\" header adı @ ile başlıyor; curl bunu dosya yolu sayar, cURL olarak dışa aktarılmadı.", "The \"%1$@\" header name starts with @; curl would treat it as a file path, so it wasn’t exported as cURL."),
+        "oauth.flow.redirectBlocked": L10nEntry("Token adresi başka bir kaynağa (%1$@) yönlendirdi; client secret ve token'lar oraya gönderilmedi. Token URL'ini doğrudan son adresle ayarla.", "The token URL redirected to another origin (%1$@); the client secret and tokens weren’t sent there. Set the token URL to the final address directly."),
+        "redirect.blockedCredential": L10nEntry("başka bir kaynağa (%1$@) yönlendirme izlenmedi; API key oraya gönderilmez", "a redirect to another origin (%1$@) wasn’t followed; the API key isn’t sent there"),
     ]
 }

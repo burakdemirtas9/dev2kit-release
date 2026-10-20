@@ -42,22 +42,27 @@ final class CurlExporterTests: XCTestCase {
         XCTAssertFalse(curl.contains("Content-Length"))
     }
 
-    func testFormURLEncodedUsesDataUrlencode() throws {
+    /// Uygulamanın gönderdiği kodlanmış gövdenin aynısı, `--data-raw` ile
+    /// (`--data-urlencode` adda `@` görünce dosya okurdu; F2).
+    func testFormURLEncodedUsesTheEncodedBodyAsDataRaw() throws {
         var model = RequestModel(method: .post, url: "https://api.example.com")
         model.body = .formURLEncoded(fields: [
             KeyValueEntry(key: "ad", value: "büyük değer"),
             KeyValueEntry(key: "kapali", value: "x", enabled: false),
         ])
         let curl = try CurlExporter.export(model, environment: nil, secretStore: secrets)
-        XCTAssertTrue(curl.contains("--data-urlencode 'ad=büyük değer'"))
+        XCTAssertTrue(curl.contains("--data-raw 'ad=b%C3%BCy%C3%BCk%20de%C4%9Fer'"), curl)
+        XCTAssertFalse(curl.contains("--data-urlencode"))
         XCTAssertFalse(curl.contains("kapali"))
     }
 
-    func testMultipartUsesFormFlagWithoutContentTypeHeader() throws {
+    /// `--form-string`: değer her zaman düz metin (`-F` `@`/`<` ile dosya okurdu; F2).
+    func testMultipartUsesFormStringWithoutContentTypeHeader() throws {
         var model = RequestModel(method: .post, url: "https://api.example.com")
         model.body = .multipartForm(fields: [KeyValueEntry(key: "alan", value: "deger")])
         let curl = try CurlExporter.export(model, environment: nil, secretStore: secrets)
-        XCTAssertTrue(curl.contains("-F 'alan=deger'"))
+        XCTAssertTrue(curl.contains("--form-string 'alan=deger'"), curl)
+        XCTAssertFalse(curl.contains("-F "))
         XCTAssertFalse(curl.contains("Content-Type"), "curl boundary'yi kendisi üretmeli")
     }
 

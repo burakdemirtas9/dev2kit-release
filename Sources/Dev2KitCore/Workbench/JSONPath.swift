@@ -21,6 +21,12 @@ public enum JSONPath {
     public static let maxMatches = 100_000
     /// Değerlendirmede ziyaret edilecek en fazla düğüm sayısı.
     static let workBudget = 20_000_000
+    /// Bir değerlendirmedeki TÜM regex (`match`, `search`) çalışmalarının
+    /// toplam süre sınırı. Düğüm bütçesi tek bir regex'in geri izlemesini
+    /// kapsamıyordu: `(a+)+$` 33 karakterde dakikalarca sürüyordu (güvenlik
+    /// incelemesi F5, 2026-10-20). ICU'nun ilerleme geri çağrısı geri izleme
+    /// sırasında da geliyor; sınırda arama durduruluyor (ölçüldü: 0.3 sn'de).
+    static let regexTimeBudget: TimeInterval = 0.5
 
     /// Sorgu hatası: 1'den başlayan sütunla.
     public struct QueryError: Error, Equatable, LocalizedError {
@@ -599,8 +605,13 @@ public enum JSONPath {
     struct Context {
         let root: JSONValue
         var work = 0
+        /// Regex çalışmasının bitmesi gereken an (`regexTimeBudget`).
+        let regexDeadline: Date
 
-        init(root: JSONValue) { self.root = root }
+        init(root: JSONValue, regexBudget: TimeInterval = JSONPath.regexTimeBudget) {
+            self.root = root
+            self.regexDeadline = Date().addingTimeInterval(regexBudget)
+        }
 
         mutating func spend(_ amount: Int = 1) throws {
             work += amount
@@ -786,7 +797,23 @@ public enum JSONPath {
                 regex = compiled
             }
             let range = NSRange(text.startIndex..., in: text)
-            return regex.firstMatch(in: text, range: range) != nil
+            // `firstMatch` süre sınırı tanımıyor; ilerleme bildirimli arama
+            // sınır dolunca durdurulur ve sorgu açık bir hatayla biter.
+            var matched = false
+            var timedOut = false
+            let deadline = regexDeadline
+            regex.enumerateMatches(in: text, options: [.reportProgress], range: range) { result, _, stop in
+                if result != nil {
+                    matched = true
+                    stop.pointee = true
+                } else if Date() > deadline {
+                    timedOut = true
+                    stop.pointee = true
+                }
+            }
+            if timedOut { throw LimitError(message: L10n.t("jsonpath.regexTooSlow")) }
+            try spend()
+            return matched
         }
 
         /// RFC 9535 §2.3.5.2.2: farklı türler eşit değildir; sıralama yalnızca

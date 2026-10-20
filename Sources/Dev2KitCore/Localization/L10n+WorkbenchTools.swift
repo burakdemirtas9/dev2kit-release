@@ -150,5 +150,6 @@ extension L10nTable {
         "wb.issue.location": L10nEntry("%1$@ (satır %2$@, sütun %3$@)", "%1$@ (line %2$@, column %3$@)"),
         "objects.tooManyTypes": L10nEntry("%1$@ sınırından fazla farklı nesne yapısı var; çıktı okunamaz hale gelir. Daha küçük bir örnek dene.", "There are more than %1$@ distinct object shapes; the output would be unreadable. Try a smaller sample."),
         "wb.tree.root": L10nEntry("kök", "root"),
+        "jsonpath.regexTooSlow": L10nEntry("Regular expression bu veride çok uzun sürdü ve durduruldu (iç içe tekrar, ör. (a+)+). İfadeyi sadeleştir.", "The regular expression took too long on this data and was stopped (nested repetition, e.g. (a+)+). Simplify the expression."),
     ]
 }

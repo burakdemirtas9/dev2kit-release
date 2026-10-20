@@ -49,5 +49,10 @@ extension L10nTable {
         "import.result.titleBlocked.other": L10nEntry("İçe aktarıldı, %1$@ request dışarıda kaldı", "Imported; %1$@ requests left out"),
         "import.result.titleCheck": L10nEntry("İçe aktarıldı, kontrol edilecekler var", "Imported, with things to check"),
         "import.result.title": L10nEntry("İçe aktarıldı", "Imported"),
+        "result.exported.plaintextTitle": L10nEntry("Dışa aktarıldı — dosyada düz metin kimlik bilgisi var", "Exported — the file contains plain-text credentials"),
+        "result.exported.plaintextAdvice": L10nEntry("Bu değerler dosyaya olduğu gibi yazıldı. Paylaşmadan önce Secrets'a taşıyıp {{secret:isim}} ile referans ver ve yeniden dışa aktar.", "These values were written to the file as-is. Before sharing, move them to Secrets, reference them with {{secret:name}} and export again."),
+        "result.exported.more.one": L10nEntry("… ve %1$@ request daha", "… and %1$@ more request"),
+        "result.exported.more.other": L10nEntry("… ve %1$@ request daha", "… and %1$@ more requests"),
+        "review.place.url": L10nEntry("URL", "URL"),
     ]
 }

@@ -5,8 +5,25 @@ import Foundation
 /// `includeSecrets=false` (varsayılan) iken `{{secret:isim}}` referansları
 /// çözülmeden bırakılır; komut panoya güvenle kopyalanabilir. `true` iken
 /// gerçek değerler Keychain'den çözülür — riske kullanıcı bilerek karar verir.
+///
+/// Değerler curl'ün dosya okuma sözdizimine (`@dosya`, `<dosya`) DÜŞMEZ:
+/// uygulama bu alanları metin olarak gönderir, komut da aynısını yapmalı.
+/// Aksi halde içe aktarılmış bir koleksiyondaki `@/yol/dosya` değeri, komut
+/// terminalde çalıştırılınca o dosyayı hedefe yüklerdi (güvenlik incelemesi
+/// F2, 2026-10-20).
 public enum CurlExporter {
     private static let engine = RequestEngine()
+
+    public enum ExportError: Error, LocalizedError, Equatable {
+        /// `@` ile başlayan başlık: `-H @dosya` curl'de dosyadan başlık okur.
+        case unsafeHeaderName(String)
+
+        public var errorDescription: String? {
+            switch self {
+            case .unsafeHeaderName(let name): return L10n.t("curl.export.unsafeHeader", name)
+            }
+        }
+    }
 
     /// Secret'ları çözmek yerine placeholder metnini geri veren store.
     private struct PlaceholderSecretStore: SecretStore {
@@ -48,6 +65,9 @@ public enum CurlExporter {
         }
 
         for (name, value) in headers.sorted(by: { $0.key.lowercased() < $1.key.lowercased() }) {
+            // `-H @dosya` curl'de başlıkları dosyadan okur. `@` geçerli bir HTTP
+            // başlık adı karakteri değil; böyle bir ad dışa aktarılmaz.
+            guard !name.hasPrefix("@") else { throw ExportError.unsafeHeaderName(name) }
             parts.append("-H \(shellQuote("\(name): \(value)"))")
         }
 
@@ -60,15 +80,21 @@ public enum CurlExporter {
             if !resolved.isEmpty {
                 parts.append("--data-raw \(shellQuote(resolved))")
             }
-        case .formURLEncoded(let fields):
-            for field in fields where field.enabled && !field.key.isEmpty {
-                let pair = "\(try resolver.resolve(field.key))=\(try resolver.resolve(field.value))"
-                parts.append("--data-urlencode \(shellQuote(pair))")
+        case .formURLEncoded:
+            // Uygulamanın gönderdiği gövdenin aynısı, hazır kodlanmış ve
+            // `--data-raw` ile (dosya sözdizimi tanımaz). Sıkılaştırma:
+            // `--data-urlencode` adda `@` olunca curl 8.7'de dosya OKUMUYOR
+            // (`=` önce aranıyor, ölçüldü), ama komut uygulamanın gönderdiği
+            // gövdenin birebir aynısı olsun ve curl sürümüne bağlı kalmasın.
+            if let body = request.httpBody, !body.isEmpty {
+                parts.append("--data-raw \(shellQuote(String(decoding: body, as: UTF8.self)))")
             }
         case .multipartForm(let fields):
+            // `--form-string`: değer her zaman düz metin. `-F 'ad=@yol'` ise
+            // dosyayı okuyup yüklerdi; `<yol` dosya içeriğini değer yapardı.
             for field in fields where field.enabled && !field.key.isEmpty {
                 let pair = "\(try resolver.resolve(field.key))=\(try resolver.resolve(field.value))"
-                parts.append("-F \(shellQuote(pair))")
+                parts.append("--form-string \(shellQuote(pair))")
             }
         }
 

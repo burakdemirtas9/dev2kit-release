@@ -314,16 +314,20 @@ public final class RequestEngine: @unchecked Sendable {
         // Gönderim boyunca tek değer: istek uçarken anahtar değişirse oturum
         // ile yanıttaki iz birbirini tutmaz hale gelmesin.
         let skipsValidation = skipCertificateValidation
-        let tlsProfile = try resolveTLSProfile(
-            for: urlRequest.url,
-            resolver: resolver,
-            skipValidation: skipsValidation
-        )
+        // İlk host'un profili şimdi yüklenir: dosya hatası gönderimden önce
+        // görünsün. Yönlendirme hedefinin profili, hedef TLS istediğinde KENDİ
+        // host'u için seçilir (güvenlik incelemesi F4, 2026-10-20: ilk host'un
+        // kurum CA'sı ve istemci kimliği zincirdeki her host'a uygulanıyordu).
+        let firstHost = urlRequest.url?.host
+        let firstProfile = try resolveTLSProfile(for: urlRequest.url, resolver: resolver, skipValidation: skipsValidation)
         let tracker = RedirectTracker(
             policy: model.options.redirect,
-            credentialHeaders: RedirectGuard.credentialHeaders(for: model),
+            credentialHeaders: RedirectGuard.merged(RedirectGuard.credentialHeaders(for: model) + built.credentialHeaders),
             hostPolicy: hostPolicy,
-            tlsProfile: tlsProfile
+            tlsProfile: { [self] host in
+                if host.caseInsensitiveCompare(firstHost ?? "") == .orderedSame { return firstProfile }
+                return try resolveTLSProfile(for: URL(string: "https://\(host)"), resolver: resolver, skipValidation: skipsValidation)
+            }
         )
         let start = ContinuousClock.now
         var data: Data
@@ -431,7 +435,13 @@ public final class RequestEngine: @unchecked Sendable {
 
     /// İsteği kurar; dolu gövde metot yüzünden dışarıda bırakıldıysa
     /// `omittedBody` (yanıttaki bildirim buradan, gönderilen isteğe göre).
-    func buildRequest(_ model: RequestModel, resolver: VariableResolver) throws -> (request: URLRequest, omittedBody: Bool) {
+    func buildRequest(_ model: RequestModel, resolver: VariableResolver) throws
+        -> (request: URLRequest, omittedBody: Bool, credentialHeaders: [String]) {
+        // Yönlendirmede başka kaynağa taşınmayacak başlıklar. ÇÖZÜLMÜŞ haliyle
+        // belirlenir (ham modelden değil): değişkenle verilen başlık adı,
+        // secret'a çıkan environment değişkeni ve boşluklu referans da yakalanır
+        // (güvenlik incelemesi F1, 2026-10-20).
+        var credentialHeaders: [String] = []
         let resolvedURLString = try resolver.resolve(model.url.trimmingCharacters(in: .whitespaces))
         guard var components = URLComponents(string: resolvedURLString),
               components.scheme != nil, components.host != nil else {
@@ -467,7 +477,13 @@ public final class RequestEngine: @unchecked Sendable {
         // Kullanıcının User-Agent'ı yok sayılır: dev2kit kendi kimliğini
         // gönderir, ezilemez (Dev2KitIdentity).
         for entry in model.headers where entry.enabled && !entry.key.isEmpty && !Dev2KitIdentity.isUserAgent(entry.key) {
-            try setHeader(try resolver.resolve(entry.value), named: try resolver.resolve(entry.key), on: &request)
+            let name = try resolver.resolveTrackingSecrets(entry.key)
+            let value = try resolver.resolveTrackingSecrets(entry.value)
+            try setHeader(value.value, named: name.value, on: &request)
+            if name.usesSecret || value.usesSecret
+                || HeaderClassifier.classify(name: name.value, value: value.value).sensitiveKind == .credential {
+                credentialHeaders.append(name.value)
+            }
         }
 
         switch model.auth {
@@ -480,7 +496,9 @@ public final class RequestEngine: @unchecked Sendable {
         case .bearer(let token):
             try setHeader("Bearer \(try resolver.resolve(token))", named: "Authorization", on: &request)
         case .apiKey(let key, let value, .header):
-            try setHeader(try resolver.resolve(value), named: try resolver.resolve(key), on: &request)
+            let name = try resolver.resolve(key)
+            try setHeader(try resolver.resolve(value), named: name, on: &request)
+            credentialHeaders.append(name)
         case .oauth2(let config):
             guard let stored = try resolver.secret(named: config.tokenSecretName), !stored.isEmpty else {
                 throw RequestEngineError.notAuthorized(config.name)
@@ -497,7 +515,7 @@ public final class RequestEngine: @unchecked Sendable {
         let omittedBody = try attachBody(to: &request, model: model, resolver: resolver)
         // En sonda: Auth (API key başlığı) dahil hiçbir yol User-Agent'ı ezemez.
         Dev2KitIdentity.stamp(&request)
-        return (request, omittedBody)
+        return (request, omittedBody, credentialHeaders)
     }
 
     /// Foundation satır sonu (CR/LF) içeren başlığı SESSİZCE düşürür: istek

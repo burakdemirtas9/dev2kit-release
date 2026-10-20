@@ -72,7 +72,12 @@ public struct PostmanAPIClient: Sendable {
             throw APIError.blockedByPolicy(violation)
         }
         request.setValue(apiKey, forHTTPHeaderField: "X-Api-Key")
-        let (data, response) = try await session.data(for: request, delegate: PolicyRedirectGuard(policy: policy))
+        let guardian = PolicyRedirectGuard(policy: policy)
+        let (data, response) = try await session.data(for: request, delegate: guardian)
+        // X-Api-Key başka bir kaynağa taşınmaz (F3).
+        if let blocked = guardian.blockedDestination {
+            throw APIError.blockedByPolicy(L10n.t("redirect.blockedCredential", blocked.host ?? blocked.absoluteString))
+        }
         guard let http = response as? HTTPURLResponse else {
             throw APIError.invalidResponse
         }

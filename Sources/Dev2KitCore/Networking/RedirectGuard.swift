@@ -73,6 +73,12 @@ public enum RedirectGuard {
         return names.filter { seen.insert($0.lowercased()).inserted }
     }
 
+    /// Standart hassas başlıklar + verilenler, büyük/küçük harf duyarsız tekil.
+    public static func merged(_ names: [String]) -> [String] {
+        var seen = Set<String>()
+        return (sensitiveHeaders + names).filter { !$0.isEmpty && seen.insert($0.lowercased()).inserted }
+    }
+
     public enum Decision: Equatable, Sendable {
         case follow(strippedHeaders: [String])
         case stop(reason: StopReason)

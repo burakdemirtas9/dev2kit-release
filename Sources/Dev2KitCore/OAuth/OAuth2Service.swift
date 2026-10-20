@@ -83,7 +83,11 @@ public struct OAuth2Service: Sendable {
     }
 
     private func perform(_ request: URLRequest, hostPolicy: HostPolicyState) async throws -> OAuth2Token {
-        let (data, response) = try await session.data(for: request, delegate: PolicyRedirectGuard(policy: hostPolicy))
+        let guardian = PolicyRedirectGuard(policy: hostPolicy)
+        let (data, response) = try await session.data(for: request, delegate: guardian)
+        if let blocked = guardian.blockedDestination {
+            throw OAuth2Client.FlowError(message: L10n.t("oauth.flow.redirectBlocked", blocked.host ?? blocked.absoluteString))
+        }
         guard let http = response as? HTTPURLResponse else {
             throw OAuth2Client.FlowError(message: L10n.t("oauth.flow.noHTTPResponse"))
         }
@@ -91,13 +95,34 @@ public struct OAuth2Service: Sendable {
     }
 }
 
-/// Token isteği yönlendirilirse hedef de politikaya uymalı; uymuyorsa
-/// yönlendirme izlenmez ve 3xx yanıtı hata olarak döner.
-final class PolicyRedirectGuard: NSObject, URLSessionTaskDelegate, Sendable {
+/// Kimlik bilgisi taşıyan isteğin (OAuth token alışverişi/yenileme, Postman
+/// API) yönlendirmesi. Yalnızca AYNI kaynağa, https → http düşüşü olmadan ve
+/// yönetici politikasına uyarak izlenir; aksi halde izlenmez ve çağıran açık
+/// bir hata verir.
+///
+/// Neden: 307/308 yönlendirme POST gövdesini (client_secret, refresh_token)
+/// ve başlıkları (X-Api-Key) olduğu gibi yeni hedefe taşır. Önceden yalnızca
+/// host politikası kontrol ediliyordu; politika yoksa başka bir kaynağa
+/// gidiyordu (güvenlik incelemesi F3, 2026-10-20).
+final class PolicyRedirectGuard: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
     let policy: HostPolicyState
+    private let lock = NSLock()
+    private var blocked: URL?
 
     init(policy: HostPolicyState) {
         self.policy = policy
+    }
+
+    /// İzlenmeyen yönlendirmenin hedefi (yoksa `nil`).
+    var blockedDestination: URL? {
+        lock.lock(); defer { lock.unlock() }
+        return blocked
+    }
+
+    /// Yönlendirme izlenebilir mi: aynı kaynak, düşüş yok, politikaya uygun.
+    static func allows(from source: URL?, to destination: URL?, policy: HostPolicyState) -> Bool {
+        guard let source, let destination else { return false }
+        return !RedirectGuard.isCrossOrigin(source, destination) && policy.violation(for: destination) == nil
     }
 
     func urlSession(
@@ -107,6 +132,13 @@ final class PolicyRedirectGuard: NSObject, URLSessionTaskDelegate, Sendable {
         newRequest request: URLRequest,
         completionHandler: @escaping (URLRequest?) -> Void
     ) {
-        completionHandler(policy.violation(for: request.url) == nil ? request : nil)
+        // Aynı kaynak şemayı da kapsar: https → http farklı kaynaktır.
+        let source = task.originalRequest?.url ?? response.url
+        if Self.allows(from: source, to: request.url, policy: policy) {
+            completionHandler(request)
+        } else {
+            lock.lock(); blocked = request.url; lock.unlock()
+            completionHandler(nil)
+        }
     }
 }

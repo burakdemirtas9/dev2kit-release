@@ -13,8 +13,11 @@ final class RedirectTracker: NSObject, URLSessionTaskDelegate, URLSessionDataDel
     /// Yönlendirme hedefi de yönetici politikasına tabidir: izinli bir host
     /// 302 ile izinsiz bir host'a kaçış yolu olmasın.
     private let hostPolicy: HostPolicyState
-    /// Bu isteğe uygulanacak TLS malzemesi (kurum CA'sı, istemci kimliği).
-    private let tlsProfile: ResolvedTLSProfile?
+    /// Host'a göre TLS malzemesi (kurum CA'sı, sabitleme, istemci kimliği).
+    /// Her challenge, onu isteyen host için çözülür; yönlendirmede ilk host'un
+    /// profili hedefe taşınmaz (F4). Sonuç host başına bir kez hesaplanır.
+    private let tlsProfile: (String) throws -> ResolvedTLSProfile?
+    private var tlsProfileCache: [String: Result<ResolvedTLSProfile?, Error>] = [:]
     private let lock = NSLock()
     private var recorded: [RedirectStep] = []
     private var stop: RedirectGuard.Decision.StopReason?
@@ -35,7 +38,7 @@ final class RedirectTracker: NSObject, URLSessionTaskDelegate, URLSessionDataDel
         policy: RedirectPolicy,
         credentialHeaders: [String],
         hostPolicy: HostPolicyState,
-        tlsProfile: ResolvedTLSProfile? = nil
+        tlsProfile: @escaping (String) throws -> ResolvedTLSProfile? = { _ in nil }
     ) {
         self.policy = policy
         self.credentialHeaders = credentialHeaders
@@ -61,20 +64,48 @@ final class RedirectTracker: NSObject, URLSessionTaskDelegate, URLSessionDataDel
                 let summary = CertificateLoader.details(of: leaf)
                 lock.lock(); network.certificate = summary; lock.unlock()
             }
+            let host = challenge.protectionSpace.host
+            let profile: ResolvedTLSProfile?
+            do {
+                profile = try resolvedProfile(for: host)
+            } catch {
+                // Hedefin profili yüklenemedi (CA dosyası yok vb.): güvenle
+                // devam edilemez, bağlantı reddedilir ve sebep gösterilir.
+                lock.lock()
+                tlsRejection = TLSChallengeHandler.Rejection(host: host, reason: error.localizedDescription, presentedNames: nil)
+                lock.unlock()
+                completionHandler(.cancelAuthenticationChallenge, nil)
+                return
+            }
             let (disposition, credential, rejection) = TLSChallengeHandler.serverTrust(
                 challenge: challenge,
-                profile: tlsProfile
+                profile: profile
             )
             if let rejection {
                 lock.lock(); tlsRejection = rejection; lock.unlock()
             }
             completionHandler(disposition, credential)
         case NSURLAuthenticationMethodClientCertificate:
-            let (disposition, credential) = TLSChallengeHandler.clientCertificate(profile: tlsProfile)
+            // İstemci kimliği yalnızca KENDİ profili olan host'a sunulur.
+            let profile = try? resolvedProfile(for: challenge.protectionSpace.host)
+            let (disposition, credential) = TLSChallengeHandler.clientCertificate(profile: profile ?? nil)
             completionHandler(disposition, credential)
         default:
             completionHandler(.performDefaultHandling, nil)
         }
+    }
+
+    private func resolvedProfile(for host: String) throws -> ResolvedTLSProfile? {
+        let key = host.lowercased()
+        lock.lock()
+        if let cached = tlsProfileCache[key] {
+            lock.unlock()
+            return try cached.get()
+        }
+        lock.unlock()
+        let result = Result { try tlsProfile(host) }
+        lock.lock(); tlsProfileCache[key] = result; lock.unlock()
+        return try result.get()
     }
 
     /// Bağlantı künyesi. URLSession bunu istek bittikten sonra bir kez verir;

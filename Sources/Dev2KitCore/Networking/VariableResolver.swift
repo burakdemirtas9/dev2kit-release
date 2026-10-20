@@ -51,10 +51,21 @@ public struct VariableResolver: Sendable {
 
     /// Metindeki tüm şablonları çözer. Şablon içermeyen metin olduğu gibi döner.
     public func resolve(_ text: String) throws -> String {
-        try resolve(text, depth: 0)
+        var usesSecret = false
+        return try resolve(text, depth: 0, usesSecret: &usesSecret)
     }
 
-    private func resolve(_ text: String, depth: Int) throws -> String {
+    /// Çözer ve sonuçta bir secret'ın değeri olup olmadığını söyler. Tüm
+    /// yollar aynı ayrıştırıcıdan geçer: doğrudan `{{secret:x}}`, boşluklu
+    /// `{{ secret:x }}` ve secret'a çıkan environment değişkeni zinciri.
+    /// Yönlendirmede hangi başlığın düşürüleceği buna göre belirlenir.
+    public func resolveTrackingSecrets(_ text: String) throws -> (value: String, usesSecret: Bool) {
+        var usesSecret = false
+        let value = try resolve(text, depth: 0, usesSecret: &usesSecret)
+        return (value, usesSecret)
+    }
+
+    private func resolve(_ text: String, depth: Int, usesSecret: inout Bool) throws -> String {
         guard text.contains("{{") else { return text }
         guard depth < Self.maxDepth else { throw ResolveError.nestingTooDeep(text) }
 
@@ -68,6 +79,7 @@ public struct VariableResolver: Sendable {
                 guard let value = try secretStore.secret(forName: name) else {
                     throw ResolveError.unknownSecret(name)
                 }
+                usesSecret = true
                 output += value
             } else {
                 guard let value = variables[token] else {
@@ -78,7 +90,7 @@ public struct VariableResolver: Sendable {
                     }
                     throw ResolveError.unknownVariable(token)
                 }
-                output += try resolve(value, depth: depth + 1)
+                output += try resolve(value, depth: depth + 1, usesSecret: &usesSecret)
             }
             lastIndex = match.range.upperBound
         }

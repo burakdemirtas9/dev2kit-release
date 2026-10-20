@@ -408,3 +408,25 @@ private struct PostmanCollection: Decodable {
         (event ?? []).filter(\.hasCode).count + (item ?? []).reduce(0) { $0 + $1.scriptCount }
     }
 }
+
+extension CollectionPorting {
+    // MARK: - Dışa aktarmada düz metin kimlik bilgisi
+
+    /// Dışa aktarılan dosyada düz metin (vault referansı olmayan) kimlik
+    /// bilgisi taşıyan request'ler ve yerleri. Başarı mesajı buna göre
+    /// yazılır: önceden "secret yazılmadı" koşulsuz söyleniyordu, oysa düz
+    /// metin bearer token dosyaya giriyordu (güvenlik incelemesi F6,
+    /// 2026-10-20). Gövdedeki keyfi veri için tam sınıflandırma garantisi
+    /// yok; tespit içe aktarma incelemesiyle aynı kurallar.
+    public struct PlaintextCredential: Equatable, Sendable {
+        public let requestName: String
+        public let places: [String]
+    }
+
+    public static func plaintextCredentials(in collection: CollectionModel) -> [PlaintextCredential] {
+        collection.requests.compactMap { request in
+            let places = ImportReviewer.plaintextCredentials(in: request)
+            return places.isEmpty ? nil : PlaintextCredential(requestName: request.name, places: places)
+        }
+    }
+}
