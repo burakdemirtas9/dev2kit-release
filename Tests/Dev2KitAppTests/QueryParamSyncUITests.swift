@@ -19,6 +19,10 @@ final class QueryParamSyncUITests: XCTestCase {
         (view as? NSTextField).map { [$0] } ?? view.subviews.flatMap(textFields)
     }
 
+    private func addressEditor(_ view: NSView) -> AddressTextView? {
+        (view as? AddressTextView) ?? view.subviews.lazy.compactMap(addressEditor).first
+    }
+
     private func type(_ text: String, into field: NSTextField, window: NSWindow) throws {
         window.makeFirstResponder(field)
         let editor = try XCTUnwrap(field.currentEditor() as? NSTextView ?? window.firstResponder as? NSTextView)
@@ -52,9 +56,10 @@ final class QueryParamSyncUITests: XCTestCase {
         XCTAssertEqual(model.request.url, "https://api.example.com/v1/users?name=xyz", "yazma bitince adrese eklenir")
 
         // Adresten tabloya.
-        let urlField = try XCTUnwrap(textFields(host).first { $0.stringValue.hasPrefix("https://api.example.com") })
-        window.makeFirstResponder(urlField)
-        let editor = try XCTUnwrap(urlField.currentEditor() as? NSTextView)
+        // Adres alanı bir metin görünümü (`URLEditor`, 2026-10-20).
+        let editor = try XCTUnwrap(addressEditor(host))
+        XCTAssertTrue(editor.string.hasPrefix("https://api.example.com"))
+        window.makeFirstResponder(editor)
         editor.insertText("&page=2", replacementRange: NSRange(location: (editor.string as NSString).length, length: 0))
         RunLoop.main.run(until: Date().addingTimeInterval(0.9))
         XCTAssertEqual(model.request.queryParams.map(\.key), ["name", "page"])

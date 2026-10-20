@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import Dev2KitCore
 
@@ -23,6 +24,11 @@ struct TemplateTextField: View {
 
     @Environment(AppState.self) private var appState
     @FocusState private var isFocused: Bool
+    /// Adres düzenleyicisi (kapsül) odakta mı; `TextField` odağından ayrı.
+    @State private var isEditingAddress = false
+    @State private var addressRejections = 0
+    @State private var addressFocusRequest = 0
+    @State private var popover = VariablePopoverPresenter()
 
     /// Son `{{`'den sonra henüz `}}` ile kapanmamış kısım; öneri tetiği.
     private var pendingToken: String? {
@@ -35,20 +41,27 @@ struct TemplateTextField: View {
     private var suggestions: [String] {
         // Yalnızca odaktaki alanda öner: aksi halde başka alana geçince
         // yarım kalmış {{ yüzünden liste açık kalıyordu.
-        guard isFocused, let token = pendingToken else { return [] }
+        guard isFocused || isEditingAddress, let token = pendingToken else { return [] }
         return appState.templateSuggestions(matching: token)
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             if let capsuleLeading {
-                HStack(spacing: 0) {
+                // Üste hizalı: alan aşağı doğru büyürken metot seçici ve
+                // ayraç ilk satırda kalır.
+                HStack(alignment: .top, spacing: 0) {
                     capsuleLeading
-                    Divider().frame(height: 16)
-                    field.padding(.horizontal, 8)
+                        .frame(height: URLEditor.lineHeight)
+                    Divider()
+                        .frame(height: 16)
+                        .padding(.top, (URLEditor.lineHeight - 16) / 2)
+                    addressEditor
+                        .padding(.horizontal, 8)
                 }
-                .frame(height: 28)
-                .inputChrome(cornerRadius: 8, isFocused: isFocused)
+                .frame(minHeight: URLEditor.lineHeight)
+                .inputChrome(cornerRadius: 8, isFocused: isEditingAddress)
+                .inputLimitNotice(limit, trigger: addressRejections)
             } else if bordered {
                 field
             } else {
@@ -82,6 +95,54 @@ struct TemplateTextField: View {
                         .padding(.leading, isBordered ? Self.borderedInset : Self.plainInset)
                 }
             }
+    }
+
+    /// Kapsüldeki adres: tek satır ↔ odakta sarılı (`URLEditor`).
+    private var addressEditor: some View {
+        URLEditor(
+            text: $text,
+            isEditing: isEditingAddress,
+            limit: limit.maxCharacters,
+            definedVariables: Set(TemplateVariables.variableRanges(in: text).map(\.name).filter {
+                appState.variablePreview(for: $0).isDefined
+            }),
+            onSubmit: { onSubmit?() },
+            onEditingChange: { editing in
+                // AppKit odak bildirimi düzen turunun içinde gelebilir.
+                DispatchQueue.main.async { isEditingAddress = editing }
+            },
+            onLimitRejected: { addressRejections += 1 },
+            onVariableClick: { name, rect, view in openVariable(name, at: rect, in: view) },
+            focusRequest: addressFocusRequest
+        )
+        .overlay(alignment: .topLeading) {
+            if text.isEmpty {
+                Text(placeholder)
+                    .font(.system(.body, design: .monospaced))
+                    .foregroundStyle(.tertiary)
+                    .frame(height: URLEditor.lineHeight)
+                    .allowsHitTesting(false)
+            }
+        }
+    }
+
+    /// Değişkene tıklama: alandaki çiple aynı baloncuk. Tanımsızsa
+    /// baloncukta "Environment değişkeni ekle" (pencere yalnızca o düğmeyle
+    /// açılır, kullanıcı isteği 2026-10-20).
+    private func openVariable(_ name: String, at rect: NSRect, in view: NSView) {
+        let presenter = popover
+        popover.show(
+            VariablePreviewCard(
+                name: name,
+                preview: appState.variablePreview(for: name),
+                token: appState.cachedToken(forVariable: name),
+                onDefine: VariableDefinition.key(from: name) == nil ? nil : {
+                    presenter.close()
+                    appState.defineVariable(name)
+                }
+            ),
+            at: rect, in: view
+        )
     }
 
     @ViewBuilder
@@ -148,6 +209,8 @@ struct TemplateTextField: View {
     private func complete(with suggestion: String) {
         guard let range = text.range(of: "{{", options: .backwards) else { return }
         text = String(text[..<range.upperBound]) + suggestion + "}}"
+        // Adres düzenleyicisinde odak öneri düğmesine kaymışsa geri gelsin.
+        if capsuleLeading != nil { addressFocusRequest += 1 }
     }
 }
 
@@ -159,23 +222,30 @@ private struct VariableHighlight: View {
     let text: String
 
     var body: some View {
-        HStack(spacing: 0) {
-            ForEach(Array(TemplateVariables.segments(in: text).enumerated()), id: \.offset) { _, segment in
-                switch segment {
-                case .text(let plain):
-                    Text(plain)
-                        .foregroundStyle(.primary)
-                        .allowsHitTesting(false)
-                case .variable(let raw, let name):
-                    VariableChip(raw: raw, name: name)
+        // Genişliği alan belirler (Color.clear önerilen genişliği alır),
+        // metin doğal genişliğinde üstüne çizilip alan sınırında kırpılır.
+        // Eskiden `fixedSize` metin dış çerçeveyi kendi genişliğine
+        // büyütüyordu; `clipped` hiç kesmiyor, uzun adres komşu düğmelerin
+        // üstüne taşıyordu.
+        Color.clear
+            .overlay(alignment: .leading) {
+                HStack(spacing: 0) {
+                    ForEach(Array(TemplateVariables.segments(in: text).enumerated()), id: \.offset) { _, segment in
+                        switch segment {
+                        case .text(let plain):
+                            Text(plain)
+                                .foregroundStyle(.primary)
+                                .allowsHitTesting(false)
+                        case .variable(let raw, let name):
+                            VariableChip(raw: raw, name: name)
+                        }
+                    }
                 }
+                .font(.system(.body, design: .monospaced))
+                .lineLimit(1)
+                .fixedSize()
             }
-        }
-        .font(.system(.body, design: .monospaced))
-        .lineLimit(1)
-        .fixedSize()
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .clipped()
+            .clipped()
     }
 }
 
@@ -187,15 +257,7 @@ private struct VariableChip: View {
     @State private var showing = false
 
     var body: some View {
-        let preview = appState.variablePreview(for: name)
-        let defined = preview.isDefined
-        // Tanımsız environment değişkeni: baloncuk yerine doğrudan değer
-        // verilecek yere gidilir (kullanıcı isteği, 2026-10-20). Secret'lar
-        // environment'a yazılmaz; onlarda baloncuk kalır.
-        let definesInEnvironment: Bool = {
-            if case .undefined = preview { return VariableDefinition.key(from: name) != nil }
-            return false
-        }()
+        let defined = appState.variablePreview(for: name).isDefined
         Text(raw)
             .foregroundStyle(defined ? Theme.variable : Theme.down)
             .background(
@@ -203,20 +265,17 @@ private struct VariableChip: View {
                     .fill((defined ? Theme.variable : Theme.down).opacity(0.12))
             )
             .contentShape(Rectangle())
-            .onTapGesture {
-                if definesInEnvironment {
-                    appState.defineVariable(name)
-                } else {
-                    showing = true
-                }
-            }
-            .help(defined ? "Değeri görmek için tıkla"
-                  : (definesInEnvironment ? "Tanımsız değişken: tıkla, environment'ta değerini ver" : "Tanımsız değişken"))
+            .onTapGesture { showing = true }
+            .help(defined ? "Değeri görmek için tıkla" : "Tanımsız değişken: tıkla")
             .popover(isPresented: $showing, arrowEdge: .bottom) {
                 VariablePreviewCard(
                     name: name,
                     preview: appState.variablePreview(for: name),
-                    token: appState.cachedToken(forVariable: name)
+                    token: appState.cachedToken(forVariable: name),
+                    onDefine: VariableDefinition.key(from: name) == nil ? nil : {
+                        showing = false
+                        appState.defineVariable(name)
+                    }
                 )
             }
     }
@@ -227,6 +286,8 @@ struct VariablePreviewCard: View {
     let preview: TemplateVariables.Preview
     /// Token Factory değişkeninin bellekteki değeri (alınmadıysa `nil`).
     let token: TokenFactory.IssuedToken?
+    /// Tanımsızsa "Environment değişkeni ekle" (secret'larda yok).
+    var onDefine: (() -> Void)?
 
     @State private var copied = false
 
@@ -256,8 +317,17 @@ struct VariablePreviewCard: View {
                     missing("Tanımsız secret. Secrets ekranından ekleyebilirsin.")
                 }
             case .undefined(let environmentName):
-                missing(environmentName.map { "\"\($0)\" environment'ında tanımlı değil." }
-                        ?? "Environment seçili değil.")
+                missing(environmentName == nil
+                        ? "Seçili bir environment yok."
+                        : "Bu değişken seçili environment içinde tanımlı değil.")
+                if let onDefine {
+                    Button("Environment değişkeni ekle", action: onDefine)
+                        .buttonStyle(PrimaryActionButtonStyle())
+                        // Baloncuk anahtar pencere olunca ⏎ ile de çalışır.
+                        .keyboardShortcut(.defaultAction)
+                        .padding(.top, 2)
+                        .help(environmentName.map { "“\($0)” environment'ına ekle" } ?? "Hangi environment'a ekleneceğini seç")
+                }
             }
         }
         .padding(12)
@@ -302,5 +372,29 @@ struct VariablePreviewCard: View {
         Label(text, systemImage: "exclamationmark.triangle.fill")
             .font(.secondaryText)
             .foregroundStyle(Theme.down)
+    }
+}
+
+/// AppKit metin görünümündeki bir aralığa SwiftUI baloncuğu bağlar (adres
+/// düzenleyicisinde değişkene tıklama). Baloncuk açıkken referansı tutar.
+final class VariablePopoverPresenter {
+    private var popover: NSPopover?
+
+    /// Baloncuk anahtar pencere olur: içindeki düğmeye ⏎ ile, Esc ile
+    /// kapatmaya klavyeden ulaşılır. Adres alanı ana pencerede ilk yanıtlayıcı
+    /// kalır; alan daralmaz.
+    func show<Content: View>(_ content: Content, at rect: NSRect, in view: NSView) {
+        popover?.close()
+        let popover = NSPopover()
+        popover.behavior = .transient
+        popover.contentViewController = NSHostingController(rootView: content)
+        popover.show(relativeTo: rect, of: view, preferredEdge: .maxY)
+        popover.contentViewController?.view.window?.makeKey()
+        self.popover = popover
+    }
+
+    func close() {
+        popover?.close()
+        popover = nil
     }
 }

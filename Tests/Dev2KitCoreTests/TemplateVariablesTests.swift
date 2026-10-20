@@ -48,3 +48,18 @@ final class TemplateVariablesTests: XCTestCase {
         XCTAssertFalse(preview("secret: yok").isDefined)
     }
 }
+
+final class TemplateVariableRangeTests: XCTestCase {
+    func testRangesAreUTF16AndMatchSegments() {
+        let text = "https://ö.test/{{ base }}/x/{{id}}"
+        let ranges = TemplateVariables.variableRanges(in: text)
+        XCTAssertEqual(ranges.map(\.name), ["base", "id"])
+        let ns = text as NSString
+        XCTAssertEqual(ns.substring(with: ranges[0].range), "{{ base }}")
+        XCTAssertEqual(ns.substring(with: ranges[1].range), "{{id}}")
+    }
+
+    func testNoVariablesNoRanges() {
+        XCTAssertTrue(TemplateVariables.variableRanges(in: "https://a.test/x").isEmpty)
+    }
+}

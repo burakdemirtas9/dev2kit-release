@@ -64,6 +64,14 @@ enum Theme {
     /// zeminde kaybolduğu için yalnızca bu eşleşmede metin rengi sabitlenir.
     static let searchCurrentMatchText = NSColor(hex: "#0e0e0e")
 
+    // MARK: Adres alanındaki değişken (AppKit metin düzenleyicisi)
+    /// `Theme.variable` / `Theme.down` ve onların %12 zemini; adres alanı
+    /// renkleri metin özniteliği olarak verir (satır sarılınca da doğru yerde).
+    static let variableNS = dynamicColor(light: "#5d3ebc", dark: "#aa9cd5")
+    static let variableBackgroundNS = dynamicColor(light: "#5d3ebc", dark: "#aa9cd5", alpha: 0.12)
+    static let undefinedVariableNS = NSColor(hex: "#e23737")
+    static let undefinedVariableBackgroundNS = dynamicColor(light: "#e23737", dark: "#e23737", alpha: 0.12)
+
     // MARK: SwiftUI renkleri
     static let accent = Color(nsColor: dynamicColor(light: "#5d3ebc", dark: "#aa9cd5"))
     static let up = Color(nsColor: NSColor(hex: "#008c29"))

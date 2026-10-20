@@ -51,6 +51,16 @@ public enum TemplateVariables {
         return result
     }
 
+    /// Değişkenlerin metindeki yeri (UTF-16, `NSString` aralığı) ve adı.
+    /// Metin düzenleyicide (adres alanı) renk ve tıklama aralığı buradan;
+    /// `segments` ile aynı kural.
+    public static func variableRanges(in text: String) -> [(range: NSRange, name: String)] {
+        guard containsVariable(text) else { return [] }
+        return text.matches(of: pattern).map { match in
+            (NSRange(match.range, in: text), String(match.1))
+        }
+    }
+
     public static func preview(
         for name: String,
         environment: EnvironmentModel?,

@@ -19,12 +19,33 @@ extension View {
 private struct InputLimitModifier: ViewModifier {
     let field: InputLimits.Field
     let english: Bool
+    @State private var rejections = 0
+
+    func body(content: Content) -> some View {
+        content
+            .background(InputLimitInstaller(limit: field.maxCharacters) { rejections += 1 })
+            .inputLimitNotice(field, english: english, trigger: rejections)
+    }
+}
+
+extension View {
+    /// Sınır aşıldığında bip + alanın altında kısa uyarı; `trigger` her
+    /// arttığında. `NSTextField` olmayan alanlar (adres düzenleyicisi) kendi
+    /// reddini sayıp bunu kullanır.
+    func inputLimitNotice(_ field: InputLimits.Field, english: Bool = false, trigger: Int) -> some View {
+        modifier(InputLimitNotice(field: field, english: english, trigger: trigger))
+    }
+}
+
+private struct InputLimitNotice: ViewModifier {
+    let field: InputLimits.Field
+    let english: Bool
+    let trigger: Int
     @State private var notice: String?
     @State private var hideTask: Task<Void, Never>?
 
     func body(content: Content) -> some View {
         content
-            .background(InputLimitInstaller(limit: field.maxCharacters) { reject() })
             .overlay(alignment: .bottomLeading) {
                 if let notice {
                     Text(notice)
@@ -40,6 +61,7 @@ private struct InputLimitModifier: ViewModifier {
                 }
             }
             .zIndex(notice == nil ? 0 : 1)
+            .onChange(of: trigger) { reject() }
     }
 
     private func reject() {
