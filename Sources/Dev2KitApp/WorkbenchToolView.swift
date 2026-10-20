@@ -335,7 +335,7 @@ struct WorkbenchToolView: View {
                 .accessibilityLabel("Clear input")
             }
             if inputSearch.isPresented {
-                EditorSearchBar(search: inputSearch, strings: .english)
+                EditorSearchBar(search: inputSearch, strings: .english, mode: .workbench)
             }
             if workbench.inputHiddenFromEditor {
                 OversizedTextNotice(
@@ -414,7 +414,7 @@ struct WorkbenchToolView: View {
                     .foregroundStyle(.tertiary)
             }
             if !showsTree, outputSearch.isPresented {
-                EditorSearchBar(search: outputSearch, strings: .english)
+                EditorSearchBar(search: outputSearch, strings: .english, mode: .workbench)
             }
             Group {
                 if showsTree {

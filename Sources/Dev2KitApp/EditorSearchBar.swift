@@ -10,6 +10,9 @@ struct EditorSearchBar: View {
     @ObservedObject var search: EditorSearchController
     /// API Client Türkçe, Workbench İngilizce (docs/V2.md); aynı bileşen.
     var strings: SearchStrings = .turkish
+    /// Çubuğun bulunduğu mod: gizli moddaki çubuk Esc'i yakalamasın (iki mod
+    /// da canlı tutuluyor, bkz. ContentView).
+    var mode: AppMode = .apiClient
     /// Çubuk açılınca yazı imleci doğrudan kutuya girsin.
     @FocusState private var focused: Bool
 
@@ -51,7 +54,7 @@ struct EditorSearchBar: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
-            .keyboardShortcut(.escape, modifiers: [])
+            .keyboardShortcut(KeyboardShortcut(.escape, modifiers: []), onlyIn: mode)
             .help(strings.close)
             .accessibilityLabel(strings.close)
         }

@@ -167,7 +167,8 @@ struct RequestDetailView: View {
                 } label: {
                     Label("Durdur", systemImage: "stop.fill")
                 }
-                .keyboardShortcut(".", modifiers: .command)
+                // Workbench açıkken (API Client gizli ama canlı) ⌘. / ⌘↩ buraya gitmesin.
+                .keyboardShortcut(KeyboardShortcut(".", modifiers: .command), onlyIn: .apiClient)
                 .help("İsteği iptal et (⌘.)")
             } else {
                 Button {
@@ -178,7 +179,7 @@ struct RequestDetailView: View {
                         .frame(height: 28)
                 }
                 .buttonStyle(PrimaryActionButtonStyle())
-                .keyboardShortcut(.return, modifiers: .command)
+                .keyboardShortcut(KeyboardShortcut(.return, modifiers: .command), onlyIn: .apiClient)
                 .disabled(request.url.isEmpty)
             }
 

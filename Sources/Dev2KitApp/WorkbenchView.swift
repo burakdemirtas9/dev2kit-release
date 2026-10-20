@@ -55,7 +55,8 @@ struct WorkbenchSidebar: View {
             .background {
                 // Görünmez düğme: ⌘K arama kutusuna odaklar.
                 Button("") { searchFocused = true }
-                    .keyboardShortcut("k", modifiers: .command)
+                    // API Client açıkken (Workbench gizli ama canlı) ⌘K burayı odaklamasın.
+                    .keyboardShortcut(KeyboardShortcut("k", modifiers: .command), onlyIn: .workbench)
                     .opacity(0)
                     .accessibilityHidden(true)
             }

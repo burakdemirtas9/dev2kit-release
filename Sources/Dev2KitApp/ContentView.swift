@@ -8,24 +8,14 @@ struct ContentView: View {
     @State private var showingCookies = false
     @State private var showingHistory = false
     @State private var showingTLS = false
-
-    private static let sidebarWidthKey = "sidebarWidth"
-    private static let minSidebarWidth: CGFloat = 220
-    private static let splitSpace = "splitContainer"
-
-    /// İlk açılışta minimum; sonraki açılışlarda kullanıcının bıraktığı genişlik.
-    @State private var sidebarWidth: CGFloat = {
-        let stored = UserDefaults.standard.double(forKey: ContentView.sidebarWidthKey)
-        return stored >= ContentView.minSidebarWidth ? CGFloat(stored) : ContentView.minSidebarWidth
-    }()
-    @State private var isHoveringDivider = false
-
-    /// Genişlik sınırları: alt 220, üst içerik genişliği — ve detay paneline
-    /// en az 480px kalacak şekilde pencereye göre kırpılır.
-    private func effectiveSidebarWidth(totalWidth: CGFloat) -> CGFloat {
-        let upper = max(Self.minSidebarWidth, min(appState.sidebarMaxWidth, totalWidth - 489))
-        return min(max(sidebarWidth, Self.minSidebarWidth), upper)
-    }
+    /// Mod bir kez kurulduysa gizlense de canlı tutulur (bkz. body).
+    @State private var keepsAPIClient = false
+    @State private var keepsWorkbench = false
+    /// Araç çubuğundaki API Client öğeleri görünür mü. Moddan bir tur sonra
+    /// izler (bkz. body): araç çubuğunu yeniden çizmek (~50 ms, ölçüldü) mod
+    /// seçicinin tıklamasıyla aynı işleme düşmesin, başparmak animasyonu önce
+    /// başlasın. Yapay gecikme değil: bir sonraki ana döngü turu.
+    @State private var toolbarShowsAPIClient: Bool?
 
     /// macOS 26 yan yana duran araç çubuğu düğmelerini tek bir cam kapsülde
     /// grupluyor; tema seçicisi Picker olunca Environment'lar ve Geçmiş ile
@@ -35,34 +25,6 @@ struct ContentView: View {
     private var toolbarGroupBreak: some ToolbarContent {
         if #available(macOS 26.0, *) {
             ToolbarSpacer(.fixed)
-        }
-    }
-
-    /// API Client modu: kenar çubuğu, sekmeler, istek editörü.
-    private var apiClientLayout: some View {
-        // Genişlik tamamen bizde: HSplitView/NavigationSplitView ayraç konumunu
-        // dışarıdan vermeye izin vermiyor (ilk açılış + kalıcılık için gerekli).
-        GeometryReader { geometry in
-            HStack(spacing: 0) {
-                SidebarView()
-                    .frame(width: effectiveSidebarWidth(totalWidth: geometry.size.width))
-                sidebarDivider(totalWidth: geometry.size.width)
-                VStack(spacing: 0) {
-                    if !appState.openTabs.isEmpty {
-                        RequestTabBar()
-                        Divider()
-                    }
-                    if let requestBinding = appState.selectedRequest {
-                        RequestDetailView(request: requestBinding)
-                    } else {
-                        NoRequestSelectedView()
-                    }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-            .coordinateSpace(name: Self.splitSpace)
-            // Sürüklerken örtük animasyon genişliği "kovalayınca" titreme oluyor.
-            .animation(nil, value: sidebarWidth)
         }
     }
 
@@ -78,22 +40,52 @@ struct ContentView: View {
 
     var body: some View {
         @Bindable var state = appState
-        Group {
-            // Mod değişince API Client görünümü kurulmaz ama durumu AppState'te
-            // (sekmeler, gövde, yanıtlar) kaldığı için geri dönünce yerindedir.
-            if appState.isAPIClient {
-                apiClientLayout
-            } else {
-                WorkbenchView()
+        // İki mod bir kez kurulduktan sonra ikisi de canlı kalır, yalnızca
+        // görünürlük değişir. Eskiden if/else her geçişte bir modun bütün
+        // ağacını (liste, editörler, NSTextView'lar) yıkıp ötekini ana iş
+        // parçacığında baştan kuruyordu: ölçüldü (debug, ekran dışı) hafif
+        // içerikte ~100 ms, yoğun içerikte ~200–290 ms; mod seçicinin
+        // animasyonu bu süre boyunca donuyordu. Gizli mod etkileşime ve
+        // klavyeye kapalı (`modeLayer`); kaydırma, seçim ve imleç korunur.
+        ZStack {
+            if appState.isAPIClient || keepsAPIClient {
+                APIClientLayout()
+                    .modeLayer(visible: appState.isAPIClient)
             }
+            if !appState.isAPIClient || keepsWorkbench {
+                WorkbenchView()
+                    .modeLayer(visible: !appState.isAPIClient)
+            }
+        }
+        .onChange(of: appState.mode, initial: true) { _, mode in
+            if mode == .apiClient { keepsAPIClient = true } else { keepsWorkbench = true }
+            if toolbarShowsAPIClient == nil {
+                // Açılışta hemen doğru durumda (titreme olmasın).
+                toolbarShowsAPIClient = mode == .apiClient
+            } else {
+                DispatchQueue.main.async { toolbarShowsAPIClient = appState.mode == .apiClient }
+            }
+        }
+        .onChange(of: appState.mode) {
+            // Gizlenen moddaki editör klavyeyi almaya devam etmesin (eskiden
+            // görünüm yıkıldığı için odak zaten düşüyordu).
+            NSApp.keyWindow?.makeFirstResponder(nil)
+        }
+        .task {
+            // Öteki modu ilk geçişten önce, kullanıcı boştayken bir kez kur:
+            // ilk geçiş de sonrakiler kadar hızlı olsun.
+            try? await Task.sleep(for: .seconds(2))
+            keepsAPIClient = true
+            keepsWorkbench = true
         }
         .toolbar {
             ToolbarItem(placement: .principal) {
                 modePicker
             }
             // Environment, geçmiş, çerez, TLS ve secret yalnızca API Client'ta
-            // anlamlı; Workbench'te gizlenir (docs/V2.md).
-            if appState.isAPIClient {
+            // anlamlı; Workbench'te gizlenir (docs/V2.md). Kaldırılmaz, gizlenir:
+            // her geçişte araç çubuğunu yeniden kurmak ~90 ms sürüyordu.
+            APIClientOnly(isVisible: toolbarShowsAPIClient ?? appState.isAPIClient) {
                 ToolbarItem(placement: .automatic) {
                     EnvironmentPicker()
                 }
@@ -125,7 +117,7 @@ struct ContentView: View {
                 .frame(width: 36)
                 .help("Açık/koyu görünüm")
             }
-            if appState.isAPIClient {
+            APIClientOnly(isVisible: toolbarShowsAPIClient ?? appState.isAPIClient) {
                 toolbarGroupBreak
                 ToolbarItem(placement: .automatic) {
                     Button {
@@ -170,7 +162,7 @@ struct ContentView: View {
                     .help("TLS ayarlarını aç")
                 }
             }
-            if appState.isAPIClient {
+            APIClientOnly(isVisible: toolbarShowsAPIClient ?? appState.isAPIClient) {
                 ToolbarItem(placement: .automatic) {
                     Button {
                         showingTLS = true
@@ -244,45 +236,63 @@ struct ContentView: View {
         }
     }
 
-    /// Sürüklenebilir dikey ayraç: 1px çizgi + 9px görünmez tutma alanı.
-    /// Bırakınca genişlik UserDefaults'a yazılır, sonraki açılışta geri gelir.
-    private func sidebarDivider(totalWidth: CGFloat) -> some View {
-        ZStack {
-            Color.clear
-                .frame(width: 9)
-                .contentShape(Rectangle())
-            // Görünür çizgi yok: kenar çubuğu camlı zeminiyle ayrışıyor
-            // (Workbench'teki gibi, 2026-10-20). Sürükleme alanı duruyor.
-        }
-        // push/pop dengesiz kalırsa imleç yığını bozuluyor (ayraç üstündeyken
-        // pencere değişince "pop" gelmeyebiliyor); bayrakla eşleştiriliyor.
-        .onHover { hovering in
-            guard hovering != isHoveringDivider else { return }
-            isHoveringDivider = hovering
-            if hovering {
-                NSCursor.resizeLeftRight.push()
-            } else {
-                NSCursor.pop()
+}
+
+private extension View {
+    /// Mod katmanı: gizliyken görünmez ve tıklama ona ulaşmaz; ağaç canlı
+    /// kalır. İçerideki klavye kısayolları modu `AppState`'ten okur.
+    ///
+    /// Bilinçli olarak `.disabled`, `.allowsHitTesting` ya da bir ortam
+    /// (environment) değeri DEĞİL: değişince katmandaki her görünüme yayılıyor,
+    /// her NSView sarmalayıcısı (`updateNSView`, büyük metinli editörler dahil)
+    /// yeniden güncelleniyor. Ölçüldü (debug, yoğun içerik): geçiş başına
+    /// 35–80 ms; yalnızca opaklık 3–16 ms. Tıklama, görünür katman üstte
+    /// (zIndex) ve gizli katmanın üstünde saydam bir örtüyle engellenir.
+    func modeLayer(visible: Bool) -> some View {
+        opacity(visible ? 1 : 0)
+            .overlay {
+                if !visible { Color.clear.contentShape(Rectangle()) }
             }
+            .accessibilityHidden(!visible)
+            .zIndex(visible ? 1 : 0)
+    }
+}
+
+extension View {
+    /// Yalnızca `mode` görünürken çalışan klavye kısayolu. İki mod da canlı
+    /// tutulduğu için gizli moddaki ⌘↩, ⌘K, Esc… aksi halde çalışırdı.
+    /// Modu kendi içinde okur: içeren görünümün gövdesi mod değişince yeniden
+    /// hesaplanmasın (ölçüldü: istek editöründe ~20 ms fark).
+    func keyboardShortcut(_ shortcut: KeyboardShortcut, onlyIn mode: AppMode) -> some View {
+        modifier(ModeShortcut(shortcut: shortcut, mode: mode))
+    }
+}
+
+private struct ModeShortcut: ViewModifier {
+    /// İsteğe bağlı: mod bilgisi olmayan bir yerde (ör. testte tek başına
+    /// çizilen Workbench) kısayol her zaman açık.
+    @Environment(AppState.self) private var appState: AppState?
+    let shortcut: KeyboardShortcut
+    let mode: AppMode
+
+    func body(content: Content) -> some View {
+        content.keyboardShortcut(appState.map { $0.mode == mode } ?? true ? shortcut : nil)
+    }
+}
+
+/// API Client'a özel araç çubuğu öğeleri. macOS 15+'ta Workbench'te gizlenir
+/// (öğeler araç çubuğunda kalır): her mod geçişinde eklenip çıkarılınca
+/// araç çubuğu yeniden kurulup çiziliyordu (ölçüldü, debug: API Client'a
+/// dönüşte ~90 ms). macOS 14'te `hidden` yok; orada eskisi gibi kaldırılır.
+private struct APIClientOnly<Content: ToolbarContent>: ToolbarContent {
+    let isVisible: Bool
+    @ToolbarContentBuilder let content: Content
+
+    var body: some ToolbarContent {
+        if #available(macOS 15.0, *) {
+            content.hidden(!isVisible)
+        } else if isVisible {
+            content
         }
-        .onDisappear {
-            if isHoveringDivider {
-                isHoveringDivider = false
-                NSCursor.pop()
-            }
-        }
-        // translation yerine konteynerdeki mutlak konum kullanılıyor: ayraç
-        // sürüklendikçe kendi koordinat uzayı da kaydığı için translation
-        // geri besleme yapıp titremeye yol açıyordu.
-        .gesture(
-            DragGesture(minimumDistance: 1, coordinateSpace: .named(Self.splitSpace))
-                .onChanged { value in
-                    let upper = max(Self.minSidebarWidth, min(appState.sidebarMaxWidth, totalWidth - 489))
-                    sidebarWidth = min(max(value.location.x, Self.minSidebarWidth), upper)
-                }
-                .onEnded { _ in
-                    UserDefaults.standard.set(Double(sidebarWidth), forKey: Self.sidebarWidthKey)
-                }
-        )
     }
 }
