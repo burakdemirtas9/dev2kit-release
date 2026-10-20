@@ -56,4 +56,21 @@ final class AddressVariableFlowTests: XCTestCase {
         XCTAssertEqual(color(of: "{{base}}", in: textView), Theme.variableNS)
         XCTAssertEqual(textView.string, "https://a.test/{{base}}/x")
     }
+
+    /// Boş durumdan yeni istek: adres alanı açılınca odakta.
+    func testPendingAddressFocusFocusesTheEditor() throws {
+        let harness = AppStateHarness()
+        defer { harness.tearDown() }
+        harness.state.addressFocusPending = true
+        let host = NSHostingView(rootView: Bar(url: "").environment(harness.state))
+        let window = NSWindow(contentRect: NSRect(x: -5000, y: 0, width: 600, height: 80), styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        window.orderFrontRegardless()
+        defer { window.close() }
+        RunLoop.main.run(until: Date().addingTimeInterval(0.5))
+        let textView = try XCTUnwrap(find(host))
+        XCTAssertTrue(window.firstResponder === textView)
+        XCTAssertFalse(harness.state.addressFocusPending)
+    }
 }

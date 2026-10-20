@@ -132,6 +132,13 @@ final class AppState {
 
     /// TLS ayarları penceresini açma isteği. Sidebar aramasındaki desenle aynı.
     private(set) var tlsSettingsRequest = 0
+    /// Kenar çubuğunda görünür yapılacak istek (yeni oluşturulan); liste
+    /// kaydırıp bir kez okur.
+    var sidebarRevealID: UUID?
+    /// Açılan isteğin adres alanı odak alsın (boş durumdan yeni istek).
+    /// Adres alanı bir kez okur.
+    var addressFocusPending = false
+
     /// Environment'lar penceresini açma isteği (tanımsız değişkene tıklama).
     var environmentsRequest = 0
     /// Pencere açılınca değeri verilecek değişken; bir kez okunur.

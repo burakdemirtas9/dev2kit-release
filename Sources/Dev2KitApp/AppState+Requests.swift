@@ -124,10 +124,10 @@ extension AppState {
         persist()
     }
 
-    /// "Yeni istek" akışı tamamlanınca (boş durumdaki bağlantı): istek
-    /// seçilen yere eklenir ve düzenlemek için açılır. Akış iptal edilirse bu
-    /// hiç çağrılmaz; boş kayıt oluşmaz. Hedef çözülemezse (ör. boş yeni
-    /// koleksiyon adı) hiçbir şey yazılmaz.
+    /// İsteği verilen yere ekler ve düzenlemek için açar: kapalı koleksiyon
+    /// açılır, kenar çubuğu isteğe kayar. Hedef çözülemezse (ör. boş yeni
+    /// koleksiyon adı) hiçbir şey yazılmaz. Diğer istekler ve sekmeler
+    /// olduğu gibi kalır.
     @discardableResult
     func createRequest(name: String, method: HTTPMethod, destination: CollectionDestination) -> UUID? {
         guard let collectionID = resolve(destination),
@@ -139,8 +139,24 @@ extension AppState {
         clearSearch()
         collapsedCollectionIDs.remove(collectionID)
         showRequest(request.id)
+        sidebarRevealID = request.id
         persist()
         return request.id
+    }
+
+    /// Boş durumdaki "yeni bir istek oluştur": varsayılan istek
+    /// Koleksiyonsuz'a, adres alanı odakta.
+    @discardableResult
+    func createUngroupedRequest() -> UUID? {
+        let id = createRequest(name: "", method: .get, destination: .ungrouped)
+        if id != nil { addressFocusPending = true }
+        return id
+    }
+
+    /// Adres alanı açılınca odak alacak mı; bir kez okunur.
+    func takeAddressFocus() -> Bool {
+        defer { addressFocusPending = false }
+        return addressFocusPending
     }
 
     /// ⌘N: yeni isteği en makul koleksiyona ekler — seçili isteğin koleksiyonu,

@@ -103,6 +103,7 @@ struct SidebarView: View {
         let dirty = appState.dirtyRequestIDs
         // ⇧/⌘ ile seçilen aralığın hangi uçta bittiğini bilmek için görünen sıra.
         let visibleOrder = matches.flatMap { $0.requests.map(\.id) }
+        ScrollViewReader { proxy in
         List(selection: listSelection(order: visibleOrder)) {
             if appState.isSearching, matches.isEmpty {
                 Text("\"\(appState.searchQuery)\" için eşleşme yok")
@@ -170,6 +171,15 @@ struct SidebarView: View {
                     )
                 }
             }
+        }
+        // Yeni oluşturulan istek listede görünür olsun.
+        .onChange(of: appState.sidebarRevealID) { _, id in
+            guard let id else { return }
+            DispatchQueue.main.async {
+                withAnimation { proxy.scrollTo(id, anchor: .center) }
+                appState.sidebarRevealID = nil
+            }
+        }
         }
         // ⌫: seçili istekleri sil. Kalıcı işlem olduğu için onay kutusundan geçer.
         .onDeleteCommand {

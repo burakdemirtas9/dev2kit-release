@@ -62,6 +62,11 @@ struct TemplateTextField: View {
                 .frame(minHeight: URLEditor.lineHeight)
                 .inputChrome(cornerRadius: 8, isFocused: isEditingAddress)
                 .inputLimitNotice(limit, trigger: addressRejections)
+                // Boş durumdan yeni istek: adres alanı odakta açılır.
+                .onAppear { if appState.takeAddressFocus() { addressFocusRequest += 1 } }
+                .onChange(of: appState.addressFocusPending) { _, pending in
+                    if pending, appState.takeAddressFocus() { addressFocusRequest += 1 }
+                }
             } else if bordered {
                 field
             } else {
