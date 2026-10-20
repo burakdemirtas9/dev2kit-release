@@ -94,4 +94,36 @@ final class VariableDefinitionFlowTests: XCTestCase {
         XCTAssertThrowsError(try state.saveVariable(key: " ", value: "v", environmentID: nil))
         XCTAssertEqual(state.workspace.environments.count, count, "boş adla environment oluşmamalı")
     }
+
+    // MARK: - Seçiciden doğrudan düzenleme (2026-10-20)
+
+    /// Seçicideki düzenle düğmesi pencereyi o environment seçili açar;
+    /// istek bir kez okunur.
+    func testEditButtonOpensTheWindowOnThatEnvironment() {
+        let first = state.addEnvironment()
+        let second = state.addEnvironment()
+        let before = state.environmentsRequest
+        state.showEnvironments(focus: second)
+        XCTAssertEqual(state.environmentsRequest, before + 1)
+        XCTAssertEqual(state.takeEnvironmentsFocusID(), second)
+        XCTAssertNil(state.takeEnvironmentsFocusID(), "ikinci okuma boş")
+        XCTAssertEqual(state.workspace.activeEnvironmentID, first, "düzenlemek aktif environment'ı değiştirmez")
+    }
+
+    func testFocusOnADeletedEnvironmentIsIgnored() {
+        let id = state.addEnvironment()
+        state.showEnvironments(focus: id)
+        state.deleteEnvironment(id)
+        XCTAssertNil(state.takeEnvironmentsFocusID())
+    }
+
+    /// Environment yokken "Environment Ekle": yenisi oluşur, aktif olur ve
+    /// pencere onu seçili açar.
+    func testAddingFromThePickerCreatesActivatesAndFocuses() {
+        XCTAssertTrue(state.workspace.environments.isEmpty)
+        let id = state.addEnvironment()
+        state.showEnvironments(focus: id)
+        XCTAssertEqual(state.workspace.activeEnvironmentID, id)
+        XCTAssertEqual(state.takeEnvironmentsFocusID(), id)
+    }
 }

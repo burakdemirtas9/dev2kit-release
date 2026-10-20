@@ -144,6 +144,23 @@ final class AppState {
     /// Pencere açılınca değeri verilecek değişken; bir kez okunur.
     var variableDefinitionRequest: VariableDefinitionRequest?
 
+    /// Environment'lar penceresi açılınca seçilecek environment (seçicideki
+    /// "değerleri düzenle" düğmesi). Pencere açılırken bir kez okunur.
+    private(set) var environmentsFocusID: UUID?
+
+    /// Environment'lar penceresini verilen environment seçili açar.
+    func showEnvironments(focus id: UUID?) {
+        environmentsFocusID = id
+        environmentsRequest += 1
+    }
+
+    /// Seçilecek environment; yoksa ya da silinmişse `nil`.
+    func takeEnvironmentsFocusID() -> UUID? {
+        defer { environmentsFocusID = nil }
+        guard let id = environmentsFocusID, workspace.environments.contains(where: { $0.id == id }) else { return nil }
+        return id
+    }
+
     /// Pencere açılınca seçilecek profil (TLS öneri kutusundaki "Profili Aç").
     /// Pencere açılırken bir kez okunur ve temizlenir.
     private(set) var tlsSettingsProfileID: UUID?

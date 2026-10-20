@@ -26,5 +26,8 @@ extension L10nTable {
         "environment.tokenVariables.empty": L10nEntry("Bu environment'ta Token Factory değişkeni yok. Sol panelin altındaki Token Factory'den ekleyebilirsin.", "This environment has no Token Factory variables. You can add them from Token Factory at the bottom of the left panel."),
         "environment.tokenVariables.shadows": L10nEntry("aynı adlı değişkeni ezer", "overrides a variable with the same name"),
         "environment.tokenVariables.shadows.help": L10nEntry("Bu environment'ta %1$@ adlı bir değişken de var; request'lerde Token Factory'deki token kullanılır.", "This environment also has a variable named %1$@; requests use the token from Token Factory."),
+        "environment.header": L10nEntry("Environment", "Environment"),
+        "environment.add": L10nEntry("Environment Ekle", "Add Environment"),
+        "environment.edit": L10nEntry("“%1$@” değerlerini düzenle", "Edit “%1$@” values"),
     ]
 }

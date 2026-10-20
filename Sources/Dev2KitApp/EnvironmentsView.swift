@@ -106,13 +106,16 @@ struct EnvironmentsView: View {
         .padding(20)
         .frame(width: 720, height: 620)
         .onAppear {
-            selectedID = appState.workspace.activeEnvironmentID ?? appState.workspace.environments.first?.id
+            selectedID = appState.takeEnvironmentsFocusID()
+                ?? appState.workspace.activeEnvironmentID ?? appState.workspace.environments.first?.id
             if let request = appState.takeVariableDefinitionRequest() {
                 start(request)
             }
         }
         // Pencere açıkken başka bir tanımsız değişkene tıklanırsa.
         .onChange(of: appState.environmentsRequest) {
+            // Pencere açıkken seçiciden başka bir environment istendi.
+            if let id = appState.takeEnvironmentsFocusID() { selectedID = id }
             if let request = appState.takeVariableDefinitionRequest() {
                 start(request)
             }

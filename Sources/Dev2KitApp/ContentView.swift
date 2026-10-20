@@ -57,8 +57,6 @@ struct ContentView: View {
                 // yana büyüyordu).
                 ToolbarItem(placement: .automatic) {
                     EnvironmentPicker()
-                        .padding(.horizontal, 12)
-                        .frame(height: 36)
                         .glassEffect(.regular.interactive(), in: .capsule)
                         .padding(.trailing, Self.trailingInset)
                 }
@@ -66,6 +64,7 @@ struct ContentView: View {
             } else {
                 ToolbarItem(placement: .automatic) {
                     EnvironmentPicker()
+                        .background(.quaternary, in: Capsule())
                         .padding(.trailing, Self.trailingInset)
                 }
             }
@@ -97,9 +96,9 @@ struct ContentView: View {
                 },
             ]
             if toolbarShowsAPIClient ?? appState.isAPIClient {
+                // Environment'lar menüde yok: seçicideki her satırın düzenle
+                // düğmesi ve "Environment Ekle" o işi yapıyor.
                 items += [
-                    RadialMenuItem(id: "environments", title: L10n.t("toolbar.environments"),
-                                   icon: AnyView(Image(systemName: "globe"))) { showingEnvironments = true },
                     // Doğrulama kapalıyken TLS öğesinde de kırmızı işaret (asıl
                     // uyarı araç çubuğunda her an görünür kalır).
                     RadialMenuItem(id: "tls", title: L10n.t("toolbar.tls"),
