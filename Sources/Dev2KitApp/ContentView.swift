@@ -28,13 +28,47 @@ struct ContentView: View {
         }
     }
 
+    /// Ayarlar çarkı sağda, environment seçicinin hemen solunda (kullanıcı
+    /// isteği, 2026-10-20). Kendi camını çizdiği için ortak kapsül kapalı;
+    /// seçiciyle arasındaki boşluk çarkın kendi çerçevesinde.
     @ToolbarContentBuilder
     private var settingsToolbarItem: some ToolbarContent {
         if #available(macOS 26.0, *) {
-            ToolbarItem(placement: .automatic) { settingsButton }
+            ToolbarItem(placement: .automatic) { settingsButton.padding(.trailing, Self.settingsSpacing) }
                 .sharedBackgroundVisibility(.hidden)
         } else {
-            ToolbarItem(placement: .automatic) { settingsButton }
+            ToolbarItem(placement: .automatic) { settingsButton.padding(.trailing, Self.settingsSpacing) }
+        }
+    }
+
+    /// Çark ile environment seçicinin camı arasındaki ek boşluk (pt). 8'de
+    /// seçici açılırken (etkileşimli cam basınca büyüyor) çarkın üstüne
+    /// biniyordu (kullanıcı geri bildirimi, 2026-10-20).
+    static let settingsSpacing: CGFloat = 16
+
+    /// Environment seçici en sağda. Sağ kenara yapışmasın: soldaki pencere
+    /// düğmelerinin kenar boşluğuyla dengelenecek kadar sabit boşluk.
+    @ToolbarContentBuilder
+    private var environmentToolbarItem: some ToolbarContent {
+        APIClientOnly(isVisible: toolbarShowsAPIClient ?? appState.isAPIClient) {
+            if #available(macOS 26.0, *) {
+                // Ortak cam kapsülü kapatılıp aynı cam elle çizilir: boşluk
+                // camın DIŞINDA kalsın (kapsülün içine eklenince seçici tek
+                // yana büyüyordu).
+                ToolbarItem(placement: .automatic) {
+                    EnvironmentPicker()
+                        .padding(.horizontal, 12)
+                        .frame(height: 36)
+                        .glassEffect(.regular.interactive(), in: .capsule)
+                        .padding(.trailing, Self.trailingInset)
+                }
+                .sharedBackgroundVisibility(.hidden)
+            } else {
+                ToolbarItem(placement: .automatic) {
+                    EnvironmentPicker()
+                        .padding(.trailing, Self.trailingInset)
+                }
+            }
         }
     }
 
@@ -55,18 +89,26 @@ struct ContentView: View {
                 RadialMenuItem(
                     id: "language", title: L10n.t("common.language"),
                     value: L10n.language.displayName, closesMenu: false,
+                    // Metin simgeden optik olarak hafif: aynı oranda büyür (11 → 13).
                     icon: AnyView(Text(L10n.language == .turkish ? "TR" : "EN")
-                        .font(.system(size: 11, weight: .bold, design: .rounded)))
+                        .font(.system(size: 13, weight: .bold, design: .rounded)))
                 ) {
                     Localizer.shared.language = L10n.language == .turkish ? .english : .turkish
                 },
             ]
             if toolbarShowsAPIClient ?? appState.isAPIClient {
                 items += [
+                    RadialMenuItem(id: "environments", title: L10n.t("toolbar.environments"),
+                                   icon: AnyView(Image(systemName: "globe"))) { showingEnvironments = true },
+                    // Doğrulama kapalıyken TLS öğesinde de kırmızı işaret (asıl
+                    // uyarı araç çubuğunda her an görünür kalır).
+                    RadialMenuItem(id: "tls", title: L10n.t("toolbar.tls"),
+                                   value: appState.certificateValidationDisabled ? L10n.t("toolbar.validationOff") : nil,
+                                   icon: AnyView(TLSMenuIcon(validationOff: appState.certificateValidationDisabled))) { showingTLS = true },
                     RadialMenuItem(id: "history", title: L10n.t("toolbar.history"),
                                    icon: AnyView(Image(systemName: "clock.arrow.circlepath"))) { showingHistory = true },
                     RadialMenuItem(id: "cookies", title: L10n.t("toolbar.cookies"),
-                                   icon: AnyView(CookieIcon().frame(width: 14, height: 14))) { showingCookies = true },
+                                   icon: AnyView(CookieIcon().frame(width: 16, height: 16))) { showingCookies = true },
                     RadialMenuItem(id: "secrets", title: L10n.t("toolbar.secrets"),
                                    icon: AnyView(Image(systemName: "key.fill"))) { showingSecrets = true },
                 ]
@@ -74,6 +116,12 @@ struct ContentView: View {
             return items
         })
     }
+
+    /// Environment seçicinin camının dışındaki sağ boşluk (pt). Araç
+    /// çubuğunun kendi sağ boşluğuna (ortak cam kapalıyken 8) eklenir; toplam
+    /// 19 = soldaki pencere düğmelerinin kenar boşluğu (ekran dışı ölçüm,
+    /// 2026-10-20; görünür camın kenarına göre, metne göre değil).
+    static let trailingInset: CGFloat = 11
 
     /// Pencerenin üst ortasındaki mod seçici: sistemin segmentli kontrolü
     /// (cam başparmak, sürüklenebilir) + seçili modda yeşil nokta
@@ -129,34 +177,11 @@ struct ContentView: View {
             ToolbarItem(placement: .principal) {
                 modePicker
             }
-            // Environment, geçmiş, çerez, TLS ve secret yalnızca API Client'ta
-            // anlamlı; Workbench'te gizlenir (docs/V2.md). Kaldırılmaz, gizlenir:
-            // her geçişte araç çubuğunu yeniden kurmak ~90 ms sürüyordu.
-            APIClientOnly(isVisible: toolbarShowsAPIClient ?? appState.isAPIClient) {
-                ToolbarItem(placement: .automatic) {
-                    EnvironmentPicker()
-                }
-                ToolbarItem(placement: .automatic) {
-                    Button {
-                        showingEnvironments = true
-                    } label: {
-                        Label(L10n.t("toolbar.environments"), systemImage: "globe")
-                    }
-                    .help(L10n.t("toolbar.environments.help"))
-                }
-                toolbarGroupBreak
-            }
-            // Görünüm, dil, geçmiş, çerez ve secrets tek Ayarlar düğmesinde:
-            // dairesel menü (SettingsMenuButton). Kendi camını çizer; macOS
-            // 26'nın ortak cam kapsülü kapatılır.
-            settingsToolbarItem
-            // Güvenlik durumu her modda görünür (docs/TASARIM.md §1): Workbench'e
-            // geçince açık kalan doğrulama gizlenmesin.
-            // Doğrulama kapalıyken her an görünür olmalı: açık unutulursa
-            // kullanıcı bunu bir yanıta bakana kadar fark etmezdi.
-            // Tıklamak durumu DEĞİŞTİRMEZ, TLS ayarlarını açar; açıp kapatmak
-            // oradaki anahtardan (kullanıcı isteği, 2026-10-20: tek tıkla
-            // sessizce açılması beklenmedik bir durum değişikliğiydi).
+            // Güvenlik durumu her modda görünür (docs/TASARIM.md §1): TLS
+            // ayarları menüye taşındı ama doğrulama kapalıyken bu uyarı araç
+            // çubuğunda kalır; açık unutulursa kullanıcı bunu bir yanıta
+            // bakana kadar fark etmezdi. Tıklamak durumu DEĞİŞTİRMEZ, TLS
+            // ayarlarını açar (kullanıcı isteği, 2026-10-20).
             if appState.certificateValidationDisabled {
                 ToolbarItem(placement: .automatic) {
                     Button {
@@ -171,16 +196,13 @@ struct ContentView: View {
                     .help(L10n.t("toolbar.validationOff.help"))
                 }
             }
-            APIClientOnly(isVisible: toolbarShowsAPIClient ?? appState.isAPIClient) {
-                ToolbarItem(placement: .automatic) {
-                    Button {
-                        showingTLS = true
-                    } label: {
-                        Label(L10n.t("toolbar.tls"), systemImage: "lock.shield")
-                    }
-                    .help(L10n.t("toolbar.tls.help"))
-                }
-            }
+            // Sağda: Ayarlar çarkı, ardından en sağda environment seçici
+            // (yalnızca API Client'ta; Workbench'te gizlenir, kaldırılmaz:
+            // araç çubuğunu yeniden kurmak ~90 ms). Görünüm, dil,
+            // environment'lar, TLS, geçmiş, çerez ve secrets dairesel menüde
+            // (SettingsMenuButton).
+            settingsToolbarItem
+            environmentToolbarItem
         }
         // ⌘Y: Geçmiş düğmesi Ayarlar menüsüne taşındı; kısayol yerinde kalsın.
         .background {
@@ -307,5 +329,21 @@ private struct APIClientOnly<Content: ToolbarContent>: ToolbarContent {
         } else if isVisible {
             content
         }
+    }
+}
+
+/// TLS öğesinin simgesi: doğrulama kapalıyken köşede kırmızı işaret.
+private struct TLSMenuIcon: View {
+    let validationOff: Bool
+
+    var body: some View {
+        Image(systemName: "lock.shield")
+            .overlay(alignment: .topTrailing) {
+                if validationOff {
+                    Circle().fill(Theme.down)
+                        .frame(width: 6, height: 6)
+                        .offset(x: 3, y: -2)
+                }
+            }
     }
 }

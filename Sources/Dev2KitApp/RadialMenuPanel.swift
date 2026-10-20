@@ -38,11 +38,7 @@ final class RadialMenuPanel {
             width: size.width,
             height: size.height
         )
-        // Ekran kenarında taşmasın: gerekirse içeri kaydır.
-        if let visible = (parent.screen ?? NSScreen.main)?.visibleFrame {
-            frame.origin.x = min(max(frame.minX, visible.minX), visible.maxX - frame.width)
-            frame.origin.y = min(max(frame.minY, visible.minY), visible.maxY - frame.height)
-        }
+        frame = Self.clamped(frame, inside: parent.frame, screen: (parent.screen ?? NSScreen.main)?.visibleFrame)
         panel.setFrame(frame, display: false)
         if panel.parent !== parent {
             panel.parent?.removeChildWindow(panel)
@@ -50,6 +46,20 @@ final class RadialMenuPanel {
         }
         panel.orderFront(nil)
         install(parent: parent)
+    }
+
+    /// Menü pencerenin ve ekranın dışına taşmasın: gerekirse içeri kaydırılır.
+    /// Çark sol üstte, pencere düğmelerinden sonra durduğu için normalde
+    /// kaydırma gerekmez; kaydırılırsa kapatma düğmesi çarkla hizasını
+    /// kaybeder (bu yüzden çarkın yeri menüye yer bırakacak şekilde seçildi).
+    static func clamped(_ frame: NSRect, inside window: NSRect, screen: NSRect?) -> NSRect {
+        var bounds = window
+        if let screen { bounds = bounds.intersection(screen) }
+        guard !bounds.isNull, bounds.width >= frame.width, bounds.height >= frame.height else { return frame }
+        var result = frame
+        result.origin.x = min(max(frame.minX, bounds.minX), bounds.maxX - frame.width)
+        result.origin.y = min(max(frame.minY, bounds.minY), bounds.maxY - frame.height)
+        return result
     }
 
     func hide() {

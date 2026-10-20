@@ -7,8 +7,9 @@ struct SettingsHaloStyle {
     /// Düğme kenarından uzaklık (pt).
     var distance: CGFloat = 3
     var lineWidth: CGFloat = 1.5
-    /// Her yayın uzunluğu (derece). Çevrenin büyük kısmı boş kalır.
-    var arcDegrees: Double = 22
+    /// Her yayın uzunluğu (derece). İki yay 90°: çevrenin yarısı ışıklı,
+    /// yarısı boş (kullanıcı isteği, 2026-10-20; önce 22°'ydi).
+    var arcDegrees: Double = 90
     /// Işık yoğunluğu (0–1) ve parıltının yarıçapı.
     var intensity: Double = 0.85
     var glowRadius: CGFloat = 2.5
@@ -82,9 +83,12 @@ struct SettingsHalo: View {
     private func arc(color: Color, intensity: Double) -> some View {
         let fraction = style.arcDegrees / 360
         let gradient = AngularGradient(
+            // Uçlar yumuşak söner; yayın orta bölümü tam yoğunlukta. İki yay
+            // arasında şeffaf boşluk kalır.
             stops: [
                 .init(color: color.opacity(0), location: 0),
-                .init(color: color.opacity(intensity), location: fraction * 0.55),
+                .init(color: color.opacity(intensity), location: fraction * 0.3),
+                .init(color: color.opacity(intensity), location: fraction * 0.7),
                 .init(color: color.opacity(0), location: fraction),
             ],
             center: .center

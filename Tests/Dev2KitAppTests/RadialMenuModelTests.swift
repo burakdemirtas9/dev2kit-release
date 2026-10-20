@@ -133,3 +133,39 @@ final class RadialMenuModelTests: XCTestCase {
         XCTAssertEqual(model.progress, [1, 0, 0, 0, 0, 0], "iptal edilen görev öğe açmaz")
     }
 }
+
+/// Yarıçap öğe sayısına göre büyür; menü pencere içinde kalır.
+final class RadialMenuGeometryTests: XCTestCase {
+    func testRadiusGrowsSoEightItemsDoNotCollide() {
+        let style = RadialMenuStyle()
+        XCTAssertEqual(style.effectiveRadius(count: 6), style.radius, "6 öğe varsayılan yarıçapa sığar")
+        let radius = style.effectiveRadius(count: 8)
+        XCTAssertGreaterThanOrEqual(radius, style.radius)
+        let gap = RadialMenuLayout(count: 8, radius: Double(radius)).gap(itemDiameter: Double(style.itemDiameter))
+        XCTAssertGreaterThanOrEqual(gap, Double(style.minimumGap) - 0.001)
+    }
+
+    /// Ölçülen yer (900 pt pencere, kısa environment adı): çark merkezi
+    /// x = 738.5. Sekiz öğeli menü pencereden taşmaz, kaydırma gerekmez
+    /// (kapatma çarkla hizalı).
+    @MainActor
+    func testMenuFitsInsideTheWindowFromTheGear() {
+        let style = RadialMenuStyle()
+        let canvas = RadialMenuView.canvas(count: 8, style: style)
+        let window = NSRect(x: 0, y: 0, width: 900, height: 600)
+        let gear = CGPoint(x: 738.5, y: 600 - 26)
+        let frame = NSRect(x: gear.x - canvas.anchor.x, y: gear.y + canvas.anchor.y - canvas.size.height,
+                           width: canvas.size.width, height: canvas.size.height)
+        XCTAssertGreaterThanOrEqual(frame.minX, 0)
+        XCTAssertLessThanOrEqual(frame.maxX, 900)
+        XCTAssertEqual(RadialMenuPanel.clamped(frame, inside: window, screen: nil), frame)
+    }
+
+    @MainActor
+    func testClampKeepsTheMenuInsideWhenItWouldOverflow() {
+        let frame = NSRect(x: -30, y: 500, width: 160, height: 150)
+        let clamped = RadialMenuPanel.clamped(frame, inside: NSRect(x: 0, y: 0, width: 900, height: 600), screen: nil)
+        XCTAssertEqual(clamped.minX, 0)
+        XCTAssertEqual(clamped.maxY, 600)
+    }
+}

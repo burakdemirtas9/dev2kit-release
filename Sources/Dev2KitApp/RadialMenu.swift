@@ -20,10 +20,19 @@ struct RadialMenuItem: Identifiable {
 struct RadialMenuStyle {
     /// Tüm öğelerin (tetikleyici dahil) çapı. Tıklama hedefi ≥ 22 pt.
     var itemDiameter: CGFloat = 28
-    var iconSize: CGFloat = 13
+    /// Simge boyutu (önce 13; 2026-10-20'de ~%15 büyüdü). Daire çapı aynı.
+    var iconSize: CGFloat = 15
     /// Görünmeyen çemberin yarıçapı. Öğeler çakışmasın diye en az
     /// `RadialMenuLayout.minimumRadius` kadar olmalı.
     var radius: CGFloat = 52
+    /// Komşu öğeler arası en küçük boşluk: öğe sayısı artınca yarıçap en az
+    /// bu boşluğu sağlayacak kadar büyür (`effectiveRadius`).
+    var minimumGap: CGFloat = 12
+
+    /// Kullanılan yarıçap: `radius`, öğeler sığmıyorsa büyütülmüş hali.
+    func effectiveRadius(count: Int) -> CGFloat {
+        max(radius, CGFloat(RadialMenuLayout.minimumRadius(count: count, itemDiameter: Double(itemDiameter), gap: Double(minimumGap))))
+    }
     /// Yolun kavisi (0 düz, 1 çember yayı).
     var curvature: Double = 0.35
     /// Doğuş ölçeği (nokta).
@@ -214,13 +223,13 @@ struct RadialMenuView: View {
 
     /// Panelin boyutu ve tetikleyicinin içindeki yeri.
     static func canvas(count: Int, style: RadialMenuStyle) -> (size: CGSize, anchor: CGPoint) {
-        let bounds = RadialMenuLayout(count: count, radius: style.radius)
+        let bounds = RadialMenuLayout(count: count, radius: style.effectiveRadius(count: count))
             .bounds(itemDiameter: style.itemDiameter, margin: style.margin)
         return (bounds.size, CGPoint(x: -bounds.minX, y: -bounds.minY))
     }
 
     private var layout: RadialMenuLayout {
-        RadialMenuLayout(count: items.count + 1, radius: style.radius,
+        RadialMenuLayout(count: items.count + 1, radius: style.effectiveRadius(count: items.count + 1),
                          curvature: reduceMotion ? 0 : style.curvature,
                          minimumScale: reduceMotion ? 0.6 : style.minimumScale)
     }
