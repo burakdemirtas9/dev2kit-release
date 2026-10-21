@@ -37,6 +37,13 @@ struct Dev2KitApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var appState = AppState()
     @State private var workbench = WorkbenchState()
+
+    /// Pencerenin en küçük hali; sabit. Workbench kendi asgari genişliğini
+    /// pencereye bildirmiyor, 900 puntoda en geniş üst çubuk (JSON Biçimlendir,
+    /// Türkçe 1125 punto ölçüldü) kenar çubuğunu ve çıktı bölmesini kırpıyordu
+    /// (14" ekranda pencereyi küçültünce düğmeler kayboluyordu, 2026-10-21).
+    /// Her araç ve iki dil için `MinimumWindowSizeTests` korur.
+    static let minimumWindowSize = CGSize(width: 1140, height: 560)
     @AppStorage(EditorZoom.key) private var editorFontSize = EditorZoom.standard
 
     /// Workbench'teyken API Client'a ait kısayollar devre dışı (docs/V2.md).
@@ -198,7 +205,7 @@ struct Dev2KitApp: App {
                 .environment(appState)
                 .environment(workbench)
                 .tint(Theme.accent)
-                .frame(minWidth: 900, minHeight: 560)
+                .frame(minWidth: Self.minimumWindowSize.width, minHeight: Self.minimumWindowSize.height)
                 .onAppear {
                     appDelegate.appState = appState
                     SidebarDoubleClick.install {
