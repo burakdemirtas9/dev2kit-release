@@ -51,9 +51,17 @@ public enum OpenAPIDiscovery {
     }
 
     /// Springdoc ve yaygın varsayılan adresler, denenme sırasıyla.
-    static let wellKnownPaths = ["/v3/api-docs/swagger-config", "/v3/api-docs", "/v2/api-docs", "/openapi.json", "/swagger.json"]
-    /// Bir keşifte en fazla bu kadar adres denenir.
-    static let maxAttempts = 12
+    /// `/api-docs…`: Springdoc'ta `springdoc.api-docs.path=/api-docs`
+    /// (kurumsal servislerde yaygın; 2026-10-21 kullanıcı bildirimi, yalnızca
+    /// `/v3/api-docs` denendiği için doküman bulunamıyordu).
+    static let wellKnownPaths = [
+        "/v3/api-docs/swagger-config", "/v3/api-docs",
+        "/api-docs/swagger-config", "/api-docs",
+        "/v2/api-docs", "/openapi.json", "/swagger.json",
+    ]
+    /// Bir keşifte en fazla bu kadar adres denenir: girilen adres + her
+    /// bilinen yol bağlam yolunda ve kökte.
+    static let maxAttempts = 1 + wellKnownPaths.count * 2
 
     public static func discover(from url: URL, fetch: Fetch) async throws -> Outcome {
         var tried: [String] = []

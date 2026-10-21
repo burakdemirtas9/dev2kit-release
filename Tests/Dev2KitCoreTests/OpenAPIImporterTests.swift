@@ -239,6 +239,34 @@ final class OpenAPIImporterTests: XCTestCase {
         XCTAssertEqual(document.operationCount, 4)
     }
 
+    /// Springdoc'ta `springdoc.api-docs.path=/api-docs`: doküman
+    /// `/api-docs`, yapılandırma `/api-docs/swagger-config` (kullanıcı
+    /// bildirimi 2026-10-21; tarayıcı kaydında yalnızca bu ikisi ve kimlik
+    /// doğrulamasız). Eskiden yalnızca `/v3/api-docs…` deneniyordu.
+    func testCustomSpringdocDocsPathIsDiscoveredFromTheSwaggerUIPage() async throws {
+        let spec = try JSONSerialization.data(withJSONObject: openAPI3)
+        let pages: [String: Data] = [
+            "https://gw.example/trade-service/swagger-ui/index.html": Data("<html>swagger</html>".utf8),
+            "https://gw.example/trade-service/api-docs/swagger-config":
+                Data(#"{"configUrl":"/trade-service/api-docs/swagger-config","url":"/trade-service/api-docs","validatorUrl":""}"#.utf8),
+            "https://gw.example/trade-service/api-docs": spec,
+        ]
+        let outcome = try await OpenAPIDiscovery.discover(from: URL(string: "https://gw.example/trade-service/swagger-ui/index.html")!) { url in
+            guard let data = pages[url.absoluteString] else { throw OpenAPIDiscovery.HTTPStatusError(url: url, statusCode: 404) }
+            return data
+        }
+        guard case .document(let document) = outcome else { return XCTFail("doküman bekleniyordu") }
+        XCTAssertEqual(document.operationCount, 4)
+    }
+
+    /// Her bilinen yol hem bağlam yolunda hem kökte denenebilmeli: deneme
+    /// sınırı aday listesini kesmemeli.
+    func testAttemptLimitCoversEveryCandidate() {
+        let candidates = OpenAPIDiscovery.candidates(around: URL(string: "https://gw.example/svc/swagger-ui/index.html")!)
+        XCTAssertEqual(candidates.count, OpenAPIDiscovery.wellKnownPaths.count * 2)
+        XCTAssertGreaterThanOrEqual(OpenAPIDiscovery.maxAttempts, candidates.count + 1, "girilen adres + adaylar")
+    }
+
     func testMultipleSpringdocGroupsAreOffered() async throws {
         let config = #"{"urls":[{"url":"/v3/api-docs/public","name":"public"},{"url":"/v3/api-docs/admin","name":"admin"}]}"#
         let outcome = try await OpenAPIDiscovery.discover(from: URL(string: "http://localhost:8080/v3/api-docs/swagger-config")!) { _ in
