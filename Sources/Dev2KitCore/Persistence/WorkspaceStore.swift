@@ -1,63 +1,493 @@
 import Foundation
 
-/// Workspace'i diske okunabilir JSON olarak yazar/okur.
-/// Konum: ~/Library/Application Support/dev2kit/workspace.json
-/// Secret'lar bu dosyada asla yer almaz (yalnızca {{secret:...}} referansları).
-public struct WorkspaceStore: Sendable {
-    public let fileURL: URL
+/// Workspace'in dosya tabanlı deposu (şema 2). Yerleşim: `StoreLayout`.
+///
+/// - **Yazım:** yalnızca değişen dosyalar. Tek isteği düzenlemek kendi
+///   koleksiyon dosyasını ve manifest'i yazar; eskiden her tuş vuruşunda tüm
+///   workspace yeniden yazılıyordu.
+/// - **Çok dosyalı işlem:** yeni dosyalar `staging`'e → günlük (journal,
+///   commit noktası) → yerine taşıma → manifest → günlük silinir. Yarıda
+///   kalırsa açılışta ileri doğru tamamlanır. Dosya başına atomiklik
+///   (`AtomicFile`) tek başına yetmez: iki dosyadan biri yazılıp öteki
+///   yazılmadan kesilirse koleksiyon ile sıra birbirini tutmaz.
+/// - **Doğrulama:** her dosyanın özeti manifest'te; tutmayan dosya okunmuş
+///   sayılmaz.
+/// - **Bozulma:** okunamayan dosyalar karantinaya KOPYALANIR (silinmez), son
+///   sağlam yedek yüklenir; yedek yoksa okunabilen kısım yüklenir ve kayıp
+///   kullanıcıya söylenir. Hiçbir durumda sessizce boş veri yazılmaz.
+/// - **Yedek:** açılışta doğrulanmış hal ve oturum boyunca saatte bir, son 5.
+///
+/// Secret'lar burada asla yer almaz (yalnızca `{{secret:...}}` referansları).
+public final class WorkspaceStore: @unchecked Sendable {
+    public let layout: StoreLayout
+    private let lock = NSLock()
+    /// Diskte geçerli olan manifest: değişiklik karşılaştırması buna göre.
+    private var committed: StoreManifest?
+    private var lastBackup: Date?
+    private let clock: @Sendable () -> Date
 
-    public init(fileURL: URL? = nil) {
-        self.fileURL = fileURL ?? AppPaths.supportDirectory.appendingPathComponent("workspace.json")
+    public static let keptBackups = 5
+    public static let backupInterval: TimeInterval = 3_600
+
+    public init(directory: URL? = nil, clock: @escaping @Sendable () -> Date = Date.init) {
+        self.layout = StoreLayout(root: directory ?? AppPaths.supportDirectory)
+        self.clock = clock
     }
 
-    public func load() throws -> WorkspaceModel {
-        guard FileManager.default.fileExists(atPath: fileURL.path) else {
-            return WorkspaceModel()
+    // MARK: - Açılış
+
+    public struct OpenResult {
+        public var workspace: WorkspaceModel
+        public var notices: [StoreNotice]
+    }
+
+    /// Workspace'i açar: yarım işlemi tamamlar, gerekirse şema 1'den taşır,
+    /// bozuk dosyada yedeğe döner. Yalnızca veri ezilmeden devam
+    /// edilemeyecekse hata atar (daha yeni şema, tamamlanamayan işlem).
+    public func open() throws -> OpenResult {
+        lock.lock(); defer { lock.unlock() }
+        var notices: [StoreNotice] = []
+        let manager = FileManager.default
+        try ensureDirectory(layout.root)
+
+        if manager.fileExists(atPath: layout.manifest.path) || manager.fileExists(atPath: layout.journal.path) {
+            if try recoverJournalLocked() { notices.append(.recoveredInterruptedSave) }
         }
-        let data = try Data(contentsOf: fileURL)
-        return try JSONDecoder().decode(WorkspaceModel.self, from: data)
+        try? manager.removeItem(at: layout.staging)
+        AtomicFile.removeLeftovers(in: layout.root)
+
+        guard manager.fileExists(atPath: layout.manifest.path) else {
+            if manager.fileExists(atPath: layout.legacyWorkspace.path) {
+                let (workspace, notice) = try migrateLegacyLocked()
+                notices.append(notice)
+                backUpIfDueLocked(force: true)
+                return OpenResult(workspace: workspace, notices: notices)
+            }
+            if manager.fileExists(atPath: layout.store.path), hasContent(layout.store) {
+                // Manifest yok ama dosyalar var: dışarıdan bozulma.
+                return OpenResult(workspace: try recoverLocked(reason: [L10n.t("store.file.manifest")], notices: &notices),
+                                  notices: notices)
+            }
+            committed = nil
+            return OpenResult(workspace: WorkspaceModel(schemaVersion: StoreManifest.currentSchema), notices: notices)
+        }
+
+        switch Self.read(layout.store) {
+        case .success(let state):
+            committed = state.manifest
+            settleLegacyLeftoverLocked()
+            backUpIfDueLocked(force: true)
+            return OpenResult(workspace: state.workspace, notices: notices)
+        case .failure(let failure):
+            if case .newerSchema(let found) = failure.kind {
+                throw StoreError.newerSchema(found: found, supported: StoreManifest.currentSchema)
+            }
+            return OpenResult(workspace: try recoverLocked(reason: failure.unreadable, notices: &notices), notices: notices)
+        }
     }
 
-    /// Okunamayan workspace dosyasını aynı klasöre yedekler ve yedeğin adresini döner:
-    /// `workspace.bozuk-20261017-224512.json`.
-    ///
-    /// Neden: okuma başarısız olunca uygulama boş workspace ile açılıyor ve ilk
-    /// kayıt bozuk dosyanın ÜZERİNE yazıyordu — uyarı ekrana geldiğinde veri
-    /// zaten gitmiş oluyordu. Dosya bozuk olabilir ama içindeki istekler elle
-    /// kurtarılabilir; ezilmeden önce kenara alınır. Kopyalanır, taşınmaz:
-    /// yedek alınamazsa asıl dosya yerinde kalsın.
+    /// Testler ve basit kullanım için: açar ve workspace'i döner.
+    public func load() throws -> WorkspaceModel { try open().workspace }
+
+    // MARK: - Kayıt
+
+    /// Anlık görüntüyü yazar; yalnızca değişen dosyalar. Hata atarsa diskteki
+    /// geçerli hal değişmemiştir (ya da bekleyen işlem açılışta tamamlanır).
+    public func save(_ workspace: WorkspaceModel) throws {
+        lock.lock(); defer { lock.unlock() }
+        try ensureDirectory(layout.root)
+        // Önceki işlem yarım kaldıysa önce o tamamlanır: üstüne yeni işlem kurulmaz.
+        if FileManager.default.fileExists(atPath: layout.journal.path) {
+            _ = try recoverJournalLocked()
+        }
+        let files = try Self.encode(workspace)
+        let manifest = StoreManifest(
+            schemaVersion: StoreManifest.currentSchema,
+            activeEnvironmentID: workspace.activeEnvironmentID,
+            collectionOrder: workspace.collections.map(\.id),
+            files: files.mapValues(AtomicFile.digest)
+        )
+        guard !manifest.sameContent(as: committed) else { return }
+        let changed = files.filter { committed?.files[$0.key] != manifest.files[$0.key] }
+        let removed = Set(committed?.files.keys.map { $0 } ?? []).subtracting(files.keys)
+        try commitLocked(writes: changed, deletes: Array(removed), manifest: manifest, in: layout.store)
+        committed = manifest
+        backUpIfDueLocked(force: false)
+    }
+
+    // MARK: - İşlem (journal)
+
+    private func commitLocked(writes: [String: Data], deletes: [String], manifest: StoreManifest, in store: URL) throws {
+        let id = UUID()
+        let staging = store.appendingPathComponent("staging/\(id.uuidString)", isDirectory: true)
+        do {
+            for (path, data) in writes {
+                try AtomicFile.write(data, to: staging.appendingPathComponent(path))
+            }
+        } catch {
+            // Commit öncesi: geçerli hal bozulmadı, yarım staging temizlenir.
+            try? FileManager.default.removeItem(at: staging)
+            throw error
+        }
+        let journal = StoreJournal(id: id, writes: writes.keys.sorted(), deletes: deletes.sorted(), manifest: manifest)
+        try AtomicFile.write(try Self.encoder.encode(journal), to: store.appendingPathComponent("journal.json"))
+        try apply(journal, in: store)
+    }
+
+    /// Günlüğü uygular; yarıda kesildiyse tekrar çağrılabilir (idempotent).
+    private func apply(_ journal: StoreJournal, in store: URL) throws {
+        let manager = FileManager.default
+        let staging = store.appendingPathComponent("staging/\(journal.id.uuidString)", isDirectory: true)
+        for path in journal.writes {
+            let staged = staging.appendingPathComponent(path)
+            let target = store.appendingPathComponent(path)
+            if manager.fileExists(atPath: staged.path) {
+                try ensureDirectory(target.deletingLastPathComponent())
+                guard rename(staged.path, target.path) == 0 else {
+                    throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+                }
+            } else {
+                // Önceki denemede taşınmış olmalı: içerik manifest'le tutmalı.
+                guard let data = try? Data(contentsOf: target),
+                      AtomicFile.digest(data) == journal.manifest.files[path] else {
+                    throw StoreError.journalUnrecoverable(path)
+                }
+            }
+        }
+        for path in journal.deletes {
+            try? manager.removeItem(at: store.appendingPathComponent(path))
+        }
+        try AtomicFile.write(try Self.encoder.encode(journal.manifest), to: store.appendingPathComponent("manifest.json"))
+        try? manager.removeItem(at: store.appendingPathComponent("journal.json"))
+        try? manager.removeItem(at: staging)
+        // Boş kalan üst dizin de kalkar (başka süren işlem yoksa boştur).
+        _ = rmdir(staging.deletingLastPathComponent().path)
+    }
+
+    /// Bekleyen günlük varsa tamamlar. Okunamayan günlük commit'e ulaşmamış
+    /// sayılır (atomik yazıldığı için yarım olamaz; dışarıdan bozulmuştur):
+    /// silinir, manifest ve özetler geçerli hali belirler.
     @discardableResult
-    public func backUpUnreadableFile(now: Date = Date()) throws -> URL {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "yyyyMMdd-HHmmss"
-        let directory = fileURL.deletingLastPathComponent()
-        let stem = fileURL.deletingPathExtension().lastPathComponent
-        let base = "\(stem).bozuk-\(formatter.string(from: now))"
-        var backup = directory.appendingPathComponent("\(base).json")
+    private func recoverJournalLocked() throws -> Bool {
+        guard let data = try? Data(contentsOf: layout.journal) else { return false }
+        guard let journal = try? JSONDecoder().decode(StoreJournal.self, from: data) else {
+            try? FileManager.default.removeItem(at: layout.journal)
+            return false
+        }
+        try apply(journal, in: layout.store)
+        return true
+    }
+
+    // MARK: - Okuma ve doğrulama
+
+    struct LoadedState {
+        var workspace: WorkspaceModel
+        var manifest: StoreManifest
+    }
+
+    struct ReadFailure: Error {
+        enum Kind { case damaged, newerSchema(Int) }
+        var kind: Kind
+        /// Okunamayan ya da özeti tutmayan dosyalar (göreli yol).
+        var unreadable: [String]
+        /// Okunabilen kısım (kurtarma için).
+        var partial: WorkspaceModel
+    }
+
+    static let encoder: JSONEncoder = {
+        let encoder = JSONEncoder()
+        // Özetler kararlı olsun (aynı içerik → aynı bayt) ve dosyalar okunabilir kalsın.
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        return encoder
+    }()
+
+    static func encode(_ workspace: WorkspaceModel) throws -> [String: Data] {
+        var files: [String: Data] = [:]
+        for collection in workspace.collections {
+            files[StoreLayout.collectionPath(collection.id)] = try encoder.encode(collection)
+        }
+        files[StoreLayout.environmentsPath] = try encoder.encode(workspace.environments)
+        files[StoreLayout.settingsPath] = try encoder.encode(
+            StoreSettings(tlsProfiles: workspace.tlsProfiles, sentBaselines: workspace.sentBaselines)
+        )
+        return files
+    }
+
+    /// Dizindeki yapıyı okur ve her dosyayı manifest özetine göre doğrular.
+    static func read(_ store: URL) -> Result<LoadedState, ReadFailure> {
+        let decoder = JSONDecoder()
+        var unreadable: [String] = []
+        var partial = WorkspaceModel(schemaVersion: StoreManifest.currentSchema)
+
+        func file<T: Decodable>(_ path: String, _ type: T.Type, expected: String?) -> T? {
+            guard let data = try? Data(contentsOf: store.appendingPathComponent(path)),
+                  expected == nil || AtomicFile.digest(data) == expected,
+                  let value = try? decoder.decode(type, from: data) else {
+                unreadable.append(path)
+                return nil
+            }
+            return value
+        }
+
+        guard let manifestData = try? Data(contentsOf: store.appendingPathComponent("manifest.json")),
+              var manifest = try? decoder.decode(StoreManifest.self, from: manifestData) else {
+            // Manifest yok: özetsiz, okunabilen her şey kurtarılır.
+            unreadable.append("manifest.json")
+            partial.environments = file(StoreLayout.environmentsPath, [EnvironmentModel].self, expected: nil) ?? []
+            if let settings = file(StoreLayout.settingsPath, StoreSettings.self, expected: nil) {
+                partial.tlsProfiles = settings.tlsProfiles
+                partial.sentBaselines = settings.sentBaselines
+            }
+            let collectionsDir = store.appendingPathComponent("collections")
+            let names = (try? FileManager.default.contentsOfDirectory(atPath: collectionsDir.path)) ?? []
+            partial.collections = names.filter { $0.hasSuffix(".json") }.sorted()
+                .compactMap { file("collections/\($0)", CollectionModel.self, expected: nil) }
+            return .failure(ReadFailure(kind: .damaged, unreadable: unreadable, partial: partial))
+        }
+        guard manifest.schemaVersion <= StoreManifest.currentSchema else {
+            return .failure(ReadFailure(kind: .newerSchema(manifest.schemaVersion), unreadable: [], partial: partial))
+        }
+        StoreMigrations.upgrade(&manifest)
+
+        partial.activeEnvironmentID = manifest.activeEnvironmentID
+        partial.environments = file(StoreLayout.environmentsPath, [EnvironmentModel].self,
+                                    expected: manifest.files[StoreLayout.environmentsPath]) ?? []
+        if let settings = file(StoreLayout.settingsPath, StoreSettings.self, expected: manifest.files[StoreLayout.settingsPath]) {
+            partial.tlsProfiles = settings.tlsProfiles
+            partial.sentBaselines = settings.sentBaselines
+        }
+        partial.collections = manifest.collectionOrder.compactMap { id in
+            file(StoreLayout.collectionPath(id), CollectionModel.self, expected: manifest.files[StoreLayout.collectionPath(id)])
+        }
+        // Sırada olmayan ama manifest'te dosyası olan koleksiyon (olmamalı).
+        guard unreadable.isEmpty else {
+            return .failure(ReadFailure(kind: .damaged, unreadable: unreadable, partial: partial))
+        }
+        return .success(LoadedState(workspace: partial, manifest: manifest))
+    }
+
+    // MARK: - Kurtarma
+
+    /// Okunamayan dosyalar karantinaya kopyalanır; en yeni okunabilen yedek
+    /// geri yüklenir. Yedek yoksa okunabilen kısım yüklenir ve bir sonraki
+    /// kayıt tüm yapıyı baştan yazar (manifest yeniden kurulur).
+    private func recoverLocked(reason unreadable: [String], notices: inout [StoreNotice]) throws -> WorkspaceModel {
+        let quarantine = try quarantineLocked()
+        for backup in backupsNewestFirst() {
+            guard case .success(let state) = Self.read(backup) else { continue }
+            try replaceStore(with: backup)
+            committed = state.manifest
+            notices.append(.restoredFromBackup(backup: backup, quarantine: quarantine))
+            return state.workspace
+        }
+        let partial: WorkspaceModel
+        if case .failure(let failure) = Self.read(layout.store) { partial = failure.partial } else { partial = WorkspaceModel() }
+        // Kısmi hal hemen tutarlı biçimde yazılır: yarım manifest kalmasın.
+        // Okunamayan dosyalar karantinada; yapıdan çıkarılır.
+        let files = try Self.encode(partial)
+        let manifest = StoreManifest(
+            schemaVersion: StoreManifest.currentSchema,
+            activeEnvironmentID: partial.activeEnvironmentID,
+            collectionOrder: partial.collections.map(\.id),
+            files: files.mapValues(AtomicFile.digest)
+        )
+        let collections = layout.store.appendingPathComponent("collections")
+        let present = ((try? FileManager.default.contentsOfDirectory(atPath: collections.path)) ?? []).map { "collections/\($0)" }
+        try commitLocked(writes: files, deletes: present.filter { files[$0] == nil }, manifest: manifest, in: layout.store)
+        committed = manifest
+        notices.append(.partiallyLoaded(lost: unreadable, quarantine: quarantine))
+        return partial
+    }
+
+    /// `store` dizininin kopyası `quarantine/<zaman>/`. Kopyalanamazsa hata:
+    /// ezilebilecek veri korunamıyorsa devam edilmez.
+    private func quarantineLocked() throws -> URL {
+        let target = uniqueDirectory(in: layout.quarantine)
+        try ensureDirectory(layout.quarantine)
+        if FileManager.default.fileExists(atPath: layout.store.path) {
+            try FileManager.default.copyItem(at: layout.store, to: target)
+        } else {
+            try ensureDirectory(target)
+        }
+        return target
+    }
+
+    private func replaceStore(with backup: URL) throws {
+        let manager = FileManager.default
+        let incoming = layout.root.appendingPathComponent("store.restoring", isDirectory: true)
+        try? manager.removeItem(at: incoming)
+        try manager.copyItem(at: backup, to: incoming)
+        try? manager.removeItem(at: layout.store)
+        guard rename(incoming.path, layout.store.path) == 0 else {
+            throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+        }
+    }
+
+    // MARK: - Yedek
+
+    /// Sağlam halin kopyası. Açılışta (doğrulanmış hal) ve oturumda saatte bir.
+    /// Yedek alınamaması kaydı durdurmaz; yalnızca yedek eksik kalır.
+    private func backUpIfDueLocked(force: Bool) {
+        let now = clock()
+        if !force, let lastBackup, now.timeIntervalSince(lastBackup) < Self.backupInterval { return }
+        guard FileManager.default.fileExists(atPath: layout.manifest.path) else { return }
+        let target = uniqueDirectory(in: layout.backups)
+        do {
+            try ensureDirectory(layout.backups)
+            try FileManager.default.copyItem(at: layout.store, to: target)
+            // Yedekte süren işlem kalıntısı olmasın.
+            try? FileManager.default.removeItem(at: target.appendingPathComponent("journal.json"))
+            try? FileManager.default.removeItem(at: target.appendingPathComponent("staging"))
+            lastBackup = now
+        } catch {
+            try? FileManager.default.removeItem(at: target)
+            return
+        }
+        let all = backupsNewestFirst()
+        for old in all.dropFirst(Self.keptBackups) { try? FileManager.default.removeItem(at: old) }
+    }
+
+    /// Yedek dizinleri, en yenisi başta (adlar zaman damgası; sözlük sırası = zaman sırası).
+    public func backupsNewestFirst() -> [URL] {
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: layout.backups.path)) ?? []
+        return names.filter { !$0.hasPrefix(".") && !$0.hasSuffix(".json") }.sorted(by: >)
+            .map { layout.backups.appendingPathComponent($0, isDirectory: true) }
+    }
+
+    private func uniqueDirectory(in parent: URL) -> URL {
+        let stamp = Self.stamp(clock())
+        var candidate = parent.appendingPathComponent(stamp, isDirectory: true)
         var attempt = 2
-        while FileManager.default.fileExists(atPath: backup.path) {
-            backup = directory.appendingPathComponent("\(base)-\(attempt).json")
+        while FileManager.default.fileExists(atPath: candidate.path) {
+            candidate = parent.appendingPathComponent("\(stamp)-\(attempt)", isDirectory: true)
             attempt += 1
         }
-        try FileManager.default.copyItem(at: fileURL, to: backup)
-        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: backup.path)
-        return backup
+        return candidate
     }
 
-    public func save(_ workspace: WorkspaceModel) throws {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys] // git diff'leri stabil kalsın
-        let data = try encoder.encode(workspace)
-        let directory = fileURL.deletingLastPathComponent()
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        // Workspace düz metin kimlik bilgisi içerebilir: dizin yalnızca
-        // kullanıcıya açık (0700), dosya ve yedeği 0600. Önceden dosya 0644
-        // yazılıyordu (güvenlik incelemesi, 2026-10-20). Atomik yazımın geçici
-        // dosyası bir an varsayılan izinle oluşur; dizin izni onu da korur.
-        try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
-        // Atomik yazım: yarım dosya kalmasın.
-        try data.write(to: fileURL, options: .atomic)
-        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: fileURL.path)
+    static func stamp(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(identifier: "UTC")
+        formatter.dateFormat = "yyyyMMdd-HHmmss"
+        return formatter.string(from: date)
+    }
+
+    // MARK: - Yardımcılar
+
+    private func ensureDirectory(_ url: URL) throws {
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true,
+                                                attributes: [.posixPermissions: 0o700])
+        try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: url.path)
+    }
+
+    private func hasContent(_ url: URL) -> Bool {
+        !((try? FileManager.default.contentsOfDirectory(atPath: url.path)) ?? []).isEmpty
+    }
+}
+
+// MARK: - Şema 1'den geçiş
+
+extension WorkspaceStore {
+    /// `workspace.json` (şema 1) → şema 2.
+    ///
+    /// Önce asıl dosyanın yedeği alınır. Yeni yapı `store.migrating`'de kurulur,
+    /// okunup kaynakla karşılaştırılır; ancak tutarsa tek `rename` ile `store`
+    /// olur. Yarıda kalan geçiş yeniden denendiğinde ara dizin baştan kurulur:
+    /// kaynak hep aynı dosya olduğu için kayıt çoğalmaz.
+    private func migrateLegacyLocked() throws -> (WorkspaceModel, StoreNotice) {
+        let manager = FileManager.default
+        let data = try Data(contentsOf: layout.legacyWorkspace)
+        let source: WorkspaceModel
+        do {
+            source = try JSONDecoder().decode(WorkspaceModel.self, from: data)
+        } catch {
+            // Okunamayan şema 1 dosyası: kopyası alınır, kenara çekilir, boş başlanır.
+            let backup = try copyLegacy(named: "workspace.bozuk")
+            try manager.removeItem(at: layout.legacyWorkspace)
+            committed = nil
+            return (WorkspaceModel(schemaVersion: StoreManifest.currentSchema),
+                    .legacyUnreadable(backup: backup, reason: error.localizedDescription))
+        }
+
+        let backup = try copyLegacy(named: "workspace.v1")
+        try? manager.removeItem(at: layout.migrating)
+        try ensureDirectory(layout.migrating)
+        let files = try Self.encode(source)
+        let manifest = StoreManifest(
+            schemaVersion: StoreManifest.currentSchema,
+            activeEnvironmentID: source.activeEnvironmentID,
+            collectionOrder: source.collections.map(\.id),
+            files: files.mapValues(AtomicFile.digest)
+        )
+        for (path, file) in files { try AtomicFile.write(file, to: layout.migrating.appendingPathComponent(path)) }
+        try AtomicFile.write(try Self.encoder.encode(manifest), to: layout.migrating.appendingPathComponent("manifest.json"))
+
+        // Doğrulama: diskteki yeni yapı okunur, kaynakla aynı mı.
+        guard case .success(let state) = Self.read(layout.migrating) else {
+            throw StoreError.migrationVerificationFailed(L10n.t("store.migration.unreadable"))
+        }
+        if let mismatch = Self.difference(source, state.workspace) {
+            throw StoreError.migrationVerificationFailed(mismatch)
+        }
+        if manager.fileExists(atPath: layout.store.path) {
+            // Manifestsiz artık (önceki yarım deneme): karantinaya alınır.
+            _ = try quarantineLocked()
+            try manager.removeItem(at: layout.store)
+        }
+        guard rename(layout.migrating.path, layout.store.path) == 0 else {
+            throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+        }
+        committed = manifest
+        // Etkin yapı artık şema 2; asıl dosyanın yedeği alındı.
+        try? manager.removeItem(at: layout.legacyWorkspace)
+        return (state.workspace, .migrated(backup: backup))
+    }
+
+    /// Geçiş tamamlandıktan sonra (rename) kesilip asıl dosya silinemediyse:
+    /// yedeği zaten var, kaldırılır; yoksa yedeğe taşınır.
+    private func settleLegacyLeftoverLocked() {
+        guard FileManager.default.fileExists(atPath: layout.legacyWorkspace.path) else { return }
+        if (try? copyLegacy(named: "workspace.v1")) != nil {
+            try? FileManager.default.removeItem(at: layout.legacyWorkspace)
+        }
+    }
+
+    /// Aynı içerikli yedek zaten varsa yenisi alınmaz (tekrarlanan deneme).
+    private func copyLegacy(named stem: String) throws -> URL {
+        let manager = FileManager.default
+        try ensureDirectory(layout.backups)
+        let data = try Data(contentsOf: layout.legacyWorkspace)
+        let existing = ((try? manager.contentsOfDirectory(atPath: layout.backups.path)) ?? [])
+            .filter { $0.hasPrefix(stem) && $0.hasSuffix(".json") }
+            .map { layout.backups.appendingPathComponent($0) }
+        if let same = existing.first(where: { (try? Data(contentsOf: $0)) == data }) { return same }
+        var target = layout.backups.appendingPathComponent("\(stem)-\(Self.stamp(clock())).json")
+        var attempt = 2
+        while manager.fileExists(atPath: target.path) {
+            target = layout.backups.appendingPathComponent("\(stem)-\(Self.stamp(clock()))-\(attempt).json")
+            attempt += 1
+        }
+        try AtomicFile.write(data, to: target)
+        return target
+    }
+
+    /// İki workspace'in kalıcı içeriği aynı mı; değilse farkın kısa tarifi.
+    static func difference(_ a: WorkspaceModel, _ b: WorkspaceModel) -> String? {
+        if a.collections.map(\.id) != b.collections.map(\.id) { return "collections" }
+        if a.collections.flatMap({ $0.requests.map(\.id) }) != b.collections.flatMap({ $0.requests.map(\.id) }) { return "requests" }
+        if a.environments.map(\.id) != b.environments.map(\.id) { return "environments" }
+        if a.activeEnvironmentID != b.activeEnvironmentID { return "activeEnvironment" }
+        guard let left = try? encode(a), let right = try? encode(b) else { return "encode" }
+        return left == right ? nil : "content"
+    }
+}
+
+/// Şema yükseltmeleri. Şema 1 → 2 dosya yapısının değişimi (`migrateLegacy`);
+/// bundan sonraki her sürüm buraya bir adım olarak eklenir.
+enum StoreMigrations {
+    static func upgrade(_ manifest: inout StoreManifest) {
+        // Şimdilik tek şema (2). Yeni sürümde: `if manifest.schemaVersion < 3 { …; manifest.schemaVersion = 3 }`
+        manifest.schemaVersion = max(manifest.schemaVersion, StoreManifest.currentSchema)
     }
 }

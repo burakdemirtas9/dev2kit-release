@@ -280,7 +280,7 @@ final class AppState {
     let engine = RequestEngine()
     /// `private` değil: `AppState+History` uzantısı da kullanıyor.
     /// Uzantılar aynı modülde; dışarıya kapalılık modül sınırında korunuyor.
-    let historyStore = HistoryStore()
+    let historyStore = HistoryStore(queue: PersistenceQueue.shared)
     let approvalStore = SecurityApprovalStore()
 
     /// Yönetici politikası her kullanımda diskten okunur: yönetici dosyayı
@@ -303,12 +303,13 @@ final class AppState {
 
     private static let historySettingsKey = "historySettings"
 
-    // FileSecretStore: imzasız dev binary'si Keychain'i her rebuild'de parola
-    // sorduruyordu; imzalı dağıtımda KeychainSecretStore'a dönülebilir.
-    init(store: WorkspaceStore = WorkspaceStore(), secretStore: SecretStore = FileSecretStore()) {
+    /// `secretStore` verilmezse Keychain (bkz. `defaultSecretStore`). Testler
+    /// her zaman kendi deposunu verir: kullanıcının Keychain'ine dokunulmaz.
+    init(store: WorkspaceStore = WorkspaceStore(), secretStore: SecretStore? = nil) {
         self.store = store
-        self.saver = WorkspaceSaver(store: store)
-        self.secretStore = secretStore
+        self.saver = WorkspaceSaver(store: store, queue: PersistenceQueue.shared)
+        let secrets = secretStore.map { ($0, nil as ResultMessage?, nil as String?) } ?? Self.defaultSecretStore()
+        self.secretStore = secrets.0
         let collapsedStrings = UserDefaults.standard.stringArray(forKey: Self.collapsedKey) ?? []
         self.collapsedCollectionIDs = Set(collapsedStrings.compactMap(UUID.init(uuidString:)))
         let savedSettings = UserDefaults.standard.data(forKey: Self.historySettingsKey)
@@ -320,35 +321,23 @@ final class AppState {
         savedMode.apply()
         self.trustStoreAllowsLongValidity = UserDefaults.standard.bool(forKey: Self.trustStoreLongValidityKey)
         do {
-            self.workspace = try store.load()
+            let opened = try store.open()
+            self.workspace = opened.workspace
+            self.startupMessage = Self.startupMessage(for: opened.notices)
         } catch {
-            // Boş workspace ile devam edilir; aşağıdaki ilk kayıt dosyanın
-            // üzerine yazacağı için bozuk dosya ÖNCE yedeklenir. Yedek
-            // alınamazsa bu oturumda hiç yazılmaz: veri ezilmektense
-            // değişiklikler kaydedilmesin.
+            // Daha yeni şema, tamamlanamayan işlem ya da doğrulanamayan geçiş:
+            // diskteki veri ezilmesin diye bu oturumda hiç yazılmaz.
             self.workspace = WorkspaceModel()
-            do {
-                let backup = try store.backUpUnreadableFile()
-                self.startupMessage = ResultMessage(
-                    kind: .warning,
-                    title: L10n.t("startup.unreadable.title"),
-                    message: L10n.t("startup.unreadable.message"),
-                    lines: [
-                        MessageLine(.info, L10n.t("startup.unreadable.backup", backup.path)),
-                        MessageLine(.info, L10n.t("startup.unreadable.reason", error.localizedDescription)),
-                    ],
-                    revealURL: backup
-                )
-            } catch let backupError {
-                self.persistenceBlocked = true
-                self.startupMessage = ResultMessage(
-                    kind: .error,
-                    title: L10n.t("startup.blocked.title"),
-                    message: L10n.t("startup.blocked.message", error.localizedDescription, backupError.localizedDescription, store.fileURL.path),
-                    revealURL: store.fileURL
-                )
-            }
+            self.persistenceBlocked = true
+            self.startupMessage = ResultMessage(
+                kind: .error,
+                title: L10n.t("startup.blocked.title"),
+                message: error.localizedDescription,
+                revealURL: store.layout.root
+            )
         }
+        if let failure = secrets.1 { startupMessage = startupMessage ?? failure }
+        if let migrated = secrets.2 { startupMessage = Self.adding(MessageLine(.info, migrated), to: startupMessage) }
         if workspace.collections.isEmpty {
             workspace.collections = [CollectionModel(name: L10n.t("collection.first"), requests: [RequestModel(name: L10n.t("request.newName"))])]
             persist()

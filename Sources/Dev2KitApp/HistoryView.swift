@@ -41,8 +41,13 @@ struct HistoryView: View {
         }
     }
 
+    /// Seçili kaydın tamamı (yanıt önizlemesi, istek gövdesi). Liste yalnızca
+    /// dizini tutar; içerik seçilince arka planda okunur.
+    @State private var loadedEntry: HistoryEntry?
+
     private var selectedEntry: HistoryEntry? {
-        appState.history.first { $0.id == selectedEntryID }
+        if let loadedEntry, loadedEntry.id == selectedEntryID { return loadedEntry }
+        return appState.history.first { $0.id == selectedEntryID }
     }
 
     var body: some View {
@@ -71,6 +76,11 @@ struct HistoryView: View {
         .onAppear {
             appState.reloadHistory()
             selectedEntryID = appState.history.first?.id
+        }
+        .task(id: selectedEntryID) {
+            guard let id = selectedEntryID else { loadedEntry = nil; return }
+            let entry = await appState.loadHistoryEntry(id)
+            if selectedEntryID == id { loadedEntry = entry }
         }
         .sheet(isPresented: $showingSettings) {
             HistorySettingsView()

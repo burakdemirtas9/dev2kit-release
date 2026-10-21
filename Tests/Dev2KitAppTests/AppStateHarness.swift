@@ -28,7 +28,7 @@ final class AppStateHarness {
         setenv(AppPaths.directoryEnvironmentKey, directory.path, 1)
         Self.defaultsKeys.forEach { UserDefaults.standard.removeObject(forKey: $0) }
 
-        store = WorkspaceStore(fileURL: directory.appendingPathComponent("workspace.json"))
+        store = WorkspaceStore(directory: directory)
         state = AppState(store: store, secretStore: FileSecretStore())
     }
 

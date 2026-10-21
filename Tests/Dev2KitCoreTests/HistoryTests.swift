@@ -192,15 +192,29 @@ final class HistoryStoreTests: XCTestCase {
 
     func testPersistsAcrossInstances() {
         store.append(entry(name: "Kalıcı"), settings: .default)
+        store.waitForPendingWrites()
         let second = HistoryStore(directory: directory)
         XCTAssertEqual(second.entries().first?.requestName, "Kalıcı")
     }
 
     func testStoredFileIsEncrypted() throws {
-        store.append(entry(name: "GizliIstekAdi"), settings: .default)
-        let raw = try Data(contentsOf: directory.appendingPathComponent("history.enc"))
-        let text = String(decoding: raw, as: UTF8.self)
-        XCTAssertFalse(text.contains("GizliIstekAdi"), "geçmiş diske düz metin yazılmamalı")
+        var secret = entry(name: "GizliIstekAdi")
+        secret = HistoryEntry(requestID: nil, requestName: "GizliIstekAdi", collectionName: nil, environmentName: nil,
+                              method: .post, url: "https://a.example.com", outcome: secret.outcome,
+                              snapshot: RequestModel(body: .raw(content: "GizliGovde", contentType: "text/plain")),
+                              responsePreview: "GizliYanit")
+        store.append(secret, settings: .default)
+        store.waitForPendingWrites()
+        let files = try XCTUnwrap(FileManager.default.subpaths(atPath: directory.path))
+            .map { directory.appendingPathComponent($0) }
+            .filter { !$0.hasDirectoryPath && $0.pathExtension == "enc" }
+        XCTAssertEqual(files.count, 2, "dizin + içerik dosyası")
+        for file in files {
+            let text = String(decoding: try Data(contentsOf: file), as: UTF8.self)
+            for word in ["GizliIstekAdi", "GizliGovde", "GizliYanit"] {
+                XCTAssertFalse(text.contains(word), "geçmiş diske düz metin yazılmamalı: \(file.lastPathComponent)")
+            }
+        }
     }
 
     func testCountRetentionPrunes() {
@@ -458,5 +472,127 @@ final class HistoryTrimmerTests: XCTestCase {
         let settings = try JSONDecoder().decode(HistorySettings.self, from: Data(json.utf8))
         XCTAssertEqual(settings.maxSnapshotBodyBytes, 32_768)
         XCTAssertEqual(settings.maxTotalBytes, 10 * 1024 * 1024)
+    }
+}
+
+/// Geçmiş dizin + içerik dosyaları (2026-10-21): liste içeriksiz yüklenir,
+/// eski tek dosya taşınır, bozuk dizin silinmez, sahipsiz içerik temizlenir.
+final class HistoryLayoutTests: XCTestCase {
+    private var directory: URL!
+    private let manager = FileManager.default
+
+    override func setUpWithError() throws {
+        directory = manager.temporaryDirectory.appendingPathComponent("dev2kit-history2-\(UUID().uuidString)")
+        try manager.createDirectory(at: directory, withIntermediateDirectories: true)
+    }
+
+    override func tearDownWithError() throws {
+        try? manager.removeItem(at: directory)
+    }
+
+    private func entry(_ name: String, preview: String? = "yanıt", body: String = "{\"a\":1}", date: Date = Date()) -> HistoryEntry {
+        HistoryEntry(date: date, requestID: UUID(), requestName: name, collectionName: nil, environmentName: nil,
+                     method: .post, url: "https://api.example.test/x",
+                     outcome: .completed(status: 200, duration: 0.1, byteCount: 10, redirectCount: 0),
+                     snapshot: RequestModel(name: name, body: .raw(content: body, contentType: "application/json")),
+                     responsePreview: preview)
+    }
+
+    private var bodies: URL { directory.appendingPathComponent("history/bodies") }
+
+    func testListIsLoadedWithoutPayloadsAndDetailHasThem() throws {
+        let store = HistoryStore(directory: directory)
+        let original = entry("Detay", preview: "uzun yanıt", body: "{\"gövde\":true}")
+        store.append(original, settings: .default)
+        store.waitForPendingWrites()
+
+        let reopened = HistoryStore(directory: directory)
+        let listed = try XCTUnwrap(reopened.entries().first)
+        XCTAssertNil(listed.responsePreview, "liste önizlemeyi taşımaz")
+        XCTAssertEqual(listed.snapshot.body, .none, "liste istek gövdesini taşımaz")
+        let full = try XCTUnwrap(reopened.fullEntry(id: original.id))
+        XCTAssertEqual(full, original)
+    }
+
+    func testLegacySingleFileIsMigratedAndKeptAsBackup() throws {
+        let legacy = (0..<5).map { entry("Eski \($0)", date: Date().addingTimeInterval(Double(-$0))) }
+        try EncryptedJSONFile<[HistoryEntry]>(fileURL: directory.appendingPathComponent("history.enc"),
+                                             keyURL: directory.appendingPathComponent(".history.key")).save(legacy)
+        let store = HistoryStore(directory: directory)
+        XCTAssertEqual(store.entries().map(\.id), legacy.map(\.id))
+        XCTAssertEqual(store.fullEntry(id: legacy[2].id), legacy[2])
+        XCTAssertFalse(manager.fileExists(atPath: directory.appendingPathComponent("history.enc").path))
+        XCTAssertTrue(manager.fileExists(atPath: directory.appendingPathComponent("history.v1.enc").path), "eski dosya yedekte")
+        // Yeniden açılış yeniden taşımaz, kayıt çoğalmaz.
+        XCTAssertEqual(HistoryStore(directory: directory).entries().count, 5)
+    }
+
+    func testCorruptIndexIsSetAsideAndPreviousIndexIsUsed() throws {
+        let store = HistoryStore(directory: directory)
+        store.append(entry("Bir"), settings: .default)
+        store.waitForPendingWrites()
+        store.append(entry("İki"), settings: .default)
+        store.waitForPendingWrites()
+        let index = directory.appendingPathComponent("history/index.enc")
+        try Data("bozuk".utf8).write(to: index)
+
+        let reopened = HistoryStore(directory: directory)
+        XCTAssertEqual(reopened.entries().map(\.requestName), ["Bir"], "önceki sağlam dizin")
+        let aside = try XCTUnwrap(reopened.recoveryNotice)
+        XCTAssertEqual(try Data(contentsOf: aside), Data("bozuk".utf8), "bozuk dizin silinmez, kenara alınır")
+    }
+
+    func testOrphanPayloadsAreRemovedAndReferencedOnesKept() throws {
+        let store = HistoryStore(directory: directory)
+        let kept = entry("Kalan")
+        store.append(kept, settings: .default)
+        store.waitForPendingWrites()
+        let orphan = bodies.appendingPathComponent("\(UUID().uuidString).enc")
+        try Data("sahipsiz".utf8).write(to: orphan)
+
+        let reopened = HistoryStore(directory: directory)
+        _ = reopened.entries()
+        reopened.waitForPendingWrites()
+        XCTAssertFalse(manager.fileExists(atPath: orphan.path))
+        XCTAssertNotNil(reopened.fullEntry(id: kept.id)?.responsePreview)
+    }
+
+    func testPrunedEntriesLoseTheirPayloadFiles() throws {
+        let store = HistoryStore(directory: directory)
+        let settings = HistorySettings(retentionCount: 2)
+        let first = entry("1", date: Date().addingTimeInterval(-3))
+        for item in [first, entry("2", date: Date().addingTimeInterval(-2)), entry("3", date: Date().addingTimeInterval(-1))] {
+            store.append(item, settings: settings)
+        }
+        store.waitForPendingWrites()
+        XCTAssertEqual(store.entries().count, 2)
+        XCTAssertFalse(manager.fileExists(atPath: bodies.appendingPathComponent("\(first.id.uuidString).enc").path))
+        XCTAssertEqual(try manager.contentsOfDirectory(atPath: bodies.path).count, 2)
+    }
+
+    func testSizeBudgetCountsPayloads() throws {
+        let store = HistoryStore(directory: directory)
+        let settings = HistorySettings(maxTotalBytes: 1_000_000)
+        let big = String(repeating: "x", count: 400_000)
+        for index in 0..<5 { store.append(entry("\(index)", preview: big, date: Date().addingTimeInterval(Double(index))), settings: settings) }
+        store.waitForPendingWrites()
+        XCTAssertEqual(store.entries().count, 2, "içerik boyutu bütçeye sayılır")
+    }
+
+    /// Büyük geçmiş: liste yalnızca dizini okur; dizin içeriklerin yanında küçük kalır.
+    func testLargeHistoryListStaysSmallAndFast() throws {
+        let preview = String(repeating: "yanıt gövdesi ", count: 1_400) // ~20 KB
+        let legacy = (0..<1_000).map { entry("İstek \($0)", preview: preview, date: Date().addingTimeInterval(Double(-$0))) }
+        try EncryptedJSONFile<[HistoryEntry]>(fileURL: directory.appendingPathComponent("history.enc"),
+                                             keyURL: directory.appendingPathComponent(".history.key")).save(legacy)
+        _ = HistoryStore(directory: directory).entries() // taşı
+
+        let start = Date()
+        let reopened = HistoryStore(directory: directory)
+        XCTAssertEqual(reopened.entries().count, 1_000)
+        XCTAssertLessThan(Date().timeIntervalSince(start), 1.0, "liste içerik okumadan açılmalı")
+        let indexSize = try XCTUnwrap(manager.attributesOfItem(atPath: directory.appendingPathComponent("history/index.enc").path)[.size] as? Int)
+        XCTAssertLessThan(indexSize, reopened.fileSizeBytes() / 10, "dizin, içeriklerin yanında küçük")
+        XCTAssertEqual(reopened.fullEntry(id: legacy[500].id)?.responsePreview, preview)
     }
 }

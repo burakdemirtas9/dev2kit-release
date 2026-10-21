@@ -158,10 +158,14 @@ final class TLSSuggestionTests: XCTestCase {
         state.declineTLSSuggestion()
         state.waitForPendingWrites()
 
-        // Diske yazılan workspace'te reddin izi olmamalı.
-        let data = try Data(contentsOf: harness.directory.appendingPathComponent("workspace.json"))
-        let text = String(decoding: data, as: UTF8.self)
-        XCTAssertFalse(text.contains("api.firmaadi.local"), "ret kalıcı kaydedilmiş")
+        // Diske yazılan workspace dosyalarının hiçbirinde reddin izi olmamalı.
+        let store = harness.store.layout.store
+        let files = try XCTUnwrap(FileManager.default.subpaths(atPath: store.path)).filter { $0.hasSuffix(".json") }
+        XCTAssertFalse(files.isEmpty)
+        for file in files {
+            let text = String(decoding: try Data(contentsOf: store.appendingPathComponent(file)), as: UTF8.self)
+            XCTAssertFalse(text.contains("api.firmaadi.local"), "ret kalıcı kaydedilmiş: \(file)")
+        }
     }
 
     // MARK: "Profili Aç"

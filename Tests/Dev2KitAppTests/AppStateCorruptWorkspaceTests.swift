@@ -2,7 +2,7 @@ import XCTest
 @testable import Dev2KitApp
 @testable import Dev2KitCore
 
-/// Okunamayan workspace.json: uyarı gösterilirken veri ezilmiş olmamalı.
+/// Okunamayan şema 1 workspace.json: uyarı gösterilirken veri ezilmiş olmamalı.
 @MainActor
 final class AppStateCorruptWorkspaceTests: XCTestCase {
     /// Beklenen mesajlar Türkçe.
@@ -16,18 +16,18 @@ final class AppStateCorruptWorkspaceTests: XCTestCase {
         directory = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("dev2kit-test-\(UUID())")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         setenv(AppPaths.directoryEnvironmentKey, directory.path, 1)
-        store = WorkspaceStore(fileURL: directory.appendingPathComponent("workspace.json"))
-        try corrupt.write(to: store.fileURL)
+        store = WorkspaceStore(directory: directory)
+        try corrupt.write(to: store.layout.legacyWorkspace)
     }
 
     override func tearDownWithError() throws {
         unsetenv(AppPaths.directoryEnvironmentKey)
-        try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: store.fileURL.path)
+        try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: store.layout.legacyWorkspace.path)
         try? FileManager.default.removeItem(at: directory)
     }
 
     private func backups() throws -> [URL] {
-        try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+        ((try? FileManager.default.contentsOfDirectory(at: store.layout.backups, includingPropertiesForKeys: nil)) ?? [])
             .filter { $0.lastPathComponent.hasPrefix("workspace.bozuk-") }
     }
 
@@ -57,7 +57,7 @@ final class AppStateCorruptWorkspaceTests: XCTestCase {
     func testWhenBackupFailsNothingIsWritten() throws {
         // Okuma izni yok: hem okuma hem yedek başarısız. Dosyanın üzerine
         // yazmak tek kopyayı yok ederdi; bu oturumda kayıt kapalı kalmalı.
-        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: store.fileURL.path)
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: store.layout.legacyWorkspace.path)
         let state = AppState(store: store, secretStore: FileSecretStore())
         state.addRequestToCurrentCollection()
         state.waitForPendingWrites()
@@ -65,8 +65,8 @@ final class AppStateCorruptWorkspaceTests: XCTestCase {
         XCTAssertTrue(state.persistenceBlocked)
         XCTAssertEqual(state.startupMessage?.kind, .error)
         XCTAssertTrue(state.startupMessage?.title.contains("kaydedilmeyecek") == true)
-        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: store.fileURL.path)
-        XCTAssertEqual(try Data(contentsOf: store.fileURL), corrupt, "dosyanın üzerine yazılmamalıydı")
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: store.layout.legacyWorkspace.path)
+        XCTAssertEqual(try Data(contentsOf: store.layout.legacyWorkspace), corrupt, "dosyanın üzerine yazılmamalıydı")
         XCTAssertTrue(try backups().isEmpty)
     }
 }

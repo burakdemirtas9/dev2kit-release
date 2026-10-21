@@ -17,6 +17,12 @@ extension AppState {
         reloadHistory()
     }
 
+    /// Kaydın tamamı (içerik dosyası arka planda okunur).
+    func loadHistoryEntry(_ id: UUID) async -> HistoryEntry? {
+        let store = historyStore
+        return await Task.detached(priority: .userInitiated) { store.fullEntry(id: id) }.value
+    }
+
     func deleteHistoryEntry(_ id: UUID) {
         historyStore.delete(id: id)
         reloadHistory()
@@ -27,8 +33,10 @@ extension AppState {
     /// çalışan bir kimlik bilgisini sessizce bozardı.
     func restore(_ entry: HistoryEntry) -> Bool {
         guard let requestID = entry.requestID else { return false }
+        // Listedeki kayıt içeriksiz; gövde içerik dosyasından.
+        let full = historyStore.fullEntry(id: entry.id) ?? entry
         let restored = withRequest(requestID) { request in
-            request = HistoryRestore.apply(entry.snapshot, to: request)
+            request = HistoryRestore.apply(full.snapshot, to: request)
             return request.id
         }
         guard let id = restored else { return false }
@@ -39,7 +47,7 @@ extension AppState {
 
     /// Geçmişteki isteği yeni bir istek olarak ekler (silinmiş isteği kurtarmak için).
     func restoreAsNewRequest(_ entry: HistoryEntry, to collectionID: UUID) {
-        var snapshot = entry.snapshot
+        var snapshot = (historyStore.fullEntry(id: entry.id) ?? entry).snapshot
         snapshot.name = entry.requestName
         addImportedRequest(snapshot, to: collectionID)
     }

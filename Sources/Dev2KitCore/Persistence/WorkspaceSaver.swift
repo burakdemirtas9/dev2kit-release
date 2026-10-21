@@ -1,6 +1,13 @@
 import Foundation
 
-/// workspace.json yazımını arka plana alan SERİ yazıcı.
+/// Uygulamanın tüm kalıcı yazımlarını sıralayan tek seri kuyruk: workspace
+/// kayıtları ve geçmiş aynı sırada diske gider (iki yazıcı aynı anda diske
+/// yüklenmez, kapanışta tek bekleme yeter).
+public enum PersistenceQueue {
+    public static let shared = DispatchQueue(label: "com.dev2kit.persistence", qos: .userInitiated)
+}
+
+/// Workspace yazımını arka plana alan SERİ yazıcı.
 ///
 /// Neden var: `WorkspaceStore.save` tüm workspace'i encode edip diske yazıyor.
 /// Bu iş MainActor'da yapılınca 100+ istekli bir workspace'te her yazımda
@@ -16,6 +23,13 @@ public final class WorkspaceSaver: @unchecked Sendable {
     public init(store: WorkspaceStore, label: String = "com.dev2kit.workspace-save") {
         self.store = store
         self.queue = DispatchQueue(label: label, qos: .userInitiated)
+    }
+
+    /// Ortak kuyrukla: workspace ve geçmiş yazımları tek sırada (bkz.
+    /// `PersistenceQueue`).
+    public init(store: WorkspaceStore, queue: DispatchQueue) {
+        self.store = store
+        self.queue = queue
     }
 
     /// Anlık görüntüyü sıraya alır ve hemen döner.

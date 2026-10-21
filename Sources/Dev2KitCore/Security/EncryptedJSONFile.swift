@@ -42,12 +42,8 @@ struct EncryptedJSONFile<Value: Codable>: Sendable {
         let plain = try JSONEncoder().encode(value)
         let sealed = try AES.GCM.seal(plain, using: loadKey())
         guard let combined = sealed.combined else { throw FileError.encodingFailed }
-        try FileManager.default.createDirectory(
-            at: fileURL.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-        try combined.write(to: fileURL, options: .atomic)
-        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: fileURL.path)
+        // 0600 geçici dosya → fsync → rename (bkz. `AtomicFile`).
+        try AtomicFile.write(combined, to: fileURL)
     }
 
     func deleteFile() throws {

@@ -5,13 +5,11 @@ import XCTest
 /// iner (kapanışta bekleyince) ve seri kuyruk sayesinde SON çağrı son yazımdır.
 final class WorkspaceSaverTests: XCTestCase {
     private var directory: URL!
-    private var fileURL: URL!
 
     override func setUpWithError() throws {
         directory = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("dev2kit-saver-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        fileURL = directory.appendingPathComponent("workspace.json")
     }
 
     override func tearDownWithError() throws {
@@ -25,27 +23,27 @@ final class WorkspaceSaverTests: XCTestCase {
     }
 
     func testWaitForPendingWritesFlushesToDisk() throws {
-        let saver = WorkspaceSaver(store: WorkspaceStore(fileURL: fileURL))
+        let saver = WorkspaceSaver(store: WorkspaceStore(directory: directory))
         saver.save(workspace(collectionName: "ilk"))
         saver.waitForPendingWrites()
 
-        let saved = try WorkspaceStore(fileURL: fileURL).load()
+        let saved = try WorkspaceStore(directory: directory).load()
         XCTAssertEqual(saved.collections.first?.name, "ilk")
     }
 
     func testLastWriteWins() throws {
-        let saver = WorkspaceSaver(store: WorkspaceStore(fileURL: fileURL))
+        let saver = WorkspaceSaver(store: WorkspaceStore(directory: directory))
         for index in 1...20 {
             saver.save(workspace(collectionName: "yazim-\(index)"))
         }
         saver.waitForPendingWrites()
 
-        let saved = try WorkspaceStore(fileURL: fileURL).load()
+        let saved = try WorkspaceStore(directory: directory).load()
         XCTAssertEqual(saved.collections.first?.name, "yazim-20")
     }
 
     func testSaveDoesNotBlockCaller() {
-        let saver = WorkspaceSaver(store: WorkspaceStore(fileURL: fileURL))
+        let saver = WorkspaceSaver(store: WorkspaceStore(directory: directory))
         let done = expectation(description: "yazim tamamlandi")
         saver.save(workspace(collectionName: "async")) { error in
             XCTAssertNil(error)

@@ -75,5 +75,77 @@ extension AppState {
     func waitForPendingWrites() {
         flushPendingWrites()
         saver.waitForPendingWrites()
+        historyStore.waitForPendingWrites()
+    }
+
+    /// Açılış bildirimleri tek mesajda: en ağır olanı başlık, hepsi satır.
+    /// Hiçbir kurtarma sessiz değil.
+    static func startupMessage(for notices: [StoreNotice]) -> ResultMessage? {
+        var head: (kind: MessageKind, title: String, text: String, reveal: URL?)?
+        var lines: [MessageLine] = []
+        func set(_ kind: MessageKind, _ title: String, _ text: String, reveal: URL?) {
+            // Daha ağır olan (uyarı > bilgi) başlığı belirler.
+            if head == nil || (kind == .warning && head?.kind != .warning) {
+                head = (kind, title, text, reveal)
+            }
+        }
+        for notice in notices {
+            switch notice {
+            case .migrated(let backup):
+                set(.info, L10n.t("store.migrated.title"), L10n.t("store.migrated.message"), reveal: backup)
+                lines.append(MessageLine(.info, L10n.t("store.backup", backup.path)))
+            case .recoveredInterruptedSave:
+                set(.info, L10n.t("store.recovered.title"), L10n.t("store.recovered.message"), reveal: nil)
+            case .restoredFromBackup(let backup, let quarantine):
+                set(.warning, L10n.t("store.restored.title"), L10n.t("store.restored.message"), reveal: quarantine)
+                lines.append(MessageLine(.info, L10n.t("store.backup", backup.path)))
+                lines.append(MessageLine(.info, L10n.t("store.quarantine", quarantine.path)))
+            case .partiallyLoaded(let lost, let quarantine):
+                set(.warning, L10n.t("store.partial.title"), L10n.t("store.partial.message", lost.joined(separator: ", ")), reveal: quarantine)
+                lines.append(MessageLine(.info, L10n.t("store.quarantine", quarantine.path)))
+            case .legacyUnreadable(let backup, let reason):
+                set(.warning, L10n.t("startup.unreadable.title"), L10n.t("startup.unreadable.message"), reveal: backup)
+                lines.append(MessageLine(.info, L10n.t("startup.unreadable.backup", backup.path)))
+                lines.append(MessageLine(.info, L10n.t("startup.unreadable.reason", reason)))
+            }
+        }
+        guard let head else { return nil }
+        return ResultMessage(kind: head.kind, title: head.title, message: head.text, lines: lines, revealURL: head.reveal)
+    }
+
+    /// Secret deposu.
+    ///
+    /// Kurumsal ortamda parola, yönetici ya da erişim onayı isteyen akış YOK
+    /// (kullanıcı kararı, 2026-10-21). Keychain, uygulamayı imzasıyla tanıdığı
+    /// için kimliği her güncellemede değişen (ad-hoc) derlemede parola sorar.
+    /// Bu yüzden:
+    /// - Ekip kimlikli imza (Developer ID): Keychain; eski şifreli dosya
+    ///   doğrulanarak taşınır, başarısızsa dosya yerinde kalır.
+    /// - Diğer her derleme: şifreli dosya deposu (`FileSecretStore`), soru yok.
+    static func defaultSecretStore() -> (SecretStore, ResultMessage?, String?) {
+        guard CodeSigningStatus.hasTeamIdentity else { return (FileSecretStore(), nil, nil) }
+        let keychain = KeychainSecretStore()
+        let directory = AppPaths.supportDirectory
+        guard SecretMigration.isPending(legacyDirectory: directory) else { return (keychain, nil, nil) }
+        do {
+            let report = try SecretMigration.migrate(legacyDirectory: directory, to: keychain)
+            return (keychain, nil, report.map { L10n.t("secrets.migrated", String($0.migrated)) })
+        } catch {
+            let message = ResultMessage(
+                kind: .warning,
+                title: L10n.t("secrets.migrationFailed.title"),
+                message: L10n.t("secrets.migrationFailed.message", error.localizedDescription)
+            )
+            return (FileSecretStore(), message, nil)
+        }
+    }
+
+    /// Mesaja satır ekler; mesaj yoksa bilgi mesajı kurar.
+    static func adding(_ line: MessageLine, to message: ResultMessage?) -> ResultMessage {
+        guard let message else {
+            return ResultMessage(kind: .info, title: L10n.t("store.migrated.title"), lines: [line])
+        }
+        return ResultMessage(kind: message.kind, title: message.title, message: message.message,
+                             lines: message.lines + [line], revealURL: message.revealURL)
     }
 }

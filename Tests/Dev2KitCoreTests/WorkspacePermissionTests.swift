@@ -11,12 +11,18 @@ final class WorkspacePermissionTests: XCTestCase {
     func testWorkspaceFileAndDirectoryArePrivate() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("dev2kit-perm-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: directory) }
-        let store = WorkspaceStore(fileURL: directory.appendingPathComponent("workspace.json"))
-        try store.save(WorkspaceModel())
-        XCTAssertEqual(try permissions(store.fileURL.path), 0o600)
-        XCTAssertEqual(try permissions(directory.path), 0o700)
+        let store = WorkspaceStore(directory: directory)
+        let collection = CollectionModel(name: "A")
+        try store.save(WorkspaceModel(collections: [collection]))
+        let collectionFile = store.layout.store.appendingPathComponent(StoreLayout.collectionPath(collection.id)).path
+        for file in [store.layout.manifest.path, collectionFile] {
+            XCTAssertEqual(try permissions(file), 0o600, file)
+        }
+        for folder in [directory.path, store.layout.store.path] {
+            XCTAssertEqual(try permissions(folder), 0o700, folder)
+        }
         // Yeniden yazımda da korunur (atomik yazım dosyayı yeniden oluşturur).
-        try store.save(WorkspaceModel())
-        XCTAssertEqual(try permissions(store.fileURL.path), 0o600)
+        try store.save(WorkspaceModel(collections: [CollectionModel(id: collection.id, name: "B")]))
+        XCTAssertEqual(try permissions(collectionFile), 0o600)
     }
 }

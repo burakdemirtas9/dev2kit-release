@@ -155,7 +155,7 @@ final class AppStateTokenMigrationTests: XCTestCase {
             try? FileManager.default.removeItem(at: directory)
         }
 
-        let store = WorkspaceStore(fileURL: directory.appendingPathComponent("workspace.json"))
+        let store = WorkspaceStore(directory: directory)
         let env = EnvironmentModel(name: "Dev", tokenVariables: [
             TokenVariable(name: "accessToken", tokenURL: "https://auth/token", clientID: "c", clientSecret: "{{secret:s}}"),
         ])
