@@ -25,7 +25,6 @@ struct RequestDetailView: View {
         let stored = UserDefaults.standard.double(forKey: RequestDetailView.responseHeightKey)
         return stored >= RequestDetailView.minResponseHeight ? CGFloat(stored) : 0
     }()
-    @State private var isHoveringDivider = false
 
     /// Pencereye sığdırılmış yanıt yüksekliği.
     private func effectiveResponseHeight(total: CGFloat) -> CGFloat {
@@ -90,22 +89,8 @@ struct RequestDetailView: View {
                 .fill(Color(nsColor: .separatorColor))
                 .frame(height: 1)
         }
-        // push/pop dengesiz kalırsa imleç yığını bozuluyor; bayrakla eşleşiyor.
-        .onHover { hovering in
-            guard hovering != isHoveringDivider else { return }
-            isHoveringDivider = hovering
-            if hovering {
-                NSCursor.resizeUpDown.push()
-            } else {
-                NSCursor.pop()
-            }
-        }
-        .onDisappear {
-            if isHoveringDivider {
-                isHoveringDivider = false
-                NSCursor.pop()
-            }
-        }
+        // İmleç cursor rect ile (push/pop bayat imleci geri yüklüyordu).
+        .cursorRegion(.resizeUpDown)
         // Konteynerdeki mutlak konum kullanılıyor: translation, ayraç
         // sürüklendikçe kendi koordinat uzayı kaydığı için geri besleme
         // yapıp titremeye yol açıyor (sidebar ayracında da böyle).

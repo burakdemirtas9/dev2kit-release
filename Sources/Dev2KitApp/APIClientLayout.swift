@@ -21,7 +21,6 @@ struct APIClientLayout: View {
         let stored = UserDefaults.standard.double(forKey: APIClientLayout.sidebarWidthKey)
         return stored >= APIClientLayout.minSidebarWidth ? CGFloat(stored) : APIClientLayout.minSidebarWidth
     }()
-    @State private var isHoveringDivider = false
 
     /// Genişlik sınırları: alt 220, üst içerik genişliği — ve detay paneline
     /// en az 480px kalacak şekilde pencereye göre kırpılır.
@@ -68,23 +67,8 @@ struct APIClientLayout: View {
             // Görünür çizgi yok: kenar çubuğu camlı zeminiyle ayrışıyor
             // (Workbench'teki gibi, 2026-10-20). Sürükleme alanı duruyor.
         }
-        // push/pop dengesiz kalırsa imleç yığını bozuluyor (ayraç üstündeyken
-        // pencere değişince "pop" gelmeyebiliyor); bayrakla eşleştiriliyor.
-        .onHover { hovering in
-            guard hovering != isHoveringDivider else { return }
-            isHoveringDivider = hovering
-            if hovering {
-                NSCursor.resizeLeftRight.push()
-            } else {
-                NSCursor.pop()
-            }
-        }
-        .onDisappear {
-            if isHoveringDivider {
-                isHoveringDivider = false
-                NSCursor.pop()
-            }
-        }
+        // İmleç cursor rect ile (push/pop bayat imleci geri yüklüyordu).
+        .cursorRegion(.resizeLeftRight)
         // translation yerine konteynerdeki mutlak konum kullanılıyor: ayraç
         // sürüklendikçe kendi koordinat uzayı da kaydığı için translation
         // geri besleme yapıp titremeye yol açıyordu.

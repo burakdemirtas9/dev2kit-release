@@ -58,16 +58,10 @@ struct InlineActionLink: View {
         .focusEffectDisabled()
         .onKeyPress(.return) { action(); return .handled }
         .onKeyPress(.space) { action(); return .handled }
-        .onHover { inside in
-            guard inside != hovering else { return }
-            hovering = inside
-            if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-        }
-        // İmleç üstündeyken görünüm kalkarsa el imleci takılı kalmasın.
-        .onDisappear {
-            if hovering { NSCursor.pop() }
-            hovering = false
-        }
+        .onHover { hovering = $0 }
+        // El imleci bağlantının sınırlarında, cursor rect ile: push/pop
+        // bayat imleci (ör. I-beam) geri yüklüyordu.
+        .cursorRegion(.pointingHand)
         .accessibilityLabel(title)
         .accessibilityAddTraits(.isButton)
     }

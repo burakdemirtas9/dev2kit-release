@@ -194,6 +194,13 @@ struct ContentView: View {
                     .modeLayer(visible: !appState.isAPIClient)
             }
         }
+        // Gizli moddaki metin alanları AppKit'te de gizlenir: saydam olsalar da
+        // imleç alanları çalışıyor, öteki modun üstüne I-beam yayıyordu.
+        .background {
+            HiddenModeCursorGuardView(mode: appState.mode, keepsAPIClient: keepsAPIClient, keepsWorkbench: keepsWorkbench)
+                .frame(width: 0, height: 0)
+                .accessibilityHidden(true)
+        }
         .onChange(of: appState.mode, initial: true) { _, mode in
             if mode == .apiClient { keepsAPIClient = true } else { keepsWorkbench = true }
             if toolbarShowsAPIClient == nil {
