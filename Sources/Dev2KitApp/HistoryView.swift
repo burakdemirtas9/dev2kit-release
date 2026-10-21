@@ -55,9 +55,11 @@ struct HistoryView: View {
                     .foregroundStyle(Theme.up)
             }
 
-            HSplitView {
-                list.frame(minWidth: 300, idealWidth: 380)
-                detail.frame(minWidth: 280)
+            // İlk açılışta liste ~380 punto (eski idealWidth).
+            SplitPanes(minFirst: 300, minSecond: 280, initialFraction: 380 / 810) {
+                list
+            } second: {
+                detail
             }
             .frame(minHeight: 320)
             .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.quaternary))

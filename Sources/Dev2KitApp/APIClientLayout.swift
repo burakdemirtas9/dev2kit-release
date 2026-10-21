@@ -22,11 +22,16 @@ struct APIClientLayout: View {
         return stored >= APIClientLayout.minSidebarWidth ? CGFloat(stored) : APIClientLayout.minSidebarWidth
     }()
 
+    @State private var dragStartWidth: CGFloat?
+
     /// Genişlik sınırları: alt 220, üst içerik genişliği — ve detay paneline
     /// en az 480px kalacak şekilde pencereye göre kırpılır.
+    private func sidebarUpperBound(totalWidth: CGFloat) -> CGFloat {
+        min(appState.sidebarMaxWidth, totalWidth - 480 - SplitDivider.thickness)
+    }
+
     private func effectiveSidebarWidth(totalWidth: CGFloat) -> CGFloat {
-        let upper = max(Self.minSidebarWidth, min(appState.sidebarMaxWidth, totalWidth - 489))
-        return min(max(sidebarWidth, Self.minSidebarWidth), upper)
+        SplitSizing.clamp(sidebarWidth, lower: Self.minSidebarWidth, upper: sidebarUpperBound(totalWidth: totalWidth))
     }
 
 
@@ -57,30 +62,19 @@ struct APIClientLayout: View {
         }
     }
 
-    /// Sürüklenebilir dikey ayraç: 1px çizgi + 9px görünmez tutma alanı.
-    /// Bırakınca genişlik UserDefaults'a yazılır, sonraki açılışta geri gelir.
+    /// Kenar çubuğu ayracı. Bırakınca genişlik UserDefaults'a yazılır,
+    /// sonraki açılışta geri gelir.
     private func sidebarDivider(totalWidth: CGFloat) -> some View {
-        ZStack {
-            Color.clear
-                .frame(width: 9)
-                .contentShape(Rectangle())
-            // Görünür çizgi yok: kenar çubuğu camlı zeminiyle ayrışıyor
-            // (Workbench'teki gibi, 2026-10-20). Sürükleme alanı duruyor.
+        // Görünür çizgi yalnızca hover/sürüklemede: kenar çubuğu camlı
+        // zeminiyle ayrışıyor (Workbench'teki gibi, 2026-10-20).
+        SplitDivider(axis: .horizontal, showsLineAtRest: false) {
+            dragStartWidth = effectiveSidebarWidth(totalWidth: totalWidth)
+        } onChange: { delta in
+            sidebarWidth = SplitSizing.resized(start: dragStartWidth ?? sidebarWidth, delta: delta,
+                                               lower: Self.minSidebarWidth, upper: sidebarUpperBound(totalWidth: totalWidth))
+        } onEnd: {
+            dragStartWidth = nil
+            UserDefaults.standard.set(Double(sidebarWidth), forKey: Self.sidebarWidthKey)
         }
-        // İmleç cursor rect ile (push/pop bayat imleci geri yüklüyordu).
-        .cursorRegion(.resizeLeftRight)
-        // translation yerine konteynerdeki mutlak konum kullanılıyor: ayraç
-        // sürüklendikçe kendi koordinat uzayı da kaydığı için translation
-        // geri besleme yapıp titremeye yol açıyordu.
-        .gesture(
-            DragGesture(minimumDistance: 1, coordinateSpace: .named(Self.splitSpace))
-                .onChanged { value in
-                    let upper = max(Self.minSidebarWidth, min(appState.sidebarMaxWidth, totalWidth - 489))
-                    sidebarWidth = min(max(value.location.x, Self.minSidebarWidth), upper)
-                }
-                .onEnded { _ in
-                    UserDefaults.standard.set(Double(sidebarWidth), forKey: Self.sidebarWidthKey)
-                }
-        )
     }
 }

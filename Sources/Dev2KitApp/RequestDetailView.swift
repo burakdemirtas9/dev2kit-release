@@ -26,14 +26,17 @@ struct RequestDetailView: View {
         return stored >= RequestDetailView.minResponseHeight ? CGFloat(stored) : 0
     }()
 
-    /// Pencereye sığdırılmış yanıt yüksekliği.
-    private func effectiveResponseHeight(total: CGFloat) -> CGFloat {
-        let upper = max(Self.minResponseHeight, total - Self.minTopHeight - Self.dividerThickness)
-        let wanted = responseHeight > 0 ? responseHeight : total * 0.45
-        return min(max(wanted, Self.minResponseHeight), upper)
+    @State private var dragStartHeight: CGFloat?
+
+    private func responseUpperBound(total: CGFloat) -> CGFloat {
+        total - Self.minTopHeight - SplitDivider.thickness
     }
 
-    private static let dividerThickness: CGFloat = 9
+    /// Pencereye sığdırılmış yanıt yüksekliği.
+    private func effectiveResponseHeight(total: CGFloat) -> CGFloat {
+        let wanted = responseHeight > 0 ? responseHeight : total * 0.45
+        return SplitSizing.clamp(wanted, lower: Self.minResponseHeight, upper: responseUpperBound(total: total))
+    }
 
     /// Dikey bölme ELDE yapılıyor, `VSplitView` ile değil.
     ///
@@ -80,30 +83,17 @@ struct RequestDetailView: View {
 
     private var isTokenFactory: Bool { appState.isTokenFactoryRequest(request.id) }
 
+    /// İstek/yanıt ayracı: aşağı sürükleme yanıtı küçültür.
     private func splitter(total: CGFloat) -> some View {
-        ZStack {
-            Color.clear
-                .frame(height: Self.dividerThickness)
-                .contentShape(Rectangle())
-            Rectangle()
-                .fill(Color(nsColor: .separatorColor))
-                .frame(height: 1)
+        SplitDivider(axis: .vertical) {
+            dragStartHeight = effectiveResponseHeight(total: total)
+        } onChange: { delta in
+            responseHeight = SplitSizing.resized(start: dragStartHeight ?? responseHeight, delta: -delta,
+                                                 lower: Self.minResponseHeight, upper: responseUpperBound(total: total))
+        } onEnd: {
+            dragStartHeight = nil
+            UserDefaults.standard.set(Double(responseHeight), forKey: Self.responseHeightKey)
         }
-        // İmleç cursor rect ile (push/pop bayat imleci geri yüklüyordu).
-        .cursorRegion(.resizeUpDown)
-        // Konteynerdeki mutlak konum kullanılıyor: translation, ayraç
-        // sürüklendikçe kendi koordinat uzayı kaydığı için geri besleme
-        // yapıp titremeye yol açıyor (sidebar ayracında da böyle).
-        .gesture(
-            DragGesture(minimumDistance: 1, coordinateSpace: .named(Self.splitSpace))
-                .onChanged { value in
-                    let upper = max(Self.minResponseHeight, total - Self.minTopHeight - Self.dividerThickness)
-                    responseHeight = min(max(total - value.location.y, Self.minResponseHeight), upper)
-                }
-                .onEnded { _ in
-                    UserDefaults.standard.set(Double(responseHeight), forKey: Self.responseHeightKey)
-                }
-        )
     }
 
     /// Ad satırı ve denetim satırı alt alta.

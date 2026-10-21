@@ -35,9 +35,10 @@ struct WorkbenchToolView: View {
             }
             // Sürüklenebilir ayırıcı: girdi/çıktı genişliğini kullanıcı ayarlar.
             // Durum bilgisi tek çubuk yerine her bölmenin alt bilgisinde.
-            HSplitView {
-                inputPane.frame(minWidth: 260)
-                outputPane.frame(minWidth: 260)
+            SplitPanes(minFirst: 260, minSecond: 260, dividerBackground: Theme.editorBackground) {
+                inputPane
+            } second: {
+                outputPane
             }
         }
         // ⌘F: odaktaki bölmede (son tıklanan editör) arama.
