@@ -13,8 +13,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         // `swift run` ile bundle olmadığı için Dock ikonu elle atanır.
-        // Gerçek .app bundle'da Info.plist zaten ikonu taşır.
-        if let url = Bundle.module.url(forResource: "AppIcon", withExtension: "icns"),
+        // Gerçek .app bundle'da Info.plist zaten ikonu taşır ve `Bundle.module`
+        // HİÇ çağrılmaz: SPM'in ürettiği erişimci kaynak paketini .app içinde
+        // ya da derleme dizininde (geliştiricinin makinesi) bulamazsa
+        // `fatalError` veriyor. make-app.sh paketi kopyalamadığı için başka bir
+        // Mac'te uygulama açılışta çöküyordu (güvenlik incelemesi, 2026-10-21).
+        if Bundle.main.bundleURL.pathExtension != "app",
+           let url = Bundle.module.url(forResource: "AppIcon", withExtension: "icns"),
            let icon = NSImage(contentsOf: url) {
             NSApp.applicationIconImage = icon
         }

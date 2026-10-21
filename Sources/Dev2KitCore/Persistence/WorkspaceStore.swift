@@ -29,7 +29,7 @@ public final class WorkspaceStore: @unchecked Sendable {
     public static let keptBackups = 5
     public static let backupInterval: TimeInterval = 3_600
 
-    public init(directory: URL? = nil, clock: @escaping @Sendable () -> Date = Date.init) {
+    public init(directory: URL? = nil, clock: @escaping @Sendable () -> Date = { Date() }) {
         self.layout = StoreLayout(root: directory ?? AppPaths.supportDirectory)
         self.clock = clock
     }
@@ -137,6 +137,10 @@ public final class WorkspaceStore: @unchecked Sendable {
     /// Günlüğü uygular; yarıda kesildiyse tekrar çağrılabilir (idempotent).
     private func apply(_ journal: StoreJournal, in store: URL) throws {
         let manager = FileManager.default
+        for path in journal.writes + journal.deletes + Array(journal.manifest.files.keys)
+        where !StoreLayout.isValidRelativePath(path) {
+            throw StoreError.journalUnrecoverable(path)
+        }
         let staging = store.appendingPathComponent("staging/\(journal.id.uuidString)", isDirectory: true)
         for path in journal.writes {
             let staged = staging.appendingPathComponent(path)
@@ -242,6 +246,11 @@ public final class WorkspaceStore: @unchecked Sendable {
             let names = (try? FileManager.default.contentsOfDirectory(atPath: collectionsDir.path)) ?? []
             partial.collections = names.filter { $0.hasSuffix(".json") }.sorted()
                 .compactMap { file("collections/\($0)", CollectionModel.self, expected: nil) }
+            return .failure(ReadFailure(kind: .damaged, unreadable: unreadable, partial: partial))
+        }
+        // Geçersiz yol taşıyan manifest bozuk sayılır (yedeğe dönülür).
+        if let bad = manifest.files.keys.first(where: { !StoreLayout.isValidRelativePath($0) }) {
+            unreadable.append(bad)
             return .failure(ReadFailure(kind: .damaged, unreadable: unreadable, partial: partial))
         }
         guard manifest.schemaVersion <= StoreManifest.currentSchema else {

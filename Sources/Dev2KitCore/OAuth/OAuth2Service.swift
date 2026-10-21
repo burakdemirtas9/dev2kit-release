@@ -82,9 +82,24 @@ public struct OAuth2Service: Sendable {
         }
     }
 
+    /// Token yanıtının üst sınırı. Gerçek yanıtlar birkaç KB; adres içe
+    /// aktarılan koleksiyondan gelebildiği için dev yanıt (ya da açılınca
+    /// büyüyen sıkıştırılmış gövde) belleği doldurmasın (güvenlik incelemesi,
+    /// 2026-10-21). Sınır açılmış veriye uygulanır.
+    static let maxTokenResponseBytes = 1_048_576
+
     private func perform(_ request: URLRequest, hostPolicy: HostPolicyState) async throws -> OAuth2Token {
         let guardian = PolicyRedirectGuard(policy: hostPolicy)
-        let (data, response) = try await session.data(for: request, delegate: guardian)
+        let (bytes, response) = try await session.bytes(for: request, delegate: guardian)
+        var data = Data()
+        for try await byte in bytes {
+            data.append(byte)
+            if data.count > Self.maxTokenResponseBytes {
+                bytes.task.cancel()
+                throw OAuth2Client.FlowError(message: L10n.t("oauth.flow.responseTooLarge",
+                                                             L10n.number(Self.maxTokenResponseBytes / 1_048_576)))
+            }
+        }
         if let blocked = guardian.blockedDestination {
             throw OAuth2Client.FlowError(message: L10n.t("oauth.flow.redirectBlocked", blocked.host ?? blocked.absoluteString))
         }

@@ -23,6 +23,13 @@ public enum OAuth2Client {
               components.scheme != nil, components.host != nil else {
             throw FlowError(message: L10n.t("oauth.flow.badAuthURL"))
         }
+        // Adres tarayıcıda açılıyor (`NSWorkspace.open`): yalnızca web adresi.
+        // Eskiden şema serbestti; içe aktarılan koleksiyon `file://`, `smb://`
+        // ya da başka bir uygulamanın şemasını açtırabiliyordu (güvenlik
+        // incelemesi, 2026-10-21).
+        guard let candidate = components.url, isWebAddress(candidate) else {
+            throw FlowError(message: L10n.t("oauth.flow.authNotHTTPS"))
+        }
         guard !config.clientID.trimmingCharacters(in: .whitespaces).isEmpty else {
             throw FlowError(message: L10n.t("oauth.flow.noClientID"))
         }
@@ -133,7 +140,8 @@ public enum OAuth2Client {
             throw FlowError(message: L10n.t("oauth.flow.badTokenURL"))
         }
         // Token uç noktası kimlik bilgisi taşır; şifresiz kanal kabul edilmez.
-        guard url.scheme?.lowercased() == "https" || url.host == "localhost" || url.host == "127.0.0.1" else {
+        // Eskiden host `localhost` ise şemaya hiç bakılmıyordu (`file://localhost/…`).
+        guard isWebAddress(url) else {
             throw FlowError(message: L10n.t("oauth.flow.tokenNotHTTPS"))
         }
 
@@ -170,5 +178,16 @@ public enum OAuth2Client {
             expiresAt: response.expires_in.map { now.addingTimeInterval($0) },
             scope: response.scope
         )
+    }
+
+    /// `https`, ya da yalnızca bu makinedeki geliştirme sunucusu için `http`
+    /// (RFC 8252 §7.3 loopback). Başka şema (dosya, ağ paylaşımı, uygulama
+    /// şeması) kabul edilmez.
+    static func isWebAddress(_ url: URL) -> Bool {
+        switch url.scheme?.lowercased() {
+        case "https": return url.host?.isEmpty == false
+        case "http": return ["localhost", "127.0.0.1", "::1", "[::1]"].contains(url.host?.lowercased() ?? "")
+        default: return false
+        }
     }
 }

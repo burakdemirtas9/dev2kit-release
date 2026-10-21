@@ -46,8 +46,13 @@ struct CurlPopover: View {
             HStack {
                 Spacer()
                 Button {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(curlText, forType: .string)
+                    if includeSecrets {
+                        // Çözülmüş secret'lar: yalnızca bu Mac, pano geçmişine girmez.
+                        SensitivePasteboard.copy(curlText)
+                    } else {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(curlText, forType: .string)
+                    }
                     copied = true
                 } label: {
                     Label(copied ? L10n.t("common.copied") : L10n.t("common.copy"),

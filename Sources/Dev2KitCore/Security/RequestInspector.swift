@@ -193,7 +193,6 @@ public enum RequestInspector {
 /// Bir isteğin kullandığı secret adları (`{{secret:isim}}`), environment
 /// değişkenleri üzerinden dolaylı kullanım ve OAuth2 token'ı dahil.
 public enum SecretReferences {
-    private static let pattern = #/\{\{\s*([^{}]+?)\s*\}\}/#
     private static let maxDepth = 5
 
     public static func names(in model: RequestModel, environment: EnvironmentModel?) -> Set<String> {
@@ -258,8 +257,8 @@ public enum SecretReferences {
 
     private static func collectVariables(from text: String, variables: [String: String], depth: Int, into names: inout Set<String>) {
         guard depth < maxDepth, text.contains("{{") else { return }
-        for match in text.matches(of: pattern) {
-            let token = String(match.1)
+        for match in TemplateScanner.matches(in: text) {
+            let token = String(match.name)
             guard !token.hasPrefix("secret:") else { continue }
             names.insert(token)
             if let value = variables[token] {
@@ -270,8 +269,8 @@ public enum SecretReferences {
 
     private static func collect(from text: String, variables: [String: String], depth: Int, into names: inout Set<String>) {
         guard depth < maxDepth, text.contains("{{") else { return }
-        for match in text.matches(of: pattern) {
-            let token = String(match.1)
+        for match in TemplateScanner.matches(in: text) {
+            let token = String(match.name)
             if token.hasPrefix("secret:") {
                 names.insert(String(token.dropFirst("secret:".count)).trimmingCharacters(in: .whitespaces))
             } else if let value = variables[token] {

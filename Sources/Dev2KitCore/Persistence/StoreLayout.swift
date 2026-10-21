@@ -37,6 +37,17 @@ public struct StoreLayout: Sendable {
     static let environmentsPath = "environments.json"
     static let settingsPath = "settings.json"
     static func collectionPath(_ id: UUID) -> String { "collections/\(id.uuidString).json" }
+
+    /// Manifest ve günlükteki göreli yol izin verilen biçimde mi. Bu yollarla
+    /// dosya taşınıp siliniyor; bozulmuş ya da elle değiştirilmiş bir dosyadaki
+    /// `../` dizin dışına çıkmasın (güvenlik incelemesi, 2026-10-21).
+    static func isValidRelativePath(_ path: String) -> Bool {
+        if path == environmentsPath || path == settingsPath { return true }
+        guard path.hasPrefix("collections/"), path.hasSuffix(".json") else { return false }
+        let stem = path.dropFirst("collections/".count).dropLast(".json".count)
+        guard let id = UUID(uuidString: String(stem)) else { return false }
+        return collectionPath(id) == path
+    }
 }
 
 /// Hangi dosyanın hangi sürümünün geçerli olduğu. Son yazılan dosya:

@@ -32,7 +32,6 @@ public enum TemplateVariables {
         }
     }
 
-    private static let pattern = #/\{\{\s*([^{}]+?)\s*\}\}/#
 
     public static func containsVariable(_ text: String) -> Bool {
         text.contains("{{") && text.contains("}}")
@@ -42,9 +41,9 @@ public enum TemplateVariables {
         guard containsVariable(text) else { return text.isEmpty ? [] : [.text(text)] }
         var result: [Segment] = []
         var last = text.startIndex
-        for match in text.matches(of: pattern) {
+        for match in TemplateScanner.matches(in: text) {
             if last < match.range.lowerBound { result.append(.text(String(text[last..<match.range.lowerBound]))) }
-            result.append(.variable(raw: String(text[match.range]), name: String(match.1)))
+            result.append(.variable(raw: String(text[match.range]), name: String(match.name)))
             last = match.range.upperBound
         }
         if last < text.endIndex { result.append(.text(String(text[last...]))) }
@@ -56,8 +55,8 @@ public enum TemplateVariables {
     /// `segments` ile aynı kural.
     public static func variableRanges(in text: String) -> [(range: NSRange, name: String)] {
         guard containsVariable(text) else { return [] }
-        return text.matches(of: pattern).map { match in
-            (NSRange(match.range, in: text), String(match.1))
+        return TemplateScanner.matches(in: text).map { match in
+            (NSRange(match.range, in: text), String(match.name))
         }
     }
 

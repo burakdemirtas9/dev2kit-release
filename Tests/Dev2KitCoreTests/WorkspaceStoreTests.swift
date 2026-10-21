@@ -308,3 +308,46 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertTrue(opened.workspace.collections.isEmpty)
     }
 }
+
+/// Manifest/günlükteki yollar dizin dışına çıkamaz (bozuk ya da değiştirilmiş dosya).
+final class WorkspaceStorePathTests: XCTestCase {
+    func testOnlyKnownRelativePathsAreAccepted() {
+        XCTAssertTrue(StoreLayout.isValidRelativePath("environments.json"))
+        XCTAssertTrue(StoreLayout.isValidRelativePath(StoreLayout.collectionPath(UUID())))
+        for bad in ["../outside.json", "collections/../../x.json", "/etc/hosts", "collections/abc.json",
+                    "collections/\(UUID().uuidString).json/../../y", "manifest.json"] {
+            XCTAssertFalse(StoreLayout.isValidRelativePath(bad), bad)
+        }
+    }
+
+    func testJournalWithTraversalIsNotApplied() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("dev2kit-path-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = WorkspaceStore(directory: directory)
+        try store.save(WorkspaceModel(collections: [CollectionModel(name: "A")]))
+        let victim = directory.appendingPathComponent("victim.txt")
+        try Data("dokunulmamalı".utf8).write(to: victim)
+        var manifest = try JSONDecoder().decode(StoreManifest.self, from: Data(contentsOf: store.layout.manifest))
+        manifest.files["../victim.txt"] = "x"
+        let journal = StoreJournal(id: UUID(), writes: [], deletes: ["../victim.txt"], manifest: manifest)
+        try JSONEncoder().encode(journal).write(to: store.layout.journal)
+
+        XCTAssertThrowsError(try WorkspaceStore(directory: directory).open())
+        XCTAssertEqual(try Data(contentsOf: victim), Data("dokunulmamalı".utf8), "dizin dışındaki dosya silinmedi")
+    }
+
+    func testManifestWithTraversalIsTreatedAsDamaged() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("dev2kit-path-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = WorkspaceStore(directory: directory)
+        let model = WorkspaceModel(collections: [CollectionModel(name: "A")])
+        try store.save(model)
+        _ = try WorkspaceStore(directory: directory).open() // sağlam yedek
+        var manifest = try JSONDecoder().decode(StoreManifest.self, from: Data(contentsOf: store.layout.manifest))
+        manifest.files["../../victim.txt"] = "x"
+        try JSONEncoder().encode(manifest).write(to: store.layout.manifest)
+        let opened = try WorkspaceStore(directory: directory).open()
+        XCTAssertEqual(opened.workspace.collections.map(\.id), model.collections.map(\.id), "yedekten döndü")
+        XCTAssertFalse(opened.notices.isEmpty)
+    }
+}

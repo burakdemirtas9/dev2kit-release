@@ -31,6 +31,8 @@ extension L10nTable {
         "store.partial.message": L10nEntry("Okunabilen kısım yüklendi; sağlam yedek bulunamadı. Okunamayan dosyaların kopyası silinmedi: %1$@", "The readable part was loaded; no good backup was found. Copies of the unreadable files were kept: %1$@"),
         "store.recovered.title": L10nEntry("Yarım kalan kayıt tamamlandı", "Interrupted save completed"),
         "store.recovered.message": L10nEntry("Uygulama son kayıt sırasında kapanmış; değişiklik tamamlandı.", "The app closed during the last save; the change was completed."),
+        "oauth.flow.responseTooLarge": L10nEntry("Token yanıtı %1$@ MB sınırını aştı; alınmadı.", "The token response exceeded the %1$@ MB limit and wasn’t accepted."),
+        "oauth.flow.authNotHTTPS": L10nEntry("Yetkilendirme adresi https olmalı (yalnızca bu makinedeki sunucu için http). Başka adres türü tarayıcıda açılmaz.", "The authorization URL must use https (http only for a server on this Mac). Other kinds of address aren’t opened."),
         "secrets.migration.verify": L10nEntry("“%1$@” Keychain'e yazıldı ama geri okunduğunda farklı çıktı", "“%1$@” was written to the Keychain but read back differently"),
         "secrets.migrated": L10nEntry("%1$@ secret Keychain'e taşındı; şifreli dosya silindi.", "%1$@ secrets moved to the Keychain; the encrypted file was deleted."),
         "secrets.migrationFailed.title": L10nEntry("Secret'lar Keychain'e taşınamadı", "Couldn’t move secrets to the Keychain"),

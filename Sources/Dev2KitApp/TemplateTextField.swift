@@ -350,8 +350,8 @@ struct VariablePreviewCard: View {
                 .frame(maxWidth: 360, alignment: .leading)
             if !value.isEmpty {
                 Button {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(value, forType: .string)
+                    // Değer token ya da kimlik bilgisi olabilir.
+                    SensitivePasteboard.copy(value)
                     copied = true
                 } label: {
                     Image(systemName: copied ? "checkmark" : "doc.on.doc")

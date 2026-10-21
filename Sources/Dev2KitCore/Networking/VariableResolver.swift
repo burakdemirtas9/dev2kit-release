@@ -32,7 +32,6 @@ public struct VariableResolver: Sendable {
 
     private let variables: [String: String]
     private let secretStore: SecretStore
-    private static let pattern = #/\{\{\s*([^{}]+?)\s*\}\}/#
     private static let maxDepth = 5
 
     public init(environment: EnvironmentModel?, secretStore: SecretStore) {
@@ -71,9 +70,9 @@ public struct VariableResolver: Sendable {
 
         var output = ""
         var lastIndex = text.startIndex
-        for match in text.matches(of: Self.pattern) {
+        for match in TemplateScanner.matches(in: text) {
             output += text[lastIndex..<match.range.lowerBound]
-            let token = String(match.1)
+            let token = String(match.name)
             if token.hasPrefix("secret:") {
                 let name = String(token.dropFirst("secret:".count)).trimmingCharacters(in: .whitespaces)
                 guard let value = try secretStore.secret(forName: name) else {

@@ -60,7 +60,12 @@ public enum CertificateLoader {
 
     /// PKCS#12 dosyasından istemci kimliğini (sertifika + özel anahtar) çıkarır.
     ///
-    /// Anahtar diske kopyalanmaz; yalnızca çağrı süresince bellekte kalır.
+    /// `SecPKCS12Import` macOS'ta varsayılan olarak kimliği kullanıcının
+    /// varsayılan (login) keychain'ine KALICI ekler (SDK belgesi). Eskiden
+    /// burada "anahtar diske kopyalanmaz" yazıyordu ama her yüklemede özel
+    /// anahtar login keychain'e yazılıyordu (güvenlik incelemesi, 2026-10-21).
+    /// macOS 15+: `kSecImportToMemoryOnly` ile yalnızca süreç belleğinde.
+    /// macOS 14'te bu seçenek yok; eski davranış sürer (bilinen sınır).
     public static func loadIdentity(atPath path: String, password: String) throws -> SecIdentity {
         let expanded = (path as NSString).expandingTildeInPath
         guard FileManager.default.fileExists(atPath: expanded) else {
@@ -70,9 +75,12 @@ public enum CertificateLoader {
             throw LoadError(message: L10n.t("cert.client.unreadable", path))
         }
 
-        let options = [kSecImportExportPassphrase as String: password] as CFDictionary
+        var options: [String: Any] = [kSecImportExportPassphrase as String: password]
+        if #available(macOS 15.0, *) {
+            options[kSecImportToMemoryOnly as String] = true
+        }
         var items: CFArray?
-        let status = SecPKCS12Import(data as CFData, options, &items)
+        let status = SecPKCS12Import(data as CFData, options as CFDictionary, &items)
 
         switch status {
         case errSecSuccess:
