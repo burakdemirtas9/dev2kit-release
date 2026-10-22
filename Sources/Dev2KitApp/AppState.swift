@@ -324,7 +324,9 @@ final class AppState {
             let opened = try store.open()
             self.workspace = opened.workspace
             self.startupMessage = Self.startupMessage(for: opened.notices)
+            opened.notices.forEach { DiagnosticLog.shared.record(DiagnosticEvent(kind: .storageRecovered, detail: $0.diagnosticDetail)) }
         } catch {
+            DiagnosticLog.shared.record(DiagnosticEvent(kind: .storageOpenFailed, error: error))
             // Daha yeni şema, tamamlanamayan işlem ya da doğrulanamayan geçiş:
             // diskteki veri ezilmesin diye bu oturumda hiç yazılmaz.
             self.workspace = WorkspaceModel()
@@ -336,7 +338,10 @@ final class AppState {
                 revealURL: store.layout.root
             )
         }
-        if let failure = secrets.1 { startupMessage = startupMessage ?? failure }
+        if let failure = secrets.1 {
+            startupMessage = startupMessage ?? failure
+            DiagnosticLog.shared.record(DiagnosticEvent(kind: .secretStoreUnavailable))
+        }
         if let migrated = secrets.2 { startupMessage = Self.adding(MessageLine(.info, migrated), to: startupMessage) }
         if workspace.collections.isEmpty {
             workspace.collections = [CollectionModel(name: L10n.t("collection.first"), requests: [RequestModel(name: L10n.t("request.newName"))])]

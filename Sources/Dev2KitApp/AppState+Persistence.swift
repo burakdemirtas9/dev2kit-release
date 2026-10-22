@@ -63,6 +63,7 @@ extension AppState {
                     self.saveState = .saved(Date())
                     return
                 }
+                DiagnosticLog.shared.record(DiagnosticEvent(kind: .storageSaveFailed, error: error))
                 self.saveError = L10n.t("save.writeFailed", error.localizedDescription)
                 self.saveState = .failed(error.localizedDescription)
             }

@@ -23,12 +23,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
            let icon = NSImage(contentsOf: url) {
             NSApp.applicationIconImage = icon
         }
+        // Çökme raporu ve tanılama günlüğü yalnızca gerçek pakette: `swift run`
+        // ve testler kullanıcının veri dizinine oturum kaydı bırakmasın.
+        if Bundle.main.bundleURL.pathExtension == "app" {
+            CrashReportCenter.shared.start()
+            handleTerminationSignal()
+        }
+    }
+
+    private var terminationSource: DispatchSourceSignal?
+
+    /// SIGTERM (`kill`, `pkill`) normal çıkış yoluna yönlendirilir: bekleyen
+    /// workspace yazımı tamamlanır, oturum temiz kapanmış sayılır. Varsayılan
+    /// davranışta süreç `applicationWillTerminate` çağrılmadan ölüyordu.
+    ///
+    /// Sinyal İŞLEYİCİSİ değil: `DispatchSource` sinyali ana kuyrukta sıradan
+    /// kod olarak teslim eder (işleyici içinde çalışma kısıtları yok). Ana
+    /// iş parçacığı donmuşsa SIGTERM etkisiz kalır; SIGKILL her zaman çalışır.
+    private func handleTerminationSignal() {
+        signal(SIGTERM, SIG_IGN)
+        let source = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
+        source.setEventHandler { NSApp.terminate(nil) }
+        source.resume()
+        terminationSource = source
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         MainActor.assumeIsolated {
             // Kapanışta bekleyen yazım arka planda; bitmesini beklemek şart.
             appState?.waitForPendingWrites()
+            // Bu oturum temiz kapandı: sonraki açılış "temiz olmayan kapanış"
+            // saymasın. Kayıttan SONRA: yazım yarıda kalırsa iz kalsın.
+            CrashReportCenter.shared.endSession()
         }
     }
 

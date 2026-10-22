@@ -38,6 +38,7 @@ struct ContactButton: View {
 /// Panonun içeriği: başlık, kişi adı, kısa açıklama, iletişim seçenekleri.
 struct ContactPopover: View {
     let info: ContactInfo
+    var crashReports = CrashReportCenter.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -60,9 +61,12 @@ struct ContactPopover: View {
                     ContactChannelRow(channel: channel)
                 }
             }
+            Divider()
+            CrashReportSection(center: crashReports)
         }
         .padding(14)
         .frame(width: 360, alignment: .leading)
+        .onAppear { crashReports.refresh() }
     }
 }
 
