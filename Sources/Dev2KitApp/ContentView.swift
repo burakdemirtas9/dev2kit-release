@@ -56,6 +56,18 @@ struct ContentView: View {
         }
     }
 
+    /// İletişim: geçmişin (Workbench'te çarkın) solunda, aynı cam daire ve
+    /// boşluk. Her iki modda görünür.
+    @ToolbarContentBuilder
+    private var contactToolbarItem: some ToolbarContent {
+        if #available(macOS 26.0, *) {
+            ToolbarItem(placement: .automatic) { ContactButton().padding(.trailing, Self.settingsSpacing) }
+                .sharedBackgroundVisibility(.hidden)
+        } else {
+            ToolbarItem(placement: .automatic) { ContactButton().padding(.trailing, Self.settingsSpacing) }
+        }
+    }
+
     private var historyButton: some View {
         let style = RadialMenuStyle()
         return Button {
@@ -250,6 +262,7 @@ struct ContentView: View {
             // araç çubuğunu yeniden kurmak ~90 ms). Görünüm, dil,
             // environment'lar, TLS, geçmiş, çerez ve secrets dairesel menüde
             // (SettingsMenuButton).
+            contactToolbarItem
             historyToolbarItem
             settingsToolbarItem
             environmentToolbarItem
