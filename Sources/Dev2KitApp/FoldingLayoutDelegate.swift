@@ -54,13 +54,26 @@ final class FoldingLayoutDelegate: NSObject, NSLayoutManagerDelegate {
         forGlyphRange glyphRange: NSRange
     ) -> Int {
         guard !sorted.isEmpty else { return 0 }
+        let string = layoutManager.textStorage?.string as NSString?
         var updated = Array(UnsafeBufferPointer(start: properties, count: glyphRange.length))
         var changed = false
         for index in 0..<glyphRange.length {
             let character = characterIndexes[index]
             guard isHidden(character) else { continue }
-            // Özetin yeri: boşluk glyph'i (genişliği aşağıdaki kutudan).
-            updated[index] = placeholders[character] != nil ? .controlCharacter : .null
+            if placeholders[character] != nil {
+                // Özetin yeri: boşluk glyph'i (genişliği aşağıdaki kutudan).
+                updated[index] = .controlCharacter
+            } else if let string, Self.isLineBreak(string.character(at: character)) {
+                // Gizli satır sonu `.null` YAPILMAZ: dizgici onu yine paragraf
+                // sonu sayıyor ve satır durumu kayıyordu. Ölçüldü (2026-10-22,
+                // kullanıcı ekran görüntüsü): yan yana katlı bloklarda sonraki
+                // görünür satır sonu yeni satır açmıyor, gizli glyph'ler
+                // ilerleyip rastgele yerde sarıyor; satırlar üst üste
+                // biniyordu. Denetim karakteri + sıfır ilerleme (aşağıda).
+                updated[index] = .controlCharacter
+            } else {
+                updated[index] = .null
+            }
             changed = true
         }
         guard changed else { return 0 }
@@ -79,7 +92,14 @@ final class FoldingLayoutDelegate: NSObject, NSLayoutManagerDelegate {
         shouldUse action: NSLayoutManager.ControlCharacterAction,
         forControlCharacterAt charIndex: Int
     ) -> NSLayoutManager.ControlCharacterAction {
-        placeholders[charIndex] != nil ? .whitespace : action
+        if placeholders[charIndex] != nil { return .whitespace }
+        // Katlı bölgedeki satır sonu satır kırmaz ve yer kaplamaz.
+        return isHidden(charIndex) ? .zeroAdvancement : action
+    }
+
+    /// Satır/paragraf sonu: LF, CR, NEL, satır ve paragraf ayırıcı.
+    static func isLineBreak(_ unit: unichar) -> Bool {
+        unit == 0x0A || unit == 0x0D || unit == 0x85 || unit == 0x2028 || unit == 0x2029
     }
 
     func layoutManager(

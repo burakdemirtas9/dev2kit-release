@@ -272,6 +272,14 @@ struct CodeEditor: NSViewRepresentable {
         let textView = scrollView.documentView as! NSTextView
         // Katlı bölge özetini ("… 30 keys") çizen yerleşim yöneticisi.
         textView.textContainer?.replaceLayoutManager(FoldingLayoutManager())
+        // Sarılan uzun satırın devamı satırın girintisinden başlasın.
+        if let original = textView.textContainer {
+            let container = WrapIndentTextContainer(size: original.size)
+            container.widthTracksTextView = original.widthTracksTextView
+            container.heightTracksTextView = original.heightTracksTextView
+            container.lineFragmentPadding = original.lineFragmentPadding
+            textView.replaceTextContainer(container)
+        }
         textView.delegate = context.coordinator
         textView.identifier = paneIdentifier.map { NSUserInterfaceItemIdentifier(rawValue: $0) }
         textView.font = EditorZoom.font(fontSize)
@@ -663,15 +671,35 @@ struct CodeEditor: NSViewRepresentable {
             textView.setNeedsDisplay(textView.visibleRect)
             gutter?.needsDisplay = true
             // Yerleşim geçersizleştiği için geçici öznitelikler (arama
-            // vurguları) silindi; yeniden konuyor.
-            applySearchHighlights(textView)
+            // vurguları) silindi; yeniden konuyor. Katlama/açma aşağıdaki
+            // satırları görünür alana taşır; renklendirme yalnızca görünen
+            // aralıkta yapıldığı için onlar renksiz kalıyordu (kullanıcı ekran
+            // görüntüsü, 2026-10-22). Renklendirme arama vurgularını da koyar.
+            colorizeVisible(textView)
         }
 
         func colorizeVisible(_ textView: NSTextView) {
             guard let storage = textView.textStorage else { return }
-            SyntaxHighlighter.colorize(storage, language: parent.language, range: visibleRange(of: textView))
+            // Katlı aralıklar atlanır: görünen glif aralığı gizli metni de
+            // kapsıyor; "tümünü katla"da bu bütün belge demekti.
+            for piece in Self.visiblePieces(of: visibleRange(of: textView), excluding: foldingDelegate.hiddenRanges) {
+                SyntaxHighlighter.colorize(storage, language: parent.language, range: piece)
+            }
             // Kaydırınca yeni görünen satırlardaki eşleşmeler de boyanmalı.
             applySearchHighlights(textView)
+        }
+
+        /// `range`'in gizli aralıklar dışında kalan parçaları (sıralı).
+        static func visiblePieces(of range: NSRange, excluding hidden: [NSRange]) -> [NSRange] {
+            var pieces: [NSRange] = []
+            var cursor = range.location
+            let end = NSMaxRange(range)
+            for gap in hidden.sorted(by: { $0.location < $1.location }) where NSMaxRange(gap) > cursor && gap.location < end {
+                if gap.location > cursor { pieces.append(NSRange(location: cursor, length: gap.location - cursor)) }
+                cursor = max(cursor, NSMaxRange(gap))
+            }
+            if cursor < end { pieces.append(NSRange(location: cursor, length: end - cursor)) }
+            return pieces
         }
 
         // MARK: - Arama
