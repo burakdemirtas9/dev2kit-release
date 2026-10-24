@@ -3,6 +3,7 @@
 extension L10nTable {
     static let menus: [String: L10nEntry] = [
         "menu.newRequest": L10nEntry("Yeni Request", "New Request"),
+        "menu.about": L10nEntry("dev2kit Hakkında", "About dev2kit"),
         "menu.newCollection": L10nEntry("Yeni Koleksiyon", "New Collection"),
         "menu.save": L10nEntry("Kaydet", "Save"),
         "menu.closeTab": L10nEntry("Sekmeyi Kapat", "Close Tab"),

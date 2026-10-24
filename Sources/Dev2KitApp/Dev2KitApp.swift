@@ -99,6 +99,10 @@ struct Dev2KitApp: App {
     /// yani keşfedilebilir olsunlar — görünmez kısayol yok sayılır.
     @CommandsBuilder
     private var appCommands: some Commands {
+        // Hakkında: standart pencere + İletişim bilgileri (AboutPanel).
+        CommandGroup(replacing: .appInfo) {
+            Button(L10n.t("menu.about")) { AboutPanel.show() }
+        }
         // "New Window" yerine "Yeni İstek": tek pencereli, koleksiyon merkezli
         // bir araçta ⌘N'in beklenen anlamı yeni istektir (Postman/Insomnia da böyle).
         CommandGroup(replacing: .newItem) {
