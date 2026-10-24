@@ -1,0 +1,10 @@
+{
+  "allowedHosts": [
+    "*.firma.com",
+    "firma.com",
+    "*.firma.local",
+    "api.partner.com",
+    "localhost",
+    "127.0.0.1"
+  ]
+}

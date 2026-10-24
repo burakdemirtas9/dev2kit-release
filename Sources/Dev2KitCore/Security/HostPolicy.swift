@@ -78,7 +78,7 @@ public enum HostPolicyLoader {
             return .invalid(reason: problem)
         }
         guard let data = try? Data(contentsOf: url) else {
-            return .invalid(reason: L10n.t("policy.unreadable", url.path))
+            return .invalid(reason: L10n.t("policy.unreadable"))
         }
         return parse(data)
     }
@@ -115,17 +115,20 @@ public enum HostPolicyLoader {
         requireRootOwnership: Bool,
         fileManager: FileManager
     ) -> String? {
-        for path in [url.path, url.deletingLastPathComponent().path] {
-            guard let attributes = try? fileManager.attributesOfItem(atPath: path) else {
-                return L10n.t("policy.permissionsUnreadable", path)
-            }
-            if requireRootOwnership, (attributes[.ownerAccountID] as? Int) != 0 {
-                return L10n.t("policy.mustBeRoot", path)
-            }
+        // Mesajda yol YOK (kullanıcı geri bildirimi, 2026-10-24): hata ekranda ve
+        // ekran görüntülerinde sistem dizin yapısını göstermesin. Hangi öğenin
+        // (dosya mı klasör mü) sorunlu olduğu söylenir; yol BT rehberinde.
+        let items = [
+            (path: url.path, unreadable: L10n.t("policy.permissionsUnreadable.file"),
+             notRoot: L10n.t("policy.mustBeRoot.file"), writable: L10n.t("policy.notWritable.file")),
+            (path: url.deletingLastPathComponent().path, unreadable: L10n.t("policy.permissionsUnreadable.folder"),
+             notRoot: L10n.t("policy.mustBeRoot.folder"), writable: L10n.t("policy.notWritable.folder")),
+        ]
+        for item in items {
+            guard let attributes = try? fileManager.attributesOfItem(atPath: item.path) else { return item.unreadable }
+            if requireRootOwnership, (attributes[.ownerAccountID] as? Int) != 0 { return item.notRoot }
             let permissions = attributes[.posixPermissions] as? Int ?? 0
-            if permissions & 0o022 != 0 {
-                return L10n.t("policy.notWritable", path)
-            }
+            if permissions & 0o022 != 0 { return item.writable }
         }
         return nil
     }

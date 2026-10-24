@@ -313,7 +313,12 @@ final class AppState {
 
     /// Yönetici politikası her kullanımda diskten okunur: yönetici dosyayı
     /// değiştirince uygulamayı yeniden başlatmak gerekmesin. Dosya küçük.
-    var hostPolicy: HostPolicyState { HostPolicyLoader.load() }
+    var hostPolicy: HostPolicyState { hostPolicyForTesting ?? HostPolicyLoader.load() }
+
+    /// YALNIZCA testler: makinedeki gerçek `/Library/.../policy.json`'dan
+    /// bağımsız çalışsınlar (`AppStateHarness`). Ortam değişkeni ya da dosya
+    /// ile ayarlanamaz; politikayı atlatmanın bir yolu değildir.
+    @ObservationIgnored var hostPolicyForTesting: HostPolicyState?
 
     // MARK: - Geçmiş durumu (davranış: AppState+History)
 

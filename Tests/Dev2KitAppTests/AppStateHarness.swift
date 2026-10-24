@@ -30,6 +30,9 @@ final class AppStateHarness {
 
         store = WorkspaceStore(directory: directory)
         state = AppState(store: store, secretStore: FileSecretStore())
+        // Makinedeki gerçek yönetici politikası testleri etkilemesin (bozuk ya
+        // da kısıtlı bir dosya, ilgisiz testleri düşürüyordu).
+        state.hostPolicyForTesting = .notConfigured
     }
 
     func tearDown() {
