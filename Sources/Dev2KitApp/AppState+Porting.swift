@@ -111,7 +111,12 @@ extension AppState {
             guard let collectionID = resolve(destination) else { return }
             addImportedRequest(output.request, to: collectionID)
         case .selectedRequest:
-            selectedRequest?.wrappedValue = output.request
+            // İsteğin kayıtlı örnekleri Kibana'dan gelen isteğin üzerine
+            // yazılırken kaybolmasın.
+            guard let binding = selectedRequest else { return }
+            var replaced = output.request
+            replaced.examples = binding.wrappedValue.examples
+            binding.wrappedValue = replaced
         }
     }
 
@@ -187,6 +192,12 @@ extension AppState {
     /// Kullanıcıya gösterilecek özet metnini döner.
     @discardableResult
     func commitImport(_ items: [PreparedImport]) -> ResultMessage {
+        // Son hat: örnek sınırını aşan istek varsa HİÇBİR şey yazılmaz.
+        // Seçim inceleme ekranında yapılır (`applyingExampleSelection`);
+        // fazlalık burada sessizce kırpılmaz.
+        if let overflowing = items.lazy.flatMap(\.review.requestsOverExampleLimit).first {
+            return importFailed(L10n.t("example.import.overLimit.detail", L10n.number(ResponseExamples.limit)) + "\n“\(overflowing.name)”")
+        }
         var results: [ImportResult.Item] = []
         for item in items {
             let collection = item.review.importableCollection
@@ -236,9 +247,11 @@ extension AppState {
     static func exportMessage(collection: CollectionModel, fileName: String) -> ResultMessage {
         let subtitle = "“\(collection.name)” · \(fileName)"
         let found = CollectionPorting.plaintextCredentials(in: collection)
+        let exampleCount = collection.requests.reduce(0) { $0 + $1.examples.count }
+        let exampleLines = exampleCount > 0 ? [MessageLine(.info, L10n.plural("example.export.included", count: exampleCount))] : []
         guard !found.isEmpty else {
             return ResultMessage(kind: .success, title: L10n.t("result.exported"), message: subtitle,
-                                 lines: [MessageLine(.info, L10n.t("result.exported.secrets"))])
+                                 lines: [MessageLine(.info, L10n.t("result.exported.secrets"))] + exampleLines)
         }
         let shown = found.prefix(8).map { MessageLine(.warning, "“\($0.requestName)”: \($0.places.joined(separator: ", "))") }
         var lines = Array(shown)
@@ -246,6 +259,7 @@ extension AppState {
             lines.append(MessageLine(.warning, L10n.plural("result.exported.more", count: found.count - shown.count)))
         }
         lines.append(MessageLine(.info, L10n.t("result.exported.plaintextAdvice")))
+        lines.append(contentsOf: exampleLines)
         return ResultMessage(kind: .warning, title: L10n.t("result.exported.plaintextTitle"), message: subtitle, lines: lines)
     }
 

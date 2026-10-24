@@ -48,7 +48,10 @@ struct APIClientLayout: View {
                         RequestTabBar()
                         Divider()
                     }
-                    if let requestBinding = appState.selectedRequest {
+                    if let content = appState.openExampleContent {
+                        // Kayıtlı örnek: istek editörü (ve Gönder'i) yerinde yok.
+                        ExampleDetailView(request: content.request, example: content.example)
+                    } else if let requestBinding = appState.selectedRequest {
                         RequestDetailView(request: requestBinding)
                     } else {
                         NoRequestSelectedView()
@@ -60,6 +63,7 @@ struct APIClientLayout: View {
             // Sürüklerken örtük animasyon genişliği "kovalayınca" titreme oluyor.
             .animation(nil, value: sidebarWidth)
         }
+        .modifier(ExampleDialogs())
     }
 
     /// Kenar çubuğu ayracı. Bırakınca genişlik UserDefaults'a yazılır,
@@ -76,5 +80,70 @@ struct APIClientLayout: View {
             dragStartWidth = nil
             UserDefaults.standard.set(Double(sidebarWidth), forKey: Self.sidebarWidthKey)
         }
+    }
+}
+
+/// Örnek kaydetme akışının uyarı ve sayfası, örnek yeniden adlandırma ve
+/// silme kutuları. Kenar çubuğu ve örnek görünümü aynı kutuları kullanır.
+private struct ExampleDialogs: ViewModifier {
+    @Environment(AppState.self) private var appState
+    @State private var renameText = ""
+
+    func body(content: Content) -> some View {
+        content
+            .alert(
+                L10n.t("example.limit.title"),
+                // Kapanmayı düğmeler yönetir: "Yönet" sayfaya geçer, "Vazgeç" bitirir.
+                isPresented: Binding(get: { appState.pendingExampleSave?.phase == .limitWarning }, set: { _ in })
+            ) {
+                Button(L10n.t("example.limit.manage")) { appState.manageExamplesForPendingSave() }
+                Button(L10n.t("common.cancel"), role: .cancel) { appState.cancelSavingExample() }
+            } message: {
+                Text(L10n.t("example.limit.message"))
+            }
+            .sheet(item: Binding(
+                get: { appState.pendingExampleSave?.phase == .naming ? appState.pendingExampleSave : nil },
+                set: { newValue in
+                    // Esc ile kapanış; uyarıya dönüşte akış sürer.
+                    if newValue == nil, appState.pendingExampleSave?.phase == .naming { appState.cancelSavingExample() }
+                }
+            )) { pending in
+                SaveExampleSheet(pending: pending)
+            }
+            .alert(
+                L10n.t("example.rename.title"),
+                isPresented: Binding(
+                    get: { appState.exampleRenameTarget != nil },
+                    set: { if !$0 { appState.exampleRenameTarget = nil } }
+                )
+            ) {
+                TextField(L10n.t("example.sheet.namePlaceholder"), text: $renameText)
+                    .inputLimit(.name)
+                Button(L10n.t("example.rename.confirm")) {
+                    if let target = appState.exampleRenameTarget {
+                        appState.renameExample(target, to: renameText)
+                    }
+                    appState.exampleRenameTarget = nil
+                }
+                Button(L10n.t("common.cancel"), role: .cancel) { appState.exampleRenameTarget = nil }
+            }
+            .onChange(of: appState.exampleRenameTarget) {
+                renameText = appState.exampleRenameTarget.flatMap(appState.example)?.name ?? ""
+            }
+            .alert(
+                L10n.t("example.delete.title", appState.exampleDeleteTarget.flatMap(appState.example)?.name ?? ""),
+                isPresented: Binding(
+                    get: { appState.exampleDeleteTarget != nil },
+                    set: { if !$0 { appState.exampleDeleteTarget = nil } }
+                )
+            ) {
+                Button(L10n.t("example.delete"), role: .destructive) {
+                    if let target = appState.exampleDeleteTarget { appState.deleteExample(target) }
+                    appState.exampleDeleteTarget = nil
+                }
+                Button(L10n.t("common.cancel"), role: .cancel) { appState.exampleDeleteTarget = nil }
+            } message: {
+                Text(L10n.t("common.deletePermanent"))
+            }
     }
 }

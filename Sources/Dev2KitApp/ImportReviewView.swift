@@ -5,8 +5,27 @@ import Dev2KitCore
 /// Kesin engelli istekler her durumda dışarıda kalır.
 struct ImportReviewView: View {
     let items: [AppState.PreparedImport]
-    let onConfirm: () -> Void
+    /// Onaylanan haller: örnek sınırını aşan isteklerde kullanıcının seçimi
+    /// uygulanmış olarak gelir.
+    let onConfirm: ([AppState.PreparedImport]) -> Void
     let onCancel: () -> Void
+
+    /// İnceleme → istek → alınacak örnekler. Başlangıçta dosyadaki ilk
+    /// `ResponseExamples.limit` örnek işaretli; kullanıcı görmeden uygulanmaz.
+    @State private var exampleSelection: [UUID: [UUID: Set<UUID>]] = [:]
+
+    private var resolvedItems: [AppState.PreparedImport]? {
+        var resolved: [AppState.PreparedImport] = []
+        for item in items {
+            if item.review.requestsOverExampleLimit.isEmpty {
+                resolved.append(item)
+                continue
+            }
+            guard let review = item.review.applyingExampleSelection(exampleSelection[item.id] ?? [:]) else { return nil }
+            resolved.append(AppState.PreparedImport(review: review, wasRenamed: item.wasRenamed))
+        }
+        return resolved
+    }
 
     private var importableCount: Int { items.reduce(0) { $0 + $1.review.importableCount } }
     private var blockedCount: Int { items.reduce(0) { $0 + $1.review.blockedCount } }
@@ -34,13 +53,94 @@ struct ImportReviewView: View {
                 Spacer()
                 Button(L10n.t("common.cancel"), role: .cancel) { onCancel() }
                     .keyboardShortcut(.cancelAction)
-                Button(L10n.plural("review.import", count: importableCount)) { onConfirm() }
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(importableCount == 0)
+                Button(L10n.plural("review.import", count: importableCount)) {
+                    if let resolvedItems { onConfirm(resolvedItems) }
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(importableCount == 0 || resolvedItems == nil)
             }
         }
         .padding(20)
         .frame(width: 620, height: 560)
+        .onAppear {
+            guard exampleSelection.isEmpty else { return }
+            for item in items {
+                let suggested = ResponseExamples.suggestedImportSelection(for: item.review.importableCollection)
+                if !suggested.isEmpty { exampleSelection[item.id] = suggested }
+            }
+        }
+    }
+
+    // MARK: Örnek sınırı
+
+    /// Sınırı aşan istekler: hangi örneklerin alınacağı burada seçilir.
+    @ViewBuilder
+    private func exampleOverflowSection(_ item: AppState.PreparedImport) -> some View {
+        let overflowing = item.review.requestsOverExampleLimit
+        if !overflowing.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Label(L10n.t("example.import.overLimit.title"), systemImage: "exclamationmark.triangle.fill")
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(Theme.warning)
+                Text(L10n.t("example.import.overLimit.detail", L10n.number(ResponseExamples.limit)))
+                    .font(.secondaryText)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                ForEach(overflowing) { request in
+                    exampleChoices(request, reviewID: item.id)
+                }
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Theme.warning.opacity(0.07), in: RoundedRectangle(cornerRadius: 6))
+        }
+    }
+
+    private func exampleChoices(_ request: RequestModel, reviewID: UUID) -> some View {
+        let picked = exampleSelection[reviewID]?[request.id] ?? []
+        let isFull = picked.count >= ResponseExamples.limit
+        return VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Text(request.method.rawValue)
+                    .font(.secondaryMono).bold()
+                    .foregroundStyle(Theme.color(for: request.method))
+                Text(request.name).fontWeight(.medium)
+                Spacer()
+                Text(L10n.t("example.import.selected", L10n.number(picked.count), L10n.number(ResponseExamples.limit)))
+                    .font(.secondaryText.monospacedDigit())
+                    .foregroundStyle(isFull ? Theme.warning : .secondary)
+            }
+            ForEach(request.examples) { example in
+                let isOn = picked.contains(example.id)
+                Toggle(isOn: Binding(
+                    get: { isOn },
+                    set: { setExample(example.id, selected: $0, request: request.id, review: reviewID) }
+                )) {
+                    HStack(spacing: 6) {
+                        Text(ResponseExamples.statusLabel(example.statusCode))
+                            .font(.secondaryMono)
+                            .foregroundStyle(Theme.statusColor(example.statusCode))
+                        Text(example.name)
+                            .lineLimit(1)
+                    }
+                }
+                .toggleStyle(.checkbox)
+                // Sınır doluyken yeni seçim açılmaz; önce biri bırakılır.
+                .disabled(!isOn && isFull)
+                .help(!isOn && isFull ? L10n.t("example.import.tooMany", L10n.number(ResponseExamples.limit)) : "")
+            }
+        }
+    }
+
+    private func setExample(_ exampleID: UUID, selected: Bool, request requestID: UUID, review reviewID: UUID) {
+        var picked = exampleSelection[reviewID]?[requestID] ?? []
+        if selected {
+            guard picked.count < ResponseExamples.limit else { return }
+            picked.insert(exampleID)
+        } else {
+            picked.remove(exampleID)
+        }
+        exampleSelection[reviewID, default: [:]][requestID] = picked
     }
 
     private func collectionSection(_ review: CollectionReview) -> some View {
@@ -61,6 +161,9 @@ struct ImportReviewView: View {
             }
             ForEach(flagged) { requestReview in
                 requestRow(requestReview)
+            }
+            if let item = items.first(where: { $0.id == review.id }) {
+                exampleOverflowSection(item)
             }
             ForEach(review.notes, id: \.self) { note in
                 Label(note, systemImage: "info.circle")

@@ -106,7 +106,7 @@ struct OpenAPIImportView: View {
         .sheet(item: $pendingReview) { pending in
             ImportReviewView(
                 items: pending.items,
-                onConfirm: { finish(pending.items) },
+                onConfirm: { finish($0) },
                 onCancel: { pendingReview = nil }
             )
         }

@@ -18,6 +18,7 @@ import Dev2KitCore
 //   AppState+History       geçmiş kaydı ve geçmişten geri yükleme
 //   AppState+Collections   koleksiyon ve environment yönetimi
 //   AppState+TLS           güven deposu, TLS profilleri, çerezler
+//   AppState+Examples      response örnekleri: kaydet, aç, "Dene", yeniden adlandır, sil
 //
 // Uzantılardan yazılan özellikler `private(set)` DEĞİL; uzantılar aynı
 // modülde, dışarıya kapalılık modül sınırında korunuyor.
@@ -46,6 +47,9 @@ final class AppState {
     /// Seçili istek. Açık değilse önizleme sekmesinde açılır (bkz. Sekmeler).
     var selectedRequestID: UUID? {
         didSet {
+            // Açık örnek yalnızca kendi isteği seçiliyken yaşar: başka isteğe,
+            // sekmeye geçmek ya da isteği kapatmak örnek görünümünü kapatır.
+            if let example = openExample, example.requestID != selectedRequestID { openExample = nil }
             guard selectedRequestID != oldValue else { return }
             if let id = selectedRequestID {
                 openTab(id)
@@ -67,9 +71,25 @@ final class AppState {
     /// `order`: görünen isteklerin sırası — aktif istek buna göre belirlenir.
     func applySelection(_ ids: Set<UUID>, order: [UUID]) {
         let active = MultiSelection.active(current: selectedRequestID, selection: ids, order: order)
+        // Listede istek seçmek (açık örneğin isteği dahil) istek editörüne döner.
+        openExample = nil
         selectedRequestIDs = ids
         selectedRequestID = active
     }
+
+    // MARK: - Response örnekleri (davranış: AppState+Examples)
+
+    /// Görüntülenen kayıtlı örnek. Açıkken istek editörü yerine örnek
+    /// görünümü çizilir ve HİÇBİR gönderim yolu ağa çıkmaz (`send` başta
+    /// bakar). Diske yazılmaz: açılış her zaman istekle başlar.
+    var openExample: ExampleRef?
+    /// "Örnek olarak kaydet" sürüyor: alınmış anlık görüntü ve aşama.
+    /// Sınır doluyken örnek silinip kaydetmeye dönülse de görüntü aynıdır.
+    var pendingExampleSave: PendingExampleSave?
+    /// Yeniden adlandırma / silme onayı bekleyen örnek (kenar çubuğu ve örnek
+    /// görünümü aynı kutuyu kullanır; kutu `APIClientLayout`'ta).
+    var exampleRenameTarget: ExampleRef?
+    var exampleDeleteTarget: ExampleRef?
 
     // MARK: - Sekmeler (davranış: AppState+Tabs)
 

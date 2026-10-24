@@ -43,6 +43,8 @@ public enum CollectionPorting {
 
     public static func importDev2Kit(_ data: Data, existingNames: [String]) throws -> ImportOutcome {
         let decoder = JSONDecoder()
+        let report = ExampleDecodeReport()
+        decoder.userInfo[ExampleDecodeReport.key] = report
         let collection: CollectionModel
         if let envelope = try? decoder.decode(Envelope.self, from: data) {
             guard envelope.format == currentFormat else {
@@ -55,10 +57,19 @@ public enum CollectionPorting {
             throw PortingError.invalidFormat(L10n.t("porting.notDev2kit"))
         }
         let (name, renamed) = try resolveName(collection.name, suffix: "New", existingNames: existingNames)
+        // Örnekler dışarıdan gelen veri: aynı doğrulama ve maskeleme. Bozuk
+        // örnek nedeniyle not düşülür; istek ve diğer örnekler alınır.
+        var warnings = report.unreadable.map { L10n.plural("example.import.unreadable", count: $0.count, $0.requestName) }
+        var validated = collection
+        validated.requests = collection.requests.map { request in
+            let checked = ResponseExamples.validatingImported(request)
+            warnings.append(contentsOf: checked.notes)
+            return checked.request
+        }
         return ImportOutcome(
-            collection: regenerateIDs(collection, name: name),
+            collection: regenerateIDs(validated, name: name),
             wasRenamed: renamed,
-            warnings: []
+            warnings: warnings
         )
     }
 
@@ -140,7 +151,7 @@ public enum CollectionPorting {
         copy.isUngrouped = false
         copy.isTokenFactory = false
         copy.requests = copy.requests.map { request in
-            var fresh = request
+            var fresh = request.regeneratingExampleIDs()
             fresh.id = UUID()
             return fresh
         }
@@ -167,7 +178,9 @@ public enum CollectionPorting {
             guard let pmRequest = item.request else { continue }
             let baseName = item.name ?? L10n.t("porting.unnamed")
             let name = prefix.isEmpty ? baseName : "\(prefix) / \(baseName)"
-            requests.append(convert(pmRequest, name: name, warnings: &warnings))
+            var request = convert(pmRequest, name: name, warnings: &warnings)
+            request.examples = convertExamples(item.response, requestName: name, warnings: &warnings)
+            requests.append(request)
         }
     }
 
@@ -193,6 +206,43 @@ public enum CollectionPorting {
         model.body = convertBody(pm.body, requestName: name, warnings: &warnings)
         model.auth = convertAuth(pm.auth, requestName: name, warnings: &warnings)
         return model
+    }
+
+    /// Postman'in kayıtlı response'ları (`item.response`). Bozuk ya da
+    /// desteklenmeyen örnek gerçek nedeniyle not düşülerek atlanır; istek ve
+    /// diğer örnekler alınır. Sınırı aşan örnek sayısı burada KIRPILMAZ:
+    /// hangilerinin alınacağını kullanıcı inceleme ekranında seçer.
+    private static func convertExamples(
+        _ responses: LossyDecodableArray<PostmanCollection.PMResponse>?,
+        requestName: String,
+        warnings: inout [String]
+    ) -> [ResponseExample] {
+        guard let responses else { return [] }
+        if responses.droppedCount > 0 {
+            warnings.append(L10n.plural("example.import.unreadable", count: responses.droppedCount, requestName))
+        }
+        var examples: [ResponseExample] = []
+        for response in responses.elements {
+            let headers = (response.header ?? []).compactMap { header -> ResponseExample.Header? in
+                guard let key = header.key, !(header.disabled ?? false) else { return nil }
+                return ResponseExample.Header(name: key, value: header.value ?? "")
+            }
+            let label = response.name ?? ""
+            let candidate = ResponseExample(
+                name: label,
+                // Kod yoksa örnek yine alınır (status doğrulanmaz).
+                statusCode: response.code ?? ResponseExamples.unknownStatus,
+                headers: headers,
+                body: response.body ?? "",
+                contentType: ResponseExamples.contentType(in: headers)
+            )
+            do {
+                examples.append(try ResponseExamples.validatedForImport(candidate))
+            } catch {
+                warnings.append(L10n.t("example.import.skipped", requestName, label, error.localizedDescription))
+            }
+        }
+        return examples
     }
 
     private static func convertBody(
@@ -279,6 +329,9 @@ private struct PostmanCollection: Decodable {
         let item: [Item]?
         let request: PMRequest?
         let event: [PMEvent]?
+        /// Kayıtlı response örnekleri. Tek bozuk örnek tüm dosyayı
+        /// "Postman değil" saydırmasın diye eleman eleman çözülür.
+        let response: LossyDecodableArray<PMResponse>?
 
         var scriptCount: Int {
             (event ?? []).filter(\.hasCode).count + (item ?? []).reduce(0) { $0 + $1.scriptCount }
@@ -334,6 +387,33 @@ private struct PostmanCollection: Decodable {
                 let container = try decoder.container(keyedBy: CodingKeys.self)
                 self.raw = try container.decodeIfPresent(String.self, forKey: .raw)
             }
+        }
+    }
+
+    /// Postman örneği. Alanlar toleranslı: `code` sayı ya da metin, `header`
+    /// dizi ya da (eski dışa aktarımlarda) düz metin, `body` metin ya da yok.
+    struct PMResponse: Decodable {
+        let name: String?
+        let code: Int?
+        let status: String?
+        let header: [PMHeader]?
+        let body: String?
+
+        private enum CodingKeys: String, CodingKey { case name, code, status, header, body }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            name = try? container.decodeIfPresent(String.self, forKey: .name)
+            if let number = try? container.decodeIfPresent(Int.self, forKey: .code) {
+                code = number
+            } else if let text = try? container.decodeIfPresent(String.self, forKey: .code) {
+                code = Int(text.trimmingCharacters(in: .whitespaces))
+            } else {
+                code = nil
+            }
+            status = try? container.decodeIfPresent(String.self, forKey: .status)
+            header = try? container.decodeIfPresent([PMHeader].self, forKey: .header)
+            body = try? container.decodeIfPresent(String.self, forKey: .body)
         }
     }
 

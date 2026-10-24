@@ -35,11 +35,36 @@ public struct RequestReview: Identifiable, Sendable {
 
 /// Bir koleksiyonun (ya da tek isteğin) içe aktarma incelemesi.
 public struct CollectionReview: Identifiable, Sendable {
-    public let id = UUID()
+    public let id: UUID
     public let collection: CollectionModel
     public let requests: [RequestReview]
     /// Dönüştürme sırasında oluşan notlar (atlanan script, desteklenmeyen auth…).
     public let notes: [String]
+
+    init(id: UUID = UUID(), collection: CollectionModel, requests: [RequestReview], notes: [String]) {
+        self.id = id
+        self.collection = collection
+        self.requests = requests
+        self.notes = notes
+    }
+
+    /// Kullanıcının örnek seçimi uygulanmış inceleme (kimlik aynı kalır).
+    /// Seçim geçersizse `nil`: fazlalık sessizce atılmaz.
+    public func applyingExampleSelection(_ selection: [UUID: Set<UUID>]) -> CollectionReview? {
+        // Engelli istekler zaten aktarılmıyor; onlar için seçim istenmez.
+        var complete = selection
+        for review in requests where review.isBlocked && review.request.examples.count > ResponseExamples.limit {
+            complete[review.id] = complete[review.id] ?? []
+        }
+        guard let trimmed = ResponseExamples.applyingImportSelection(complete, to: collection) else { return nil }
+        let byID = Dictionary(uniqueKeysWithValues: trimmed.requests.map { ($0.id, $0) })
+        return CollectionReview(
+            id: id,
+            collection: trimmed,
+            requests: requests.map { RequestReview(request: byID[$0.id] ?? $0.request, findings: $0.findings) },
+            notes: notes
+        )
+    }
 
     /// Aktarılacak hali: kesin engelli istekler çıkarılmış.
     public var importableCollection: CollectionModel {
@@ -52,8 +77,17 @@ public struct CollectionReview: Identifiable, Sendable {
     public var blockedCount: Int { requests.filter(\.isBlocked).count }
     public var importableCount: Int { requests.count - blockedCount }
 
-    /// Hiç bulgu ve not yoksa inceleme ekranı gösterilmeden aktarılabilir.
-    public var isClean: Bool { notes.isEmpty && requests.allSatisfy { $0.findings.isEmpty } }
+    /// Örnek sınırını (`ResponseExamples.limit`) aşan, aktarılacak istekler:
+    /// hangi örneklerin alınacağını kullanıcı seçer, fazlalık sessizce atılmaz.
+    public var requestsOverExampleLimit: [RequestModel] {
+        ResponseExamples.overflowingRequests(in: importableCollection)
+    }
+
+    /// Hiç bulgu, not ve örnek seçimi yoksa inceleme ekranı gösterilmeden
+    /// aktarılabilir.
+    public var isClean: Bool {
+        notes.isEmpty && requests.allSatisfy { $0.findings.isEmpty } && requestsOverExampleLimit.isEmpty
+    }
 }
 
 /// İçe aktarılan içeriği ağa hiç çıkmadan, şablon haliyle inceler.

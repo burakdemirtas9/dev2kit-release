@@ -98,6 +98,10 @@ public struct RequestModel: Codable, Identifiable, Hashable, Sendable {
     /// taşınırsa ayar onunla gider ama başka yerde yok sayılır.
     /// Tele çıkan bir şey değil: `isFunctionallyEqual` kapsamında DEĞİL.
     public var tokenOutput: TokenOutput?
+    /// Kaydedilmiş response örnekleri (en çok `ResponseExamples.limit`).
+    /// Eski dosyalarda yok; okunurken boş. Tele çıkan bir şey değil:
+    /// `isFunctionallyEqual` kapsamında DEĞİL, geri dönüşte korunur.
+    public var examples: [ResponseExample]
 
     public init(
         id: UUID = UUID(),
@@ -109,7 +113,8 @@ public struct RequestModel: Codable, Identifiable, Hashable, Sendable {
         body: RequestBody = .none,
         auth: AuthConfig = .none,
         options: RequestOptions = .default,
-        tokenOutput: TokenOutput? = nil
+        tokenOutput: TokenOutput? = nil,
+        examples: [ResponseExample] = []
     ) {
         self.id = id
         self.name = name
@@ -121,6 +126,7 @@ public struct RequestModel: Codable, Identifiable, Hashable, Sendable {
         self.auth = auth
         self.options = options
         self.tokenOutput = tokenOutput
+        self.examples = examples
     }
 
     /// İki isteğin TELE ÇIKAN kısmı aynı mı.
@@ -158,9 +164,16 @@ public struct RequestModel: Codable, Identifiable, Hashable, Sendable {
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        let name = try container.decode(String.self, forKey: .name)
+        // Bozuk tek örnek isteği (ve koleksiyonu) okunamaz yapmasın.
+        let examples = try container.decodeIfPresent(LossyDecodableArray<ResponseExample>.self, forKey: .examples)
+        if let examples, examples.droppedCount > 0,
+           let report = decoder.userInfo[ExampleDecodeReport.key] as? ExampleDecodeReport {
+            report.record(requestName: name, count: examples.droppedCount)
+        }
         self.init(
             id: try container.decode(UUID.self, forKey: .id),
-            name: try container.decode(String.self, forKey: .name),
+            name: name,
             method: try container.decode(HTTPMethod.self, forKey: .method),
             url: try container.decode(String.self, forKey: .url),
             headers: try container.decodeIfPresent([KeyValueEntry].self, forKey: .headers) ?? [],
@@ -168,8 +181,30 @@ public struct RequestModel: Codable, Identifiable, Hashable, Sendable {
             body: try container.decodeIfPresent(RequestBody.self, forKey: .body) ?? .none,
             auth: try container.decodeIfPresent(AuthConfig.self, forKey: .auth) ?? .none,
             options: try container.decodeIfPresent(RequestOptions.self, forKey: .options) ?? .default,
-            tokenOutput: try container.decodeIfPresent(TokenOutput.self, forKey: .tokenOutput)
+            tokenOutput: try container.decodeIfPresent(TokenOutput.self, forKey: .tokenOutput),
+            examples: examples?.elements ?? []
         )
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, method, url, headers, queryParams, body, auth, options, tokenOutput, examples
+    }
+
+    /// Örneği olmayan istekte `examples` alanı yazılmaz: mevcut koleksiyon
+    /// dosyaları ve dışa aktarımlar bu özellik yüzünden değişmesin.
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(name, forKey: .name)
+        try container.encode(method, forKey: .method)
+        try container.encode(url, forKey: .url)
+        try container.encode(headers, forKey: .headers)
+        try container.encode(queryParams, forKey: .queryParams)
+        try container.encode(body, forKey: .body)
+        try container.encode(auth, forKey: .auth)
+        try container.encode(options, forKey: .options)
+        try container.encodeIfPresent(tokenOutput, forKey: .tokenOutput)
+        if !examples.isEmpty { try container.encode(examples, forKey: .examples) }
     }
 }
 

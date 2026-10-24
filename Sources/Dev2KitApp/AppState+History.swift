@@ -72,7 +72,8 @@ extension AppState {
             url: HistoryRedactor.maskURL(request.url),
             outcome: outcome,
             snapshot: HistoryTrimmer.trim(
-                HistoryRedactor.redact(request),
+                // Geçmiş isteği anlatır; kayıtlı örnek yanıtlar oraya girmez.
+                HistoryRedactor.redact(request.withoutExamples),
                 maxBodyBytes: historySettings.maxSnapshotBodyBytes
             ),
             responsePreview: preview

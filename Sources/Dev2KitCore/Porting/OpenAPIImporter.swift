@@ -173,6 +173,8 @@ public enum OpenAPIImporter {
         private var skippedCookieParams = 0
         private var usedSchemes: [String: String] = [:]
         private var tokenURLs: Set<String> = []
+        /// Alınamayan response örnekleri (gerçek nedeniyle).
+        private var exampleNotes: [String] = []
 
         init(document: Document, variableName: String) {
             self.document = document
@@ -251,7 +253,64 @@ public enum OpenAPIImporter {
                 request.headers.append(KeyValueEntry(key: "Content-Type", value: contentType))
             }
             request.auth = auth(for: operation)
+            request.examples = responseExamples(operation, requestName: name)
             return request
+        }
+
+        // MARK: Response örnekleri
+
+        /// Dokümanda AÇIKÇA yazılmış response örnekleri (`example`,
+        /// `examples`). Şemadan üretilen örnek değer kayıtlı bir response
+        /// değil; örnek olarak alınmaz. Sayısal olmayan kodlar (`default`,
+        /// `2XX`) bir status değil, atlanır.
+        private mutating func responseExamples(_ operation: [String: Any], requestName: String) -> [ResponseExample] {
+            guard let responses = operation["responses"] as? [String: Any] else { return [] }
+            var examples: [ResponseExample] = []
+            for code in responses.keys.sorted() {
+                guard let status = Int(code), let response = resolve(responses[code] as Any) else { continue }
+                let description = (response["description"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                var found: [(name: String, mediaType: String, value: Any)] = []
+                if document.isSwagger2 {
+                    let byType = response["examples"] as? [String: Any] ?? [:]
+                    for mediaType in byType.keys.sorted() {
+                        if let value = byType[mediaType] { found.append((description, mediaType, value)) }
+                    }
+                } else {
+                    let content = response["content"] as? [String: Any] ?? [:]
+                    for mediaType in content.keys.sorted() {
+                        guard let media = content[mediaType] as? [String: Any] else { continue }
+                        if let value = media["example"] { found.append((description, mediaType, value)) }
+                        let named = media["examples"] as? [String: Any] ?? [:]
+                        for key in named.keys.sorted() {
+                            // Dış değer (`externalValue`) izlenmez: içe aktarma ağa çıkmaz.
+                            guard let entry = resolve(named[key] as Any), let value = entry["value"] else { continue }
+                            let summary = (entry["summary"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? key
+                            found.append((summary, mediaType, value))
+                        }
+                    }
+                }
+                for item in found {
+                    let body: String
+                    if item.mediaType.contains("json"), case .raw(let content, _) = jsonBody(item.value, contentType: item.mediaType) {
+                        body = content
+                    } else {
+                        body = text(item.value)
+                    }
+                    let candidate = ResponseExample(
+                        name: item.name,
+                        statusCode: status,
+                        headers: [ResponseExample.Header(name: "Content-Type", value: item.mediaType)],
+                        body: body,
+                        contentType: item.mediaType
+                    )
+                    do {
+                        examples.append(try ResponseExamples.validatedForImport(candidate))
+                    } catch {
+                        exampleNotes.append(L10n.t("example.import.skipped", requestName, item.name, error.localizedDescription))
+                    }
+                }
+            }
+            return examples
         }
 
         // MARK: Parametreler ve gövde
@@ -441,6 +500,7 @@ public enum OpenAPIImporter {
             if skippedCookieParams > 0 {
                 notes.append(L10n.plural("openapi.note.cookies", count: skippedCookieParams))
             }
+            notes.append(contentsOf: exampleNotes)
             return notes
         }
 

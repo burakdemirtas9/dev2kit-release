@@ -26,6 +26,13 @@ extension AppState {
     ///   gönder" dedi: Token Factory'ye gidilmez, değişken environment'taki
     ///   aynı adlı değere ya da boşa bağlanır (`environmentWithoutTokens`).
     func send(_ request: RequestModel, refreshingTokens: Bool = false, skippingTokens: Bool = false) {
+        // Kayıtlı örnek açıkken hiçbir yol (düğme, ⌘↩, adres alanında ⏎,
+        // güvenlik onayı, token yeniden deneme) ağa çıkmaz: istek
+        // düzenleyicisine dönülür, gönderim kullanıcının kararıdır.
+        guard openExample == nil else {
+            returnFromExample()
+            return
+        }
         flushPendingWrites()
         // Gönderilen istek kullanılan istektir: önizleme sekmesi kalıcı olur.
         pinTab(request.id)

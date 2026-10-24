@@ -51,7 +51,8 @@ extension AppState {
         clearSearch()
         let factoryID = workspace.ensureTokenFactoryCollection()
         guard let index = workspace.collections.firstIndex(id: factoryID) else { return }
-        for var request in picked {
+        // Token Factory'de örnek yok (yanıtı token taşır, kaydedilmez).
+        for var request in picked.map(\.withoutExamples) {
             request.id = UUID()
             request.name = CollectionPorting.uniqueName(
                 request.name,

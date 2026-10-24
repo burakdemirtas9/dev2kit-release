@@ -142,6 +142,14 @@ extension Theme {
         case .options: return methodPink
         }
     }
+
+    /// HTTP status renginin tek kuralı: 2xx yeşil, 5xx kırmızı, diğerleri sarı
+    /// (yanıt durum rozeti, örnek satırları, içe aktarma seçimi).
+    /// Bilinmeyen status (içe aktarılan örnekte kod yok) nötr.
+    static func statusColor(_ statusCode: Int) -> Color {
+        if statusCode <= 0 { return .secondary }
+        return (200..<300).contains(statusCode) ? up : (statusCode < 500 ? warning : down)
+    }
 }
 
 /// Yazı ölçeği (docs/TASARIM.md §3).

@@ -81,7 +81,7 @@ struct PostmanImportView: View {
         .sheet(item: $pendingReview) { pending in
             ImportReviewView(
                 items: pending.items,
-                onConfirm: { finishImport(pending.items) },
+                onConfirm: { finishImport($0) },
                 onCancel: {
                     pendingReview = nil
                     lastResultMessage = ([L10n.t("postman.cancelled")] + pendingFailures).joined(separator: "\n")

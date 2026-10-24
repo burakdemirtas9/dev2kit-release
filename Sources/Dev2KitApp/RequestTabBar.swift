@@ -114,6 +114,8 @@ private struct RequestTab: View {
             if isDouble {
                 appState.pinTab(request.id)
             } else {
+                // Açık örneğin sekmesine basmak istek editörüne döner.
+                appState.openExample = nil
                 appState.selectedRequestID = request.id
             }
         }

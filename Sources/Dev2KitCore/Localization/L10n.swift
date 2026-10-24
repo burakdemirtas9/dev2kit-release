@@ -168,7 +168,7 @@ public struct L10nEntry: Sendable {
 public enum L10nTable {
     static let sections: [[String: L10nEntry]] = [
         common, menus, apiClient, response, sidebar, environments, tls, imports, history, secrets,
-        tokenFactory, workbench, workbenchTools, diff, messages, core,
+        tokenFactory, workbench, workbenchTools, diff, messages, core, examples,
     ]
 
     public static let all: [String: L10nEntry] = sections.reduce(into: [:]) { result, section in

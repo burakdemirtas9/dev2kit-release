@@ -122,9 +122,9 @@ struct SidebarBottomBar: View {
         )) { pending in
             ImportReviewView(
                 items: pending.items,
-                onConfirm: {
+                onConfirm: { confirmed in
                     appState.pendingImport = nil
-                    appState.portingMessage = appState.commitImport(pending.items)
+                    appState.portingMessage = appState.commitImport(confirmed)
                 },
                 onCancel: { appState.pendingImport = nil }
             )

@@ -4,6 +4,16 @@ import Dev2KitCore
 
 struct ResponseView: View {
     @Environment(AppState.self) private var appState
+    /// Verilirse canlı yanıt yerine kayıtlı örnek gösterilir: aynı body,
+    /// header ve önizleme görünümleri; ölçüm (süre, ağ, yönlendirme),
+    /// token önerileri ve "örnek olarak kaydet" yok.
+    var exampleDisplay: AppState.ResponseDisplay?
+
+    private var isExample: Bool { exampleDisplay != nil }
+
+    private var state: AppState.ResponseState {
+        exampleDisplay.map { .success($0) } ?? appState.lastResponse
+    }
     @State private var selectedTab: Tab = .body
     @State private var copied = false
     @State private var fileSaveError: String?
@@ -39,7 +49,7 @@ struct ResponseView: View {
     }
 
     var body: some View {
-        switch appState.lastResponse {
+        switch state {
         case .idle:
             ContentUnavailableView(
                 L10n.t("response.empty.title"),
@@ -114,7 +124,7 @@ struct ResponseView: View {
                     .help(L10n.t("response.getBodyOmitted.help"))
                     .accessibilityElement(children: .combine)
                 }
-                if let id = appState.selectedRequestID, let advice = appState.tokenRetryAdvice[id] {
+                if !isExample, let id = appState.selectedRequestID, let advice = appState.tokenRetryAdvice[id] {
                     TokenRetryBanner(requestID: id, advice: advice)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
@@ -138,7 +148,11 @@ struct ResponseView: View {
 
                 switch selectedTab {
                 case .body:
-                    if !display.fitsEditor {
+                    if isExample, response.body.isEmpty {
+                        ContentUnavailableView(L10n.t("example.emptyBody"), systemImage: "doc")
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .background(Theme.editorBackground)
+                    } else if !display.fitsEditor {
                         OversizedTextNotice(
                             title: L10n.t("response.hidden.title", TextStats.size(display.prettyText.utf8.count)),
                             detail: L10n.t("response.hidden.detail", TextStats.size(WorkbenchLimits.maxOutputBytes), TextStats.size(WorkbenchLimits.maxEditorLineBytes))
@@ -419,15 +433,19 @@ struct ResponseView: View {
         let response = display.data
         return HStack(spacing: 16) {
             // Durum kodu rozet (2026-10-20 düzeni): renkli yazı, aynı tonda zemin.
-            let statusColor = response.isSuccess ? Theme.up : (response.statusCode < 500 ? Theme.warning : Theme.down)
-            Text("\(response.statusCode)")
+            let statusColor = Theme.statusColor(response.statusCode)
+            Text(ResponseExamples.statusLabel(response.statusCode))
                 .font(.system(.body, design: .monospaced)).bold()
                 .foregroundStyle(statusColor)
                 .padding(.horizontal, 7)
                 .padding(.vertical, 1)
                 .background(statusColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 5))
                 .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(statusColor.opacity(0.3)))
-            if let timing = response.timing {
+            if isExample {
+                // Örnek bir ölçüm değil: süre saklanmaz, "0 ms" gösterilmez.
+                Text(TextStats.size(response.body.count))
+                    .foregroundStyle(.secondary)
+            } else if let timing = response.timing {
                 Button {
                     showingTiming = true
                 } label: {
@@ -445,7 +463,9 @@ struct ResponseView: View {
                 Text(String(format: "%.0f ms", response.duration * 1000))
                     .foregroundStyle(.secondary)
             }
-            if let size = response.size {
+            if isExample {
+                EmptyView()
+            } else if let size = response.size {
                 Button {
                     showingSize = true
                 } label: {
@@ -518,6 +538,9 @@ struct ResponseView: View {
         let response = display.data
         let isText = !response.body.isEmpty && response.bodyText != nil
         return HStack(spacing: 10) {
+            if !isExample, let id = appState.selectedRequestID {
+                saveAsExampleButton(id)
+            }
             Button {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(display.prettyText, forType: .string)
@@ -542,6 +565,19 @@ struct ResponseView: View {
                   : L10n.t("response.saveToFile.help"))
         }
         .buttonStyle(.borderless)
+    }
+
+    /// Yanıtı isteğin altına örnek olarak kaydeder. Kesilmiş, çok büyük ya
+    /// da Token Factory yanıtında devre dışı; ipucu nedenini söyler.
+    private func saveAsExampleButton(_ requestID: UUID) -> some View {
+        let reason = appState.exampleUnavailableReason(for: requestID)
+        return Button {
+            appState.beginSavingExample(for: requestID)
+        } label: {
+            Label(L10n.t("example.save"), systemImage: "bookmark")
+        }
+        .disabled(reason != nil || appState.pendingExampleSave != nil)
+        .help(reason?.localizedDescription ?? L10n.t("example.save.help"))
     }
 
     /// Ham byte'lar yazılır (biçimlendirilmiş hali değil): PDF, görsel gibi

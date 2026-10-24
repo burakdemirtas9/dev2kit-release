@@ -109,7 +109,8 @@ extension AppState {
     }
 
     func recordBaseline(_ request: RequestModel) {
-        workspace.sentBaselines[request.id.uuidString] = request
+        // Örnekler tele çıkmaz; son gönderilen halde çoğaltılmaz.
+        workspace.sentBaselines[request.id.uuidString] = request.withoutExamples
         workspace.pruneBaselines()
         persist()
     }
@@ -188,7 +189,8 @@ extension AppState {
     /// Ad çakışmasında koleksiyon import'uyla aynı kural: "isim kopya", "isim kopya 2"…
     func duplicateRequest(_ id: UUID) {
         guard let location = locateRequest(id) else { return }
-        var copy = workspace.collections[location.collection].requests[location.request]
+        // Örnekler de kopyalanır, kendi kimlikleriyle.
+        var copy = workspace.collections[location.collection].requests[location.request].regeneratingExampleIDs()
         copy.id = UUID()
         copy.name = CollectionPorting.uniqueName(
             copy.name,
@@ -285,6 +287,9 @@ extension AppState {
         for index in workspace.collections.indices {
             workspace.collections[index].requests.removeAll { ids.contains($0.id) }
         }
+        // Örnekler isteğin içinde; istekle birlikte gitti. Açık örnek kapanır.
+        if let example = openExample, ids.contains(example.requestID) { openExample = nil }
+        if let pending = pendingExampleSave, ids.contains(pending.requestID) { pendingExampleSave = nil }
         ids.forEach { closeTab($0) }
         selectedRequestIDs.subtract(ids)
         if let id = selectedRequestID, ids.contains(id) { selectedRequestID = nil }

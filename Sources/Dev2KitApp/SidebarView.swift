@@ -39,12 +39,23 @@ struct SidebarView: View {
     /// gerçek temizleme yolları `selectedRequestID`'yi doğrudan set ettiği
     /// için onlar etkilenmez.
     /// `order`: görünen isteklerin sırası; aktif istek buna göre belirlenir.
-    private func listSelection(order: [UUID]) -> Binding<Set<UUID>> {
+    ///
+    /// Örnek satırları da listede seçilebilir (satıra gesture bağlanmaz,
+    /// UI-KURALLARI §2c): tek başına seçilen örnek açılır; istek seçimine
+    /// karışan örnek kimlikleri yok sayılır.
+    /// `exampleOwners`: görünen örneklerin sahibi olan istekler.
+    private func listSelection(order: [UUID], exampleOwners: [UUID: UUID]) -> Binding<Set<UUID>> {
         Binding(
-            get: { appState.selectedRequestIDs },
+            get: { appState.openExample.map { [$0.exampleID] } ?? appState.selectedRequestIDs },
             set: { newValue in
                 guard !newValue.isEmpty else { return }
-                appState.applySelection(newValue, order: order)
+                if newValue.count == 1, let exampleID = newValue.first, let owner = exampleOwners[exampleID] {
+                    appState.openExample(AppState.ExampleRef(requestID: owner, exampleID: exampleID))
+                    return
+                }
+                let requests = newValue.filter { exampleOwners[$0] == nil }
+                guard !requests.isEmpty else { return }
+                appState.applySelection(requests, order: order)
             }
         )
     }
@@ -103,8 +114,9 @@ struct SidebarView: View {
         let dirty = appState.dirtyRequestIDs
         // ⇧/⌘ ile seçilen aralığın hangi uçta bittiğini bilmek için görünen sıra.
         let visibleOrder = matches.flatMap { $0.requests.map(\.id) }
+        let exampleOwners = RequestTreeRows.exampleOwners(in: matches.flatMap(\.requests))
         ScrollViewReader { proxy in
-        List(selection: listSelection(order: visibleOrder)) {
+        List(selection: listSelection(order: visibleOrder, exampleOwners: exampleOwners)) {
             if appState.isSearching, matches.isEmpty {
                 Text(L10n.t("sidebar.search.noMatch", appState.searchQuery))
                     .font(.callout)
@@ -116,28 +128,52 @@ struct SidebarView: View {
                 let collection = match.collection
                 Section {
                     if !isCollapsedForDisplay(collection.id) {
-                        ForEach(match.requests) { request in
-                            SidebarRequestRow(
-                                request: request,
-                                collection: collection,
-                                isDirty: dirty.contains(request.id),
-                                onDelete: { deleteRequestTargets = $0 }
-                            )
-                            .tag(request.id)
-                            .opacity(isDimmed(collection.id) ? 0.35 : 1)
-                            .disabled(draggingCollectionID != nil)
-                            .moveDisabled(appState.isSearching)
-                            // Token Factory paneline bırakılınca kopyalanabilsin diye
-                            // satır kimliğini taşır; liste içi sıralama (`onMove`)
-                            // bundan etkilenmez.
-                            .itemProvider { NSItemProvider(object: request.id.uuidString as NSString) }
+                        // İstek ve hemen altında kayıtlı örnekleri. Satır
+                        // listesi koleksiyon başına bir kez kurulur.
+                        let requestsByID = Dictionary(match.requests.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+                        let rows = RequestTreeRows.rows(for: match.requests)
+                        ForEach(rows) { row in
+                            switch row {
+                            case .request(let id):
+                                if let request = requestsByID[id] {
+                                    SidebarRequestRow(
+                                        request: request,
+                                        collection: collection,
+                                        isDirty: dirty.contains(request.id),
+                                        onDelete: { deleteRequestTargets = $0 }
+                                    )
+                                    .tag(request.id)
+                                    .opacity(isDimmed(collection.id) ? 0.35 : 1)
+                                    .disabled(draggingCollectionID != nil)
+                                    .moveDisabled(appState.isSearching)
+                                    // Token Factory paneline bırakılınca kopyalanabilsin diye
+                                    // satır kimliğini taşır; liste içi sıralama (`onMove`)
+                                    // bundan etkilenmez.
+                                    .itemProvider { NSItemProvider(object: request.id.uuidString as NSString) }
+                                }
+                            case .example(let requestID, let exampleID):
+                                if let example = requestsByID[requestID]?.examples.first(where: { $0.id == exampleID }) {
+                                    SidebarExampleRow(
+                                        ref: AppState.ExampleRef(requestID: requestID, exampleID: exampleID),
+                                        example: example
+                                    )
+                                    .tag(exampleID)
+                                    .opacity(isDimmed(collection.id) ? 0.35 : 1)
+                                    .disabled(draggingCollectionID != nil)
+                                    // Örnek isteğinden ayrılmaz; sürüklenmez.
+                                    .moveDisabled(true)
+                                }
+                            }
                         }
                         .onMove { source, destination in
                             // Filtreliyken indeksler GÖRÜNEN listeye göre gelir;
                             // gerçek sıradaki konumlara karşılık gelmez, yanlış
                             // isteği taşır. `moveDisabled` ile birlikte ikinci hat.
-                            guard !appState.isSearching else { return }
-                            appState.moveRequests(in: collection.id, from: source, to: destination)
+                            guard !appState.isSearching,
+                                  // Satır indeksleri (örnekler araya giriyor) istek indeksine çevrilir.
+                                  let move = RequestTreeRows.requestMove(source: source, destination: destination, in: rows)
+                            else { return }
+                            appState.moveRequests(in: collection.id, from: move.source, to: move.destination)
                         }
                         // Filtreliyken gizlenir: arama sonucunun arasında duran
                         // "Yeni İstek" satırları sonucu okunmaz hale getiriyor.
@@ -183,6 +219,11 @@ struct SidebarView: View {
         }
         // ⌫: seçili istekleri sil. Kalıcı işlem olduğu için onay kutusundan geçer.
         .onDeleteCommand {
+            // Açık örnek seçiliyse yalnızca o örnek silinir (onaylı).
+            if let example = appState.openExample {
+                appState.exampleDeleteTarget = example
+                return
+            }
             guard !appState.selectedRequestIDs.isEmpty else { return }
             deleteRequestTargets = appState.selectedRequestIDs
         }
