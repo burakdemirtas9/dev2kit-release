@@ -245,6 +245,9 @@ extension AppState {
     /// BİR KEZ, arka planda yapılır; her render'da yeniden JSON parse etmek
     /// büyük yanıtlarda paneli kilitliyordu.
     struct ResponseDisplay: Sendable {
+        /// Her yanıtın (ve hazırlanan örnek gösteriminin) kendi kimliği:
+        /// görünüm "yeni yanıt geldi"yi buradan anlar.
+        let id = UUID()
         let data: ResponseData
         let prettyText: String
         let language: CodeLanguage

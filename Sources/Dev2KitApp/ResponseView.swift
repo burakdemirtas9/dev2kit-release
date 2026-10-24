@@ -16,6 +16,9 @@ struct ResponseView: View {
     }
     @State private var selectedTab: Tab = .body
     @State private var copied = false
+    /// Status rozetinin yerinde kedi görseli (çift tıklama easter egg'i).
+    @State private var showsStatusCat = false
+    @State private var hoveringStatusCat = false
     @State private var fileSaveError: String?
     @State private var showingNetwork = false
     @State private var showingTiming = false
@@ -49,6 +52,16 @@ struct ResponseView: View {
     }
 
     var body: some View {
+        content
+            .overlayPreferenceValue(StatusBadgeBoundsKey.self) { statusCatPreview($0) }
+            .animation(.easeOut(duration: 0.12), value: hoveringStatusCat && showsStatusCat)
+            .onChange(of: displayID) {
+                showsStatusCat = false
+                hoveringStatusCat = false
+            }
+    }
+
+    @ViewBuilder private var content: some View {
         switch state {
         case .idle:
             ContentUnavailableView(
@@ -429,18 +442,97 @@ struct ResponseView: View {
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 
+    /// Durum kodu rozeti (2026-10-20 düzeni): renkli yazı, aynı tonda zemin.
+    ///
+    /// Easter egg: çift tıklayınca o kodun kedi görseli, tekrar çift
+    /// tıklayınca rozet. Görsel rozetin yerini KAPLAR ama yerleşime girmez
+    /// (rozet görünmez durur, görsel üstünde): satır yüksekliği ve komşular
+    /// kıpırdamaz. Görseli olmayan kodda çift tıklama bir şey yapmaz.
+    private func statusBadge(_ statusCode: Int) -> some View {
+        let statusColor = Theme.statusColor(statusCode)
+        let cat = showsStatusCat ? HTTPCatImages.image(for: statusCode) : nil
+        let summary = HTTPStatus.summary(statusCode)
+        return Text(ResponseExamples.statusLabel(statusCode))
+            .font(.system(.body, design: .monospaced)).bold()
+            .foregroundStyle(statusColor)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 1)
+            .background(statusColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 5))
+            .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(statusColor.opacity(0.3)))
+            .opacity(cat == nil ? 1 : 0)
+            .overlay {
+                if let cat {
+                    Image(nsImage: cat)
+                        .resizable()
+                        .interpolation(.high)
+                        .aspectRatio(contentMode: .fit)
+                        // Satırın dikey boşluğunu doldurur (rozet ~20 pt + 2 × 6 pt).
+                        .frame(width: Self.statusCatSize, height: Self.statusCatSize)
+                        .allowsHitTesting(false)
+                }
+            }
+            .contentShape(Rectangle())
+            .onTapGesture(count: 2) { toggleStatusCat(statusCode) }
+            .onHover { hoveringStatusCat = $0 }
+            // Büyük önizlemenin konumu; çizimi ResponseView'ın en üstünde
+            // (editör ve sekmelerin üstünde kalsın, bkz. `statusCatPreview`).
+            .anchorPreference(key: StatusBadgeBoundsKey.self, value: .bounds) { cat == nil ? nil : $0 }
+            .help(summary)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(cat == nil
+                ? L10n.t("response.status.accessibility", summary)
+                : L10n.t("response.status.cat.accessibility", summary))
+    }
+
+    private static let statusCatSize: CGFloat = 32
+    private static let statusCatPreviewSize: CGFloat = 64
+
+    /// Kedinin üstüne gelince yaklaşık 64 × 64 önizleme: ayrı pencere ya da
+    /// popover değil, yanıt panelinin üstünde yüzen kart. Tıklamayı almaz,
+    /// yerleşimi değiştirmez; rozetin hemen altında, sola hizalı.
+    @ViewBuilder
+    private func statusCatPreview(_ anchor: Anchor<CGRect>?) -> some View {
+        if hoveringStatusCat, showsStatusCat, let anchor,
+           case .success(let display) = state,
+           let cat = HTTPCatImages.image(for: display.data.statusCode) {
+            GeometryReader { proxy in
+                let badge = proxy[anchor]
+                Image(nsImage: cat)
+                    .resizable()
+                    .interpolation(.high)
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: Self.statusCatPreviewSize, height: Self.statusCatPreviewSize)
+                    .padding(6)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+                    .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.primary.opacity(0.1)))
+                    .shadow(color: .black.opacity(0.18), radius: 8, y: 3)
+                    .offset(x: badge.minX, y: badge.maxY + 4)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
+            .transition(.opacity)
+        }
+    }
+
+    private func toggleStatusCat(_ statusCode: Int) {
+        if showsStatusCat {
+            showsStatusCat = false
+        } else if HTTPCatImages.image(for: statusCode) != nil {
+            showsStatusCat = true
+        }
+    }
+
+    /// Gösterilen yanıtın kimliği; değişince (yeni yanıt, başka istek)
+    /// rozet normale döner.
+    private var displayID: UUID? {
+        if case .success(let display) = state { return display.id }
+        return nil
+    }
+
     private func statusBar(_ display: AppState.ResponseDisplay) -> some View {
         let response = display.data
         return HStack(spacing: 16) {
-            // Durum kodu rozet (2026-10-20 düzeni): renkli yazı, aynı tonda zemin.
-            let statusColor = Theme.statusColor(response.statusCode)
-            Text(ResponseExamples.statusLabel(response.statusCode))
-                .font(.system(.body, design: .monospaced)).bold()
-                .foregroundStyle(statusColor)
-                .padding(.horizontal, 7)
-                .padding(.vertical, 1)
-                .background(statusColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 5))
-                .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(statusColor.opacity(0.3)))
+            statusBadge(response.statusCode)
             if isExample {
                 // Örnek bir ölçüm değil: süre saklanmaz, "0 ms" gösterilmez.
                 Text(TextStats.size(response.body.count))
@@ -596,4 +688,12 @@ struct ResponseView: View {
         }
     }
 
+}
+
+/// Kedi görseli açıkken status rozetinin sınırı (hover önizlemesinin yeri).
+private struct StatusBadgeBoundsKey: PreferenceKey {
+    static let defaultValue: Anchor<CGRect>? = nil
+    static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) {
+        value = value ?? nextValue()
+    }
 }

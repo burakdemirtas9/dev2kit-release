@@ -23,6 +23,8 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/dev2kit"
 cp Sources/Dev2KitApp/Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+# Status alanındaki kedi görselleri (HTTPCatImages Bundle.main'den okur).
+cp -R Sources/Dev2KitApp/Resources/HTTPCats "$APP/Contents/Resources/HTTPCats"
 
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>

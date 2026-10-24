@@ -3,6 +3,8 @@
 extension L10nTable {
     static let response: [String: L10nEntry] = [
         "response.tab.preview": L10nEntry("Önizleme", "Preview"),
+        "response.status.accessibility": L10nEntry("HTTP status %1$@", "HTTP status %1$@"),
+        "response.status.cat.accessibility": L10nEntry("HTTP status %1$@, kedi görseli", "HTTP status %1$@, cat picture"),
         "response.tab.redirects": L10nEntry("Yönlendirme", "Redirects"),
         "response.empty.title": L10nEntry("Henüz response yok", "No Response Yet"),
         "response.empty.message": L10nEntry("Request'i ⌘⏎ ile gönder.", "Send the request with ⌘⏎."),

@@ -23,7 +23,9 @@ let package = Package(
             exclude: ["Resources/AppIcon.png", "Resources/Dev2Kit.entitlements"],
             // İkon: .app bundle'ına make-app.sh kopyalar; `swift run` ile
             // bundle olmadan çalışırken Dock ikonu Bundle.module'den yüklenir.
-            resources: [.copy("Resources/AppIcon.icns")]
+            // HTTPCats: status alanındaki kedi görselleri (128 px, ~310 KB);
+            // .app'e make-app.sh kopyalar, `swift run`/testte Bundle.module.
+            resources: [.copy("Resources/AppIcon.icns"), .copy("Resources/HTTPCats")]
         ),
         .testTarget(
             name: "Dev2KitCoreTests",

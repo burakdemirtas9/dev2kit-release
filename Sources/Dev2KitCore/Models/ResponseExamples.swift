@@ -113,7 +113,7 @@ public enum ResponseExamples {
     public static func defaultName(statusCode: Int, existing: [String]) -> String {
         let base = statusCode <= 0
             ? L10n.t("example.defaultName.noStatus")
-            : reasonPhrase(statusCode).map { "\(statusCode) \($0)" } ?? L10n.t("example.defaultName", String(statusCode))
+            : HTTPStatus.reasonPhrase(statusCode).map { "\(statusCode) \($0)" } ?? L10n.t("example.defaultName", String(statusCode))
         let taken = Set(existing)
         guard taken.contains(base) else { return base }
         return (2...).lazy.map { "\(base) (\($0))" }.first { !taken.contains($0) } ?? base
@@ -125,33 +125,6 @@ public enum ResponseExamples {
             .replacingOccurrences(of: "\n", with: " ")
         guard !trimmed.isEmpty else { return nil }
         return String(trimmed.prefix(maxNameLength))
-    }
-
-    /// Standart HTTP gerekçe ifadeleri (RFC 9110). Dil bağımsız, çevrilmez.
-    static func reasonPhrase(_ statusCode: Int) -> String? {
-        switch statusCode {
-        case 200: return "OK"
-        case 201: return "Created"
-        case 202: return "Accepted"
-        case 204: return "No Content"
-        case 301: return "Moved Permanently"
-        case 302: return "Found"
-        case 304: return "Not Modified"
-        case 400: return "Bad Request"
-        case 401: return "Unauthorized"
-        case 403: return "Forbidden"
-        case 404: return "Not Found"
-        case 405: return "Method Not Allowed"
-        case 409: return "Conflict"
-        case 415: return "Unsupported Media Type"
-        case 422: return "Unprocessable Content"
-        case 429: return "Too Many Requests"
-        case 500: return "Internal Server Error"
-        case 502: return "Bad Gateway"
-        case 503: return "Service Unavailable"
-        case 504: return "Gateway Timeout"
-        default: return nil
-        }
     }
 
     // MARK: - Ekle, yeniden adlandır, sil
