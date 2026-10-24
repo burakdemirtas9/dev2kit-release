@@ -51,9 +51,10 @@ struct APIClientLayout: View {
                         RequestTabBar()
                         Divider()
                     }
-                    if let content = appState.openExampleContent {
+                    if let content = appState.openExampleContent, let ref = appState.openExample,
+                       let draft = appState.exampleBinding(ref) {
                         // Kayıtlı örnek: istek editörü (ve Gönder'i) yerinde yok.
-                        ExampleDetailView(request: content.request, example: content.example)
+                        ExampleDetailView(request: content.request, example: content.example, draft: draft)
                     } else if let requestBinding = appState.selectedRequest {
                         RequestDetailView(request: requestBinding)
                     } else {

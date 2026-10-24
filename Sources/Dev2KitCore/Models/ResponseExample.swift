@@ -1,7 +1,8 @@
 import Foundation
 
 /// Bir isteğin altında saklanan response örneği: belli bir andaki yanıtın
-/// donmuş hali (status, header'lar, body, content type).
+/// donmuş hali (status, header'lar, body, content type) ve onu üreten
+/// request (Postman'deki `originalRequest`). İkisi de düzenlenebilir.
 ///
 /// İsteğin içinde, koleksiyon dosyasında durur (`RequestModel.examples`):
 /// istek silinince örnekleri de gider, istekle birlikte dışa aktarılır.
@@ -11,13 +12,30 @@ import Foundation
 /// kaydedilirken maskelenir (`ResponseExamples.capture`): workspace dosyası
 /// düz metin, secret'lar oraya yazılmaz.
 public struct ResponseExample: Codable, Identifiable, Hashable, Sendable {
-    public struct Header: Codable, Hashable, Sendable {
+    /// Response header'ı. Kimlik düzenleme tablosunda satır kimliği olsun diye
+    /// (yazarken satır yeniden kurulup odak kaybolmasın); `enabled` Postman'in
+    /// `disabled` alanının karşılığı. Eski kayıtlarda ikisi de yok.
+    public struct Header: Codable, Hashable, Sendable, Identifiable {
+        public var id: UUID
         public var name: String
         public var value: String
+        public var enabled: Bool
 
-        public init(name: String, value: String) {
+        public init(id: UUID = UUID(), name: String, value: String, enabled: Bool = true) {
+            self.id = id
             self.name = name
             self.value = value
+            self.enabled = enabled
+        }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            self.init(
+                id: try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID(),
+                name: try container.decode(String.self, forKey: .name),
+                value: try container.decodeIfPresent(String.self, forKey: .value) ?? "",
+                enabled: try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
+            )
         }
     }
 
@@ -37,6 +55,10 @@ public struct ResponseExample: Codable, Identifiable, Hashable, Sendable {
     public var bodyEncoding: BodyEncoding
     /// Yanıtın Content-Type'ı; yanıtta yoksa `nil`.
     public var contentType: String?
+    /// Bu yanıtı üreten request (şablon hali: `{{değişken}}`ler çözülmemiş,
+    /// düz metin kimlik bilgileri maskeli). Özellik gelmeden kaydedilen
+    /// örneklerde `nil`: uydurulmaz, ekranda "request kaydı yok".
+    public var request: ExampleRequest?
 
     public init(
         id: UUID = UUID(),
@@ -46,7 +68,8 @@ public struct ResponseExample: Codable, Identifiable, Hashable, Sendable {
         headers: [Header] = [],
         body: String = "",
         bodyEncoding: BodyEncoding = .text,
-        contentType: String? = nil
+        contentType: String? = nil,
+        request: ExampleRequest? = nil
     ) {
         self.id = id
         self.name = name
@@ -56,6 +79,7 @@ public struct ResponseExample: Codable, Identifiable, Hashable, Sendable {
         self.body = body
         self.bodyEncoding = bodyEncoding
         self.contentType = contentType
+        self.request = request
     }
 
     public init(from decoder: Decoder) throws {
@@ -69,8 +93,14 @@ public struct ResponseExample: Codable, Identifiable, Hashable, Sendable {
             headers: try container.decodeIfPresent([Header].self, forKey: .headers) ?? [],
             body: try container.decodeIfPresent(String.self, forKey: .body) ?? "",
             bodyEncoding: try container.decodeIfPresent(BodyEncoding.self, forKey: .bodyEncoding) ?? .text,
-            contentType: try container.decodeIfPresent(String.self, forKey: .contentType)
+            contentType: try container.decodeIfPresent(String.self, forKey: .contentType),
+            request: try container.decodeIfPresent(ExampleRequest.self, forKey: .request)
         )
+    }
+
+    /// Etkin header'lardan Content-Type (düzenlemeden sonra eşitlemek için).
+    public var headerContentType: String? {
+        headers.first { $0.enabled && $0.name.trimmingCharacters(in: .whitespaces).lowercased() == "content-type" }?.value
     }
 
     /// Body'nin ham byte'ları (gösterim, önizleme, dosyaya kaydetme için).
@@ -86,11 +116,70 @@ public struct ResponseExample: Codable, Identifiable, Hashable, Sendable {
     public var responseData: ResponseData {
         ResponseData(
             statusCode: statusCode,
-            headers: headers.map { (name: $0.name, value: $0.value) },
+            headers: headers.filter(\.enabled).map { (name: $0.name, value: $0.value) },
             body: bodyData,
             duration: 0,
             finalURL: nil
         )
+    }
+}
+
+/// Örneğin request tarafı: Postman `originalRequest`'inin karşılığı.
+/// Tele çıkan alanlar (auth ayrı değil: kimlik bilgisi header'da ya da
+/// `{{secret:…}}` referansında durur). Ad, ayarlar ve Token Factory alanı yok.
+public struct ExampleRequest: Codable, Hashable, Sendable {
+    public var method: HTTPMethod
+    public var url: String
+    public var headers: [KeyValueEntry]
+    public var queryParams: [KeyValueEntry]
+    public var body: RequestBody
+
+    public init(
+        method: HTTPMethod = .get,
+        url: String = "",
+        headers: [KeyValueEntry] = [],
+        queryParams: [KeyValueEntry] = [],
+        body: RequestBody = .none
+    ) {
+        self.method = method
+        self.url = url
+        self.headers = headers
+        self.queryParams = queryParams
+        self.body = body
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            method: try container.decodeIfPresent(HTTPMethod.self, forKey: .method) ?? .get,
+            url: try container.decodeIfPresent(String.self, forKey: .url) ?? "",
+            headers: try container.decodeIfPresent([KeyValueEntry].self, forKey: .headers) ?? [],
+            queryParams: try container.decodeIfPresent([KeyValueEntry].self, forKey: .queryParams) ?? [],
+            body: try container.decodeIfPresent(RequestBody.self, forKey: .body) ?? .none
+        )
+    }
+
+    /// İsteğin tele çıkan kısmı, kimlik bilgileri maskeli (`HistoryRedactor`:
+    /// geçmişle aynı kural; `{{secret:…}}` referansı olduğu gibi kalır).
+    /// Auth yapılandırması header'a dönüştürülmez: değeri gönderim anında
+    /// çözülüyor, örnekte yalnızca türü bilinir.
+    public init(capturing request: RequestModel) {
+        let masked = HistoryRedactor.redact(request)
+        self.init(method: masked.method, url: masked.url, headers: masked.headers,
+                  queryParams: masked.queryParams, body: masked.body)
+    }
+
+    /// Düzenleme ekranındaki editörler `RequestModel` bağlıyor; aradaki çeviri.
+    public var asRequestModel: RequestModel {
+        RequestModel(name: "", method: method, url: url, headers: headers, queryParams: queryParams, body: body)
+    }
+
+    public mutating func update(from model: RequestModel) {
+        method = model.method
+        url = model.url
+        headers = model.headers
+        queryParams = model.queryParams
+        body = model.body
     }
 }
 

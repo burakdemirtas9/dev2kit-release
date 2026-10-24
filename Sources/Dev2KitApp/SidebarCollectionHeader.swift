@@ -108,6 +108,11 @@ struct SidebarCollectionHeader: View {
                 } label: {
                     Label(L10n.t("collection.export"), systemImage: "square.and.arrow.up")
                 }
+                Button {
+                    appState.exportCollection(collection.id, format: .postman)
+                } label: {
+                    Label(L10n.t("collection.exportPostman"), systemImage: "square.and.arrow.up.on.square")
+                }
                 Divider()
                 Button(role: .destructive) {
                     onDelete()

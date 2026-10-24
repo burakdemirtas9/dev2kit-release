@@ -65,10 +65,12 @@ public enum ResponseExamples {
 
     /// Yanıtın tek seferde alınmış, maskelenmiş anlık görüntüsü. Status,
     /// header'lar, body ve content type AYNI `ResponseData`'dan gelir.
+    /// `request`: bu yanıtı üreten istek (çağıran, son GÖNDERİLEN hali verir;
+    /// editördeki hal gönderimden sonra değişmiş olabilir).
     ///
     /// Body maskelemesi metin boyutuyla büyüyor: çağıran ana thread'de
     /// yapmamalı (`BackgroundWork.run`).
-    public static func capture(_ response: ResponseData, name: String, date: Date = Date()) throws -> ResponseExample {
+    public static func capture(_ response: ResponseData, request: RequestModel? = nil, name: String, date: Date = Date()) throws -> ResponseExample {
         if let reason = unavailableReason(for: response) { throw reason }
         let headers = response.headers.map { ResponseExample.Header(name: $0.name, value: $0.value) }
         let body = encodedBody(response.body)
@@ -79,7 +81,8 @@ public enum ResponseExamples {
             headers: headers,
             body: body.text,
             bodyEncoding: body.encoding,
-            contentType: contentType(in: headers)
+            contentType: contentType(in: headers),
+            request: request.map(ExampleRequest.init(capturing:))
         ))
     }
 
@@ -89,10 +92,16 @@ public enum ResponseExamples {
         var copy = example
         copy.headers = example.headers.map { header in
             guard CredentialNames.isCredentialHeader(header.name), !header.value.isEmpty else { return header }
-            return ResponseExample.Header(name: header.name, value: HistoryRedactor.mask)
+            var masked = header
+            masked.value = HistoryRedactor.mask
+            return masked
         }
         if copy.bodyEncoding == .text {
             copy.body = HistoryRedactor.redactStructuredText(example.body)
+        }
+        // Request tarafı da aynı kurallarla (içe aktarılan originalRequest).
+        if let request = example.request {
+            copy.request = ExampleRequest(capturing: request.asRequestModel)
         }
         copy.name = normalizedName(example.name) ?? defaultName(statusCode: example.statusCode, existing: [])
         return copy
@@ -125,6 +134,23 @@ public enum ResponseExamples {
             .replacingOccurrences(of: "\n", with: " ")
         guard !trimmed.isEmpty else { return nil }
         return String(trimmed.prefix(maxNameLength))
+    }
+
+    // MARK: - Düzenleme
+
+    /// Kullanıcı düzenlemesinden sonra tutarlılık: boş ad öncekine döner,
+    /// Content-Type etkin header'dan okunur, metin dışı (base64) body
+    /// düzenlenmediği için dokunulmaz. Düzenlenen değer maskelenmez:
+    /// kullanıcının kendi yazdığı.
+    public static func normalizedAfterEdit(_ edited: ResponseExample, previous: ResponseExample) -> ResponseExample {
+        var copy = edited
+        copy.name = normalizedName(edited.name) ?? previous.name
+        copy.contentType = edited.headerContentType
+        if previous.bodyEncoding == .base64 {
+            copy.body = previous.body
+            copy.bodyEncoding = .base64
+        }
+        return copy
     }
 
     // MARK: - Ekle, yeniden adlandır, sil

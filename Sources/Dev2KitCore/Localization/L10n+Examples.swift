@@ -44,6 +44,32 @@ extension L10nTable {
         "example.contentType": L10nEntry("Content-Type: %1$@", "Content-Type: %1$@"),
         "example.accessibility": L10nEntry("Örnek: %1$@, status %2$@", "Example: %1$@, status %2$@"),
 
+        // Request tarafı ve düzenleme
+        "example.request.title": L10nEntry("Request", "Request"),
+        "example.response.title": L10nEntry("Response", "Response"),
+        "example.request.missing": L10nEntry("Bu örnekte request kaydı yok (özellik gelmeden önce kaydedildi). Düzenle ile ekleyebilirsin.", "This example has no request recorded (it was saved before this feature). You can add one with Edit."),
+        "example.request.add": L10nEntry("Request Ekle", "Add Request"),
+        "example.request.masked": L10nEntry("Kimlik bilgileri maskeli; {{değişken}}ler çözülmemiş haliyle.", "Credentials are masked; {{variables}} are kept unresolved."),
+        "example.edit": L10nEntry("Düzenle", "Edit"),
+        "example.edit.help": L10nEntry("Örneğin request ve response'unu düzenle; değişiklikler kendiliğinden kaydedilir", "Edit the example’s request and response; changes are saved automatically"),
+        "example.edit.done": L10nEntry("Bitti", "Done"),
+        "example.status": L10nEntry("Status", "Status"),
+        "example.status.placeholder": L10nEntry("ör. 200", "e.g. 200"),
+        "example.body.binary": L10nEntry("Body metin değil (%1$@); düzenlenemez, olduğu gibi korunur.", "The body isn’t text (%1$@); it can’t be edited and is kept as is."),
+        "example.tab.body": L10nEntry("Body", "Body"),
+        "example.tab.headers": L10nEntry("Headers", "Headers"),
+        "example.tab.params": L10nEntry("Params", "Params"),
+
+        // Postman dışa aktarma
+        "collection.exportPostman": L10nEntry("Postman Olarak Dışa Aktar…", "Export as Postman…"),
+        "export.panel.postman": L10nEntry("Koleksiyonu Postman Olarak Dışa Aktar", "Export Collection as Postman"),
+        "postmanExport.oauth2": L10nEntry("OAuth2 yapılandırması Postman'e taşınmadı (biçimleri farklı): %1$@", "The OAuth2 configuration wasn’t carried over to Postman (the formats differ): %1$@"),
+        "postmanExport.binaryExample": L10nEntry("Metin olmayan örnek body'si taşınmadı (Postman örnekleri metin): %1$@", "A non-text example body wasn’t carried over (Postman examples are text): %1$@"),
+        "postmanExport.disabledQuery": L10nEntry("Kapalı query parametreleri taşınmadı (adreste yoklar): %1$@", "Disabled query parameters weren’t carried over (they’re not in the URL): %1$@"),
+        "postmanExport.options": L10nEntry("İstek ayarları (zaman aşımı, yönlendirme, çerez) Postman'e taşınmadı: %1$@", "Request settings (timeout, redirects, cookies) weren’t carried over to Postman: %1$@"),
+        "postmanExport.more.one": L10nEntry("ve %1$@ tane daha", "and %1$@ more"),
+        "postmanExport.more.other": L10nEntry("ve %1$@ tane daha", "and %1$@ more"),
+
         // İçe / dışa aktarma
         "example.import.invalidBody": L10nEntry("body çözümlenemedi (geçersiz base64)", "the body couldn’t be decoded (invalid base64)"),
         "example.import.skipped": L10nEntry("“%1$@” request'inin “%2$@” örneği alınmadı: %3$@", "The “%2$@” example of the “%1$@” request wasn’t imported: %3$@"),

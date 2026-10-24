@@ -224,17 +224,23 @@ public enum CollectionPorting {
         var examples: [ResponseExample] = []
         for response in responses.elements {
             let headers = (response.header ?? []).compactMap { header -> ResponseExample.Header? in
-                guard let key = header.key, !(header.disabled ?? false) else { return nil }
-                return ResponseExample.Header(name: key, value: header.value ?? "")
+                guard let key = header.key else { return nil }
+                return ResponseExample.Header(name: key, value: header.value ?? "", enabled: !(header.disabled ?? false))
             }
             let label = response.name ?? ""
+            // originalRequest istekle aynı dönüştürücüden geçer; desteklenmeyen
+            // parçası (dosya alanı, bilinmeyen auth) not olarak düşer.
+            let originalRequest = response.originalRequest.map { pm in
+                ExampleRequest(capturing: convert(pm, name: "\(requestName) › \(label)", warnings: &warnings))
+            }
             let candidate = ResponseExample(
                 name: label,
                 // Kod yoksa örnek yine alınır (status doğrulanmaz).
                 statusCode: response.code ?? ResponseExamples.unknownStatus,
                 headers: headers,
                 body: response.body ?? "",
-                contentType: ResponseExamples.contentType(in: headers)
+                contentType: ResponseExamples.contentType(in: headers),
+                request: originalRequest
             )
             do {
                 examples.append(try ResponseExamples.validatedForImport(candidate))
@@ -398,8 +404,10 @@ private struct PostmanCollection: Decodable {
         let status: String?
         let header: [PMHeader]?
         let body: String?
+        /// Örneği üreten request; yoksa (eski dışa aktarımlar) `nil`.
+        let originalRequest: PMRequest?
 
-        private enum CodingKeys: String, CodingKey { case name, code, status, header, body }
+        private enum CodingKeys: String, CodingKey { case name, code, status, header, body, originalRequest }
 
         init(from decoder: Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -414,6 +422,7 @@ private struct PostmanCollection: Decodable {
             status = try? container.decodeIfPresent(String.self, forKey: .status)
             header = try? container.decodeIfPresent([PMHeader].self, forKey: .header)
             body = try? container.decodeIfPresent(String.self, forKey: .body)
+            originalRequest = try? container.decodeIfPresent(PMRequest.self, forKey: .originalRequest)
         }
     }
 

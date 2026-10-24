@@ -223,16 +223,35 @@ extension AppState {
         ResultMessage(kind: .error, title: L10n.t("result.importFailed"), message: message)
     }
 
-    func exportCollection(_ id: UUID) {
+    enum ExportFormat {
+        case dev2kit
+        /// Postman Collection v2.1 (istekler + örnekler, `originalRequest` dahil).
+        case postman
+    }
+
+    func exportCollection(_ id: UUID, format: ExportFormat = .dev2kit) {
         guard let collection = workspace.collections.first(where: { $0.id == id }) else { return }
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.json]
-        panel.nameFieldStringValue = "\(collection.name).dev2kit.json"
-        panel.title = L10n.t("export.panel")
+        switch format {
+        case .dev2kit:
+            panel.nameFieldStringValue = "\(collection.name).dev2kit.json"
+            panel.title = L10n.t("export.panel")
+        case .postman:
+            panel.nameFieldStringValue = "\(collection.name).postman_collection.json"
+            panel.title = L10n.t("export.panel.postman")
+        }
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
-            try CollectionPorting.exportData(collection).write(to: url)
-            portingMessage = Self.exportMessage(collection: collection, fileName: url.lastPathComponent)
+            switch format {
+            case .dev2kit:
+                try CollectionPorting.exportData(collection).write(to: url)
+                portingMessage = Self.exportMessage(collection: collection, fileName: url.lastPathComponent)
+            case .postman:
+                let output = try PostmanExporter.export(collection)
+                try output.data.write(to: url)
+                portingMessage = Self.exportMessage(collection: collection, fileName: url.lastPathComponent, notes: output.notes)
+            }
         } catch {
             portingMessage = ResultMessage(
                 kind: .error,
@@ -244,13 +263,16 @@ extension AppState {
 
     /// Dışa aktarma sonucu, dosyanın gerçek içeriğine göre: düz metin kimlik
     /// bilgisi varsa uyarı ve yerleri; yoksa "yalnızca referans" bilgisi.
-    static func exportMessage(collection: CollectionModel, fileName: String) -> ResultMessage {
+    static func exportMessage(collection: CollectionModel, fileName: String, notes: [String] = []) -> ResultMessage {
         let subtitle = "“\(collection.name)” · \(fileName)"
         let found = CollectionPorting.plaintextCredentials(in: collection)
         let exampleCount = collection.requests.reduce(0) { $0 + $1.examples.count }
-        let exampleLines = exampleCount > 0 ? [MessageLine(.info, L10n.plural("example.export.included", count: exampleCount))] : []
+        // Biçim dönüşümünde taşınamayanlar (Postman) uyarı satırı olarak.
+        let exampleLines = (exampleCount > 0 ? [MessageLine(.info, L10n.plural("example.export.included", count: exampleCount))] : [])
+            + notes.map { MessageLine(.warning, $0) }
         guard !found.isEmpty else {
-            return ResultMessage(kind: .success, title: L10n.t("result.exported"), message: subtitle,
+            // Biçim dönüşümünde kayıp varsa başarı değil uyarı.
+            return ResultMessage(kind: notes.isEmpty ? .success : .warning, title: L10n.t("result.exported"), message: subtitle,
                                  lines: [MessageLine(.info, L10n.t("result.exported.secrets"))] + exampleLines)
         }
         let shown = found.prefix(8).map { MessageLine(.warning, "“\($0.requestName)”: \($0.places.joined(separator: ", "))") }

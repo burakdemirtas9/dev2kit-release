@@ -274,6 +274,49 @@ final class ResponseExampleFlowTests: XCTestCase {
         XCTAssertNotEqual(examples(copyID)[0].id, examples(request.id)[0].id)
     }
 
+    // MARK: - Request tarafı ve düzenleme
+
+    /// Örneğin request'i yanıtı üreten (son gönderilen) haldir; gönderimden
+    /// sonra editörde yapılan değişiklik örneğe girmez.
+    func testExampleCapturesTheSentRequestNotLaterEdits() async throws {
+        var request = harness.addRequest(named: "gönderilen", url: "https://api.example.com/v1")
+        state.recordBaseline(request)                    // gönderim anındaki hal
+        request.url = "https://api.example.com/sonradan"
+        state.selectedRequest?.wrappedValue = request    // gönderimden sonra düzenlendi
+        receive(request.id)
+        try await saveExample(request.id, name: "e")
+        XCTAssertEqual(examples(request.id).first?.request?.url, "https://api.example.com/v1")
+    }
+
+    func testEditingExampleRequestAndResponseIsSavedAndNormalized() async throws {
+        let request = harness.addRequest(named: "düzenle")
+        receive(request.id)
+        try await saveExample(request.id, name: "e")
+        let ref = AppState.ExampleRef(requestID: request.id, exampleID: examples(request.id)[0].id)
+        let binding = try XCTUnwrap(state.exampleBinding(ref))
+
+        var edited = binding.wrappedValue
+        edited.statusCode = 404
+        edited.body = #"{"error": "yok"}"#
+        edited.headers = [ResponseExample.Header(name: "Content-Type", value: "application/problem+json")]
+        edited.request?.method = .delete
+        edited.request?.url = "https://api.example.com/kayit/9"
+        binding.wrappedValue = edited
+
+        let saved = try XCTUnwrap(harness.savedWorkspace().collections.flatMap(\.requests).first { $0.id == request.id }?.examples.first)
+        XCTAssertEqual(saved.statusCode, 404)
+        XCTAssertEqual(saved.body, #"{"error": "yok"}"#)
+        XCTAssertEqual(saved.contentType, "application/problem+json", "Content-Type header'dan eşitlenir")
+        XCTAssertEqual(saved.request?.method, .delete)
+        XCTAssertEqual(saved.request?.url, "https://api.example.com/kayit/9")
+        XCTAssertEqual(state.request(withID: request.id)?.url, request.url, "ana istek değişmez")
+
+        // Örnek silindikten sonra eski bağlama yazmak bir şey yapmaz.
+        state.deleteExample(ref)
+        binding.wrappedValue = edited
+        XCTAssertTrue(examples(request.id).isEmpty)
+    }
+
     // MARK: - İçe aktarma
 
     func testImportOverLimitRequiresSelectionAndNeverTrimsSilently() throws {

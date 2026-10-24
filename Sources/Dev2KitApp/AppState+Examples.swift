@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 import Dev2KitCore
 
 /// Response örnekleri: kaydetme (sınır uyarısıyla), görüntüleme, "Dene" ile
@@ -88,12 +89,16 @@ extension AppState {
               let request = request(withID: requestID) else { return }
         // Tutarlı görüntü: status, header, body aynı `ResponseData` değerinden.
         let data = display.data
+        // Yanıtı üreten request: son BAŞARIYLA gönderilen hal (yanıt geldiğinde
+        // kaydedilir). Editördeki hal o andan sonra değişmiş olabilir; yoksa
+        // (ör. hiç kaydedilmemiş) güncel hal.
+        let sentRequest = workspace.sentBaselines[requestID.uuidString] ?? request.withoutExamples
         pendingExampleSave = PendingExampleSave(requestID: requestID, snapshot: nil, phase: .preparing)
         let pendingID = pendingExampleSave?.id
         let existingNames = request.examples.map(\.name)
         Task { [weak self] in
             // Maskeleme body boyutuyla büyüyen regex işi: ana thread dışında.
-            let captured = await BackgroundWork.run { try? ResponseExamples.capture(data, name: "") }
+            let captured = await BackgroundWork.run { try? ResponseExamples.capture(data, request: sentRequest, name: "") }
             guard let self, self.pendingExampleSave?.id == pendingID else { return }
             guard var snapshot = captured else {
                 self.pendingExampleSave = nil
@@ -147,6 +152,30 @@ extension AppState {
             collapsedCollectionIDs.remove(collection.id)
         }
         sidebarRevealID = requestID
+    }
+
+    // MARK: - Düzenleme
+
+    /// Örneği yerinde düzenlemek için bağlama (request ve response tarafı).
+    /// Her yazımda `ResponseExamples.normalizedAfterEdit` uygulanır ve istek
+    /// düzenlemesi gibi gecikmeli kaydedilir. Örnek ya da istek silinirse
+    /// okuma son bilinen değeri döner, yazma bir şey yapmaz.
+    func exampleBinding(_ ref: ExampleRef) -> Binding<ResponseExample>? {
+        guard let initial = example(ref) else { return nil }
+        return Binding(
+            get: { self.example(ref) ?? initial },
+            set: { newValue in
+                // `withRequest` içinde workspace okunmaz: önceki değer önce alınır.
+                guard let previous = self.example(ref) else { return }
+                let normalized = ResponseExamples.normalizedAfterEdit(newValue, previous: previous)
+                guard normalized != previous else { return }
+                self.withRequest(ref.requestID) { request in
+                    guard let index = request.examples.firstIndex(where: { $0.id == ref.exampleID }) else { return }
+                    request.examples[index] = normalized
+                }
+                self.persistSoon()
+            }
+        )
     }
 
     // MARK: - Yönetim
