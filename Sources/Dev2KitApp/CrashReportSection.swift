@@ -110,7 +110,7 @@ struct CrashReportSection: View {
         }
     }
 
-    /// "21 Eki 22:28 · Sürüm 1.2.0 (161)"
+    /// "21 Eki 22:28 · Sürüm 1.2 (177)"
     private func metadataLine(_ record: LatestCrashRecord) -> String {
         let date = record.summary?.crashedAt ?? record.session.launchedAt
         let version = L10n.t("crash.version", record.summary?.appVersion ?? record.session.appVersion,

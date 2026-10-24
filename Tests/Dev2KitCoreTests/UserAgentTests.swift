@@ -8,7 +8,7 @@ final class UserAgentTests: XCTestCase {
     private let resolver = VariableResolver(environment: nil, secretStore: InMemorySecretStore())
 
     func testValueIsTheDecidedVersion() {
-        XCTAssertEqual(Dev2KitIdentity.userAgent, "dev2kit-v1.2.0")
+        XCTAssertEqual(Dev2KitIdentity.userAgent, "dev2kit-v1.2")
     }
 
     func testEngineSendsDev2KitUserAgent() throws {

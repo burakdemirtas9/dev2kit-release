@@ -14,10 +14,9 @@ enum AboutPanel {
             .applicationVersion: Dev2KitIdentity.version,
             .credits: credits(),
         ]
-        // `.app`'te derleme numarası Info.plist'te; bundle'sız çalışmada yok.
-        if let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String {
-            options[.version] = build
-        }
+        // `.app`'te Info.plist'ten (make-app.sh oradan yazar); bundle'sız
+        // çalışmada kaynaktaki değer.
+        options[.version] = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? Dev2KitIdentity.build
         NSApp.orderFrontStandardAboutPanel(options: options)
         NSApp.activate()
     }

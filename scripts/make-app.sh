@@ -12,7 +12,10 @@ cd "$(dirname "$0")/.."
 # Sürüm tek yerde: Dev2KitIdentity.version (User-Agent da oradan).
 VERSION="$(sed -n 's/.*static let version = "\(.*\)".*/\1/p' Sources/Dev2KitCore/Networking/Dev2KitIdentity.swift)"
 VERSION="${VERSION:-0.0.0}"
-BUILD_NUMBER="$(git rev-list --count HEAD 2>/dev/null || echo 1)"
+# Derleme numarası da tek yerde: Dev2KitIdentity.build (release deposunda
+# commit sayısı anlamsız). Yoksa eski yol: commit sayısı.
+BUILD_NUMBER="$(sed -n 's/.*static let build = "\(.*\)".*/\1/p' Sources/Dev2KitCore/Networking/Dev2KitIdentity.swift)"
+BUILD_NUMBER="${BUILD_NUMBER:-$(git rev-list --count HEAD 2>/dev/null || echo 1)}"
 APP="build/dev2kit.app"
 ENTITLEMENTS="Sources/Dev2KitApp/Resources/Dev2Kit.entitlements"
 
