@@ -108,6 +108,14 @@ final class AppState {
 
     // MARK: - Sidebar arama
 
+    /// Araç çubuğundaki logonun penceredeki sağ kenarı (point; ölçülene
+    /// kadar `nil`). Sol panelin asgari genişliği buna göre (`SidebarSizing`).
+    var headerLogoTrailingEdge: CGFloat?
+
+    var sidebarMinimumWidth: CGFloat {
+        SidebarSizing.minimumWidth(logoTrailingEdge: headerLogoTrailingEdge, logoWidth: HeaderLogo.size.width)
+    }
+
     /// Sidebar filtresi. Kalıcı DEĞİL: arama geçici bir görünüm durumu,
     /// uygulamayı filtreli açmak "isteklerim kaybolmuş" etkisi yaratır.
     var searchQuery = ""

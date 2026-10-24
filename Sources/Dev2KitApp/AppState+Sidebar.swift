@@ -58,6 +58,6 @@ extension AppState {
         }
         // başlık: chevron + tutamaç + padding ≈ 64px · satır: metot sütunu + boşluk ≈ 88px
         let widest = max(width(longestHeader, headerFont) + 64, width(longestRow, rowFont) + 88)
-        return max(220, widest + 36)
+        return max(SidebarSizing.baseMinimum, widest + 36)
     }
 }

@@ -105,7 +105,9 @@ final class SplitDividerTests: XCTestCase {
         XCTAssertEqual(UserDefaults.standard.double(forKey: "sidebarWidth"), Double(start + 40), accuracy: 0.5, "bırakılan genişlik saklanır")
 
         drag(sidebar, dx: -5_000, steps: 1)
-        XCTAssertEqual(frame(sidebar).minX, 220, accuracy: 0.5, "hızlı sürükleme asgaride durur")
+        // Asgari sabit 220 değil: logonun panelin üstüne sığması (SidebarSizing).
+        XCTAssertEqual(frame(sidebar).minX, harness.state.sidebarMinimumWidth, accuracy: 0.5, "hızlı sürükleme asgaride durur")
+        XCTAssertGreaterThanOrEqual(frame(sidebar).minX, SidebarSizing.minimumWidth(logoTrailingEdge: nil, logoWidth: HeaderLogo.size.width) - 0.5)
         drag(sidebar, dx: 5_000, steps: 1)
         XCTAssertLessThanOrEqual(frame(sidebar).maxX, 1140 - 480 + 0.5, "detaya en az 480 pt kalır")
     }

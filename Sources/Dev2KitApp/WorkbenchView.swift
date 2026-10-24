@@ -4,11 +4,14 @@ import Dev2KitCore
 /// Workbench modu: solda araç listesi, sağda açık araç.
 struct WorkbenchView: View {
     @Environment(WorkbenchState.self) private var workbench
+    /// Araç listesinin genişliği: logo iki modda da aynı yerde, liste de
+    /// onun genişliğinde (`AppState.sidebarMinimumWidth`, ContentView verir).
+    var sidebarWidth: CGFloat = SidebarSizing.baseMinimum
 
     var body: some View {
         HStack(spacing: 0) {
             WorkbenchSidebar()
-                .frame(width: 220)
+                .frame(width: sidebarWidth)
             Divider()
             if workbench.showsDiffChecker {
                 DiffCheckerView()

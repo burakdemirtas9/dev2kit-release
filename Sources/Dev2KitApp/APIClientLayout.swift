@@ -13,25 +13,28 @@ struct APIClientLayout: View {
     @Environment(AppState.self) private var appState
 
     private static let sidebarWidthKey = "sidebarWidth"
-    private static let minSidebarWidth: CGFloat = 220
     private static let splitSpace = "splitContainer"
 
-    /// İlk açılışta minimum; sonraki açılışlarda kullanıcının bıraktığı genişlik.
-    @State private var sidebarWidth: CGFloat = {
-        let stored = UserDefaults.standard.double(forKey: APIClientLayout.sidebarWidthKey)
-        return stored >= APIClientLayout.minSidebarWidth ? CGFloat(stored) : APIClientLayout.minSidebarWidth
-    }()
+    /// İlk açılışta minimum; sonraki açılışlarda kullanıcının bıraktığı
+    /// genişlik. Asgari logo ölçülünce kesinleşir; kayıtlı değer asgarinin
+    /// altındaysa gösterimde sınıra çekilir (`effectiveSidebarWidth`),
+    /// geçerli tercih olduğu gibi kalır.
+    @State private var sidebarWidth: CGFloat = SidebarSizing.restoredPreference(
+        UserDefaults.standard.double(forKey: APIClientLayout.sidebarWidthKey),
+        minimum: SidebarSizing.baseMinimum
+    )
 
     @State private var dragStartWidth: CGFloat?
 
-    /// Genişlik sınırları: alt 220, üst içerik genişliği — ve detay paneline
-    /// en az 480px kalacak şekilde pencereye göre kırpılır.
+    /// Genişlik sınırları (`SidebarSizing`): alt sınır logonun panelin
+    /// üstünde sığması, üst sınır en uzun ad — ve detay paneline en az
+    /// 480 pt kalacak şekilde pencereye göre kırpılır. Çelişirse alt kazanır.
     private func sidebarUpperBound(totalWidth: CGFloat) -> CGFloat {
-        min(appState.sidebarMaxWidth, totalWidth - 480 - SplitDivider.thickness)
+        SidebarSizing.upperBound(contentMaximum: appState.sidebarMaxWidth, totalWidth: totalWidth, divider: SplitDivider.thickness)
     }
 
     private func effectiveSidebarWidth(totalWidth: CGFloat) -> CGFloat {
-        SplitSizing.clamp(sidebarWidth, lower: Self.minSidebarWidth, upper: sidebarUpperBound(totalWidth: totalWidth))
+        SidebarSizing.width(preferred: sidebarWidth, minimum: appState.sidebarMinimumWidth, upper: sidebarUpperBound(totalWidth: totalWidth))
     }
 
 
@@ -75,7 +78,7 @@ struct APIClientLayout: View {
             dragStartWidth = effectiveSidebarWidth(totalWidth: totalWidth)
         } onChange: { delta in
             sidebarWidth = SplitSizing.resized(start: dragStartWidth ?? sidebarWidth, delta: delta,
-                                               lower: Self.minSidebarWidth, upper: sidebarUpperBound(totalWidth: totalWidth))
+                                               lower: appState.sidebarMinimumWidth, upper: sidebarUpperBound(totalWidth: totalWidth))
         } onEnd: {
             dragStartWidth = nil
             UserDefaults.standard.set(Double(sidebarWidth), forKey: Self.sidebarWidthKey)

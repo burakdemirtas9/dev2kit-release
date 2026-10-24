@@ -41,6 +41,19 @@ struct ContentView: View {
         }
     }
 
+    /// Pencere başlığının ("dev2kit") yerinde logo; başlık Pencere menüsünde
+    /// ve Mission Control'de kalır. Görsel kendisi PNG: macOS 26'nın ortak
+    /// cam kapsülü kapalı, yalnızca görsel (kullanıcı isteği, 2026-10-24).
+    @ToolbarContentBuilder
+    private var logoToolbarItem: some ToolbarContent {
+        if #available(macOS 26.0, *) {
+            ToolbarItem(placement: .navigation) { HeaderLogo() }
+                .sharedBackgroundVisibility(.hidden)
+        } else {
+            ToolbarItem(placement: .navigation) { HeaderLogo() }
+        }
+    }
+
     /// Geçmiş: çarkın solunda, aynı boşlukla (kullanıcı isteği, 2026-10-20).
     /// Çarkla aynı görünüm (28 pt cam daire); ortak kapsül kapalı, boşluk
     /// camın dışında. Yalnızca API Client'ta.
@@ -202,7 +215,7 @@ struct ContentView: View {
                     .modeLayer(visible: appState.isAPIClient)
             }
             if !appState.isAPIClient || keepsWorkbench {
-                WorkbenchView()
+                WorkbenchView(sidebarWidth: appState.sidebarMinimumWidth)
                     .modeLayer(visible: !appState.isAPIClient)
             }
         }
@@ -235,6 +248,7 @@ struct ContentView: View {
             keepsWorkbench = true
         }
         .toolbar {
+            logoToolbarItem
             ToolbarItem(placement: .principal) {
                 modePicker
             }
@@ -267,6 +281,7 @@ struct ContentView: View {
             settingsToolbarItem
             environmentToolbarItem
         }
+        .modifier(HidesWindowTitle())
         .sheet(isPresented: $showingSecrets) {
             SecretsView()
         }

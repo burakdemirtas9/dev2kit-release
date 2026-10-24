@@ -74,7 +74,9 @@ struct Dev2KitApp: App {
     /// Türkçe 1125 punto ölçüldü) kenar çubuğunu ve çıktı bölmesini kırpıyordu
     /// (14" ekranda pencereyi küçültünce düğmeler kayboluyordu, 2026-10-21).
     /// Her araç ve iki dil için `MinimumWindowSizeTests` korur.
-    static let minimumWindowSize = CGSize(width: 1140, height: 560)
+    /// 1140 → 1160 (2026-10-24): sol panel logoya göre 220 → ~239 pt oldu;
+    /// Türkçe JSON Biçimlendir üst çubuğu 1144 pt istedi.
+    static let minimumWindowSize = CGSize(width: 1160, height: 560)
     @AppStorage(EditorZoom.key) private var editorFontSize = EditorZoom.standard
 
     /// Workbench'teyken API Client'a ait kısayollar devre dışı (docs/V2.md).
