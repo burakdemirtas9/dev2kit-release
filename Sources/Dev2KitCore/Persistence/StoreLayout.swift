@@ -1,12 +1,14 @@
 import Foundation
 
-/// Veri dizininin yerleşimi (şema 2, 2026-10-21).
+/// Veri dizininin yerleşimi (şema 2, 2026-10-21; şema 3, 2026-10-24: örnekler ayrı).
 ///
 /// ```
 /// <kök>/
 ///   store/
 ///     manifest.json            şema, sıra, etkin environment, dosya özetleri
-///     collections/<uuid>.json  koleksiyon başına (istekleriyle)
+///     collections/<uuid>.json  koleksiyon başına (istekleriyle, örnekleri hariç)
+///     examples/<uuid>.json     istek başına kayıtlı response örnekleri (şema 3;
+///                              yalnızca örneği olan istekte)
 ///     environments.json        tüm environment'lar (az ve küçük)
 ///     settings.json            TLS profilleri, son gönderilen haller
 ///     journal.json             süren çok dosyalı işlem (bitince silinir)
@@ -16,7 +18,8 @@ import Foundation
 ///   workspace.json             şema 1 (tek dosya); geçişten sonra yedeğe taşınır
 /// ```
 /// Ayrım kullanım şekline göre: tek isteğin düzenlenmesi yalnızca kendi
-/// koleksiyon dosyasını (ve manifest'i) yazar. Environment'lar ve ayarlar az
+/// koleksiyon dosyasını (ve manifest'i) yazar. Örnekler (5 × 1 MB'a kadar)
+/// ayrı dosyada: istek düzenlemek onları yeniden yazmaz. Environment'lar ve ayarlar az
 /// olduğu için tek dosyada; her alana ayrı dosya açılmadı.
 public struct StoreLayout: Sendable {
     public let root: URL
@@ -37,23 +40,30 @@ public struct StoreLayout: Sendable {
     static let environmentsPath = "environments.json"
     static let settingsPath = "settings.json"
     static func collectionPath(_ id: UUID) -> String { "collections/\(id.uuidString).json" }
+    /// İsteğin kayıtlı örnekleri (şema 3).
+    static func examplesPath(_ requestID: UUID) -> String { "examples/\(requestID.uuidString).json" }
 
     /// Manifest ve günlükteki göreli yol izin verilen biçimde mi. Bu yollarla
     /// dosya taşınıp siliniyor; bozulmuş ya da elle değiştirilmiş bir dosyadaki
     /// `../` dizin dışına çıkmasın (güvenlik incelemesi, 2026-10-21).
     static func isValidRelativePath(_ path: String) -> Bool {
         if path == environmentsPath || path == settingsPath { return true }
-        guard path.hasPrefix("collections/"), path.hasSuffix(".json") else { return false }
-        let stem = path.dropFirst("collections/".count).dropLast(".json".count)
-        guard let id = UUID(uuidString: String(stem)) else { return false }
-        return collectionPath(id) == path
+        for (prefix, make) in [("collections/", collectionPath), ("examples/", examplesPath)] {
+            guard path.hasPrefix(prefix), path.hasSuffix(".json") else { continue }
+            let stem = path.dropFirst(prefix.count).dropLast(".json".count)
+            guard let id = UUID(uuidString: String(stem)) else { return false }
+            return make(id) == path
+        }
+        return false
     }
 }
 
 /// Hangi dosyanın hangi sürümünün geçerli olduğu. Son yazılan dosya:
 /// çok dosyalı işlemde manifest en sonda yazılır.
 struct StoreManifest: Codable, Equatable {
-    static let currentSchema = 2
+    /// 3 (2026-10-24): response örnekleri `examples/` altında ayrı dosyada.
+    /// Daha eski sürüm bu yapıyı açmaz (`newerSchema`), üzerine yazmaz.
+    static let currentSchema = 3
 
     var schemaVersion: Int
     var activeEnvironmentID: UUID?

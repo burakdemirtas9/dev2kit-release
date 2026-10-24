@@ -1,6 +1,10 @@
 import Foundation
 
-/// Workspace'in dosya tabanlı deposu (şema 2). Yerleşim: `StoreLayout`.
+/// Workspace'in dosya tabanlı deposu (şema 3). Yerleşim: `StoreLayout`.
+///
+/// - **Encode önbelleği:** içeriği son kayıttakiyle aynı olan dosya yeniden
+///   encode edilmez ve özetlenmez (`EncodeCache`); kayıt maliyeti değişen
+///   dosya kadar. Önbellek yalnızca değer + özet tutar, bayt tutmaz.
 ///
 /// - **Yazım:** yalnızca değişen dosyalar. Tek isteği düzenlemek kendi
 ///   koleksiyon dosyasını ve manifest'i yazar; eskiden her tuş vuruşunda tüm
@@ -25,6 +29,8 @@ public final class WorkspaceStore: @unchecked Sendable {
     private var committed: StoreManifest?
     private var lastBackup: Date?
     private let clock: @Sendable () -> Date
+    /// Değişmeyen dosyalar her kayıtta yeniden encode edilip özetlenmesin.
+    private let encodeCache = EncodeCache()
 
     public static let keptBackups = 5
     public static let backupInterval: TimeInterval = 3_600
@@ -100,16 +106,20 @@ public final class WorkspaceStore: @unchecked Sendable {
         if FileManager.default.fileExists(atPath: layout.journal.path) {
             _ = try recoverJournalLocked()
         }
-        let files = try Self.encode(workspace)
+        let encoded = try Self.encodeWithDigests(workspace, cache: encodeCache)
         let manifest = StoreManifest(
             schemaVersion: StoreManifest.currentSchema,
             activeEnvironmentID: workspace.activeEnvironmentID,
             collectionOrder: workspace.collections.map(\.id),
-            files: files.mapValues(AtomicFile.digest)
+            files: encoded.digests
         )
         guard !manifest.sameContent(as: committed) else { return }
-        let changed = files.filter { committed?.files[$0.key] != manifest.files[$0.key] }
-        let removed = Set(committed?.files.keys.map { $0 } ?? []).subtracting(files.keys)
+        // Yalnızca özeti değişen dosyalar; baytları yalnızca onlar için.
+        var changed: [String: Data] = [:]
+        for (path, digest) in encoded.digests where committed?.files[path] != digest {
+            changed[path] = try encoded.data(for: path)
+        }
+        let removed = Set(committed?.files.keys.map { $0 } ?? []).subtracting(encoded.digests.keys)
         try commitLocked(writes: changed, deletes: Array(removed), manifest: manifest, in: layout.store)
         committed = manifest
         backUpIfDueLocked(force: false)
@@ -206,15 +216,72 @@ public final class WorkspaceStore: @unchecked Sendable {
     }()
 
     static func encode(_ workspace: WorkspaceModel) throws -> [String: Data] {
-        var files: [String: Data] = [:]
-        for collection in workspace.collections {
-            files[StoreLayout.collectionPath(collection.id)] = try encoder.encode(collection)
+        try encodeWithDigests(workspace, cache: nil).fresh
+    }
+
+    /// Kaydın encode sonucu: tüm dosyaların özeti; baytlar yalnızca bu turda
+    /// encode edilenler için tutulur, önbellekten gelenlerinki gerekirse
+    /// (diskteki halden farklıysa) o an üretilir. Böylece önbellek dosya
+    /// içeriklerini bellekte ikinci kez taşımaz.
+    struct Encoded {
+        var digests: [String: String] = [:]
+        var fresh: [String: Data] = [:]
+        var cached: [String: EncodeCache.Entry] = [:]
+
+        func data(for path: String) throws -> Data {
+            if let data = fresh[path] { return data }
+            guard let entry = cached[path] else { throw CocoaError(.fileWriteUnknown) }
+            return try entry.encode()
         }
-        files[StoreLayout.environmentsPath] = try encoder.encode(workspace.environments)
-        files[StoreLayout.settingsPath] = try encoder.encode(
-            StoreSettings(tlsProfiles: workspace.tlsProfiles, sentBaselines: workspace.sentBaselines)
-        )
-        return files
+    }
+
+    /// Dosyalar ve özetleri. Örnekler istek başına ayrı dosyada (şema 3);
+    /// koleksiyon dosyası örneksiz yazılır. `cache` verilirse içeriği son
+    /// kayıttakiyle aynı olan dosya yeniden encode edilmez ve özetlenmez.
+    ///
+    /// Ölçüldü (2026-10-24, release, 20 istek × 5 × 1 MB örnek): önceden her
+    /// kayıt (değişiklik olmasa da, başka koleksiyonda tek harf de) ~330–370 ms.
+    static func encodeWithDigests(_ workspace: WorkspaceModel, cache: EncodeCache?) throws -> Encoded {
+        var result = Encoded()
+        func put<T: Encodable & Equatable>(_ value: T, at path: String) throws {
+            if let hit = cache?.hit(for: value, at: path) {
+                result.digests[path] = hit.digest
+                result.cached[path] = hit
+                return
+            }
+            let data = try encoder.encode(value)
+            let digest = AtomicFile.digest(data)
+            result.digests[path] = digest
+            result.fresh[path] = data
+            cache?.store(value, digest: digest, at: path)
+        }
+        for collection in workspace.collections {
+            var stripped = collection
+            for index in stripped.requests.indices where !stripped.requests[index].examples.isEmpty {
+                let request = stripped.requests[index]
+                try put(request.examples, at: StoreLayout.examplesPath(request.id))
+                stripped.requests[index].examples = []
+            }
+            try put(stripped, at: StoreLayout.collectionPath(collection.id))
+        }
+        try put(workspace.environments, at: StoreLayout.environmentsPath)
+        try put(StoreSettings(tlsProfiles: workspace.tlsProfiles, sentBaselines: workspace.sentBaselines),
+                at: StoreLayout.settingsPath)
+        cache?.retain(only: Set(result.digests.keys))
+        return result
+    }
+
+    /// Koleksiyonlara örneklerini dosyalarından yerleştirir. Şema 2'de
+    /// (2026-10-24 öncesi) örnekler koleksiyon dosyasının içindeydi: dosyası
+    /// olmayan istekte o haliyle kalır, bir sonraki kayıt ayırır.
+    static func attachExamples(to collections: inout [CollectionModel], load: (String) -> [ResponseExample]?) {
+        for c in collections.indices {
+            for r in collections[c].requests.indices {
+                if let examples = load(StoreLayout.examplesPath(collections[c].requests[r].id)) {
+                    collections[c].requests[r].examples = examples
+                }
+            }
+        }
     }
 
     /// Dizindeki yapıyı okur ve her dosyayı manifest özetine göre doğrular.
@@ -246,6 +313,10 @@ public final class WorkspaceStore: @unchecked Sendable {
             let names = (try? FileManager.default.contentsOfDirectory(atPath: collectionsDir.path)) ?? []
             partial.collections = names.filter { $0.hasSuffix(".json") }.sorted()
                 .compactMap { file("collections/\($0)", CollectionModel.self, expected: nil) }
+            attachExamples(to: &partial.collections) { path in
+                guard FileManager.default.fileExists(atPath: store.appendingPathComponent(path).path) else { return nil }
+                return file(path, [ResponseExample].self, expected: nil)
+            }
             return .failure(ReadFailure(kind: .damaged, unreadable: unreadable, partial: partial))
         }
         // Geçersiz yol taşıyan manifest bozuk sayılır (yedeğe dönülür).
@@ -267,6 +338,12 @@ public final class WorkspaceStore: @unchecked Sendable {
         }
         partial.collections = manifest.collectionOrder.compactMap { id in
             file(StoreLayout.collectionPath(id), CollectionModel.self, expected: manifest.files[StoreLayout.collectionPath(id)])
+        }
+        // Örnek dosyası manifest'teyse okunur ve özeti doğrulanır; tutmazsa
+        // diğer dosyalar gibi bozuk sayılır (karantina + yedek).
+        attachExamples(to: &partial.collections) { path in
+            guard let expected = manifest.files[path] else { return nil }
+            return file(path, [ResponseExample].self, expected: expected)
         }
         // Sırada olmayan ama manifest'te dosyası olan koleksiyon (olmamalı).
         guard unreadable.isEmpty else {
@@ -496,7 +573,42 @@ extension WorkspaceStore {
 /// bundan sonraki her sürüm buraya bir adım olarak eklenir.
 enum StoreMigrations {
     static func upgrade(_ manifest: inout StoreManifest) {
-        // Şimdilik tek şema (2). Yeni sürümde: `if manifest.schemaVersion < 3 { …; manifest.schemaVersion = 3 }`
+        // 2 → 3: dosya yapısı aynı; örnekler koleksiyon dosyasının içinden
+        // ayrı dosyaya bir sonraki kayıtta taşınır (`attachExamples` ikisini
+        // de okur). Manifest'te değişecek alan yok.
         manifest.schemaVersion = max(manifest.schemaVersion, StoreManifest.currentSchema)
+    }
+}
+
+/// Son kayıttaki dosya içerikleri: değeri aynı olan dosya yeniden encode
+/// edilmez ve özetlenmez. Karşılaştırma `==` ile; değişmemiş değer aynı
+/// belleği paylaştığı için (String/Array kopyalama-yazma) ucuz. Kayıt kilidi
+/// altında kullanılır (`WorkspaceStore.lock`).
+///
+/// Yanlış içerik yazamaz: aynı değer + aynı encoder = aynı bayt (çıktı
+/// sıralı anahtarlı, kararlı). Diskteki hal ne olursa olsun geçerlidir;
+/// yazılıp yazılmayacağına yine manifest özeti karar verir.
+final class EncodeCache {
+    struct Entry {
+        let value: Any
+        let digest: String
+        let encode: () throws -> Data
+    }
+
+    private var entries: [String: Entry] = [:]
+
+    /// Değer son kayıttakiyle aynıysa onun özeti.
+    func hit<T: Encodable & Equatable>(for value: T, at path: String) -> Entry? {
+        guard let cached = entries[path], let old = cached.value as? T, old == value else { return nil }
+        return cached
+    }
+
+    func store<T: Encodable & Equatable>(_ value: T, digest: String, at path: String) {
+        entries[path] = Entry(value: value, digest: digest, encode: { try WorkspaceStore.encoder.encode(value) })
+    }
+
+    /// Artık olmayan dosyaların kaydı düşer (silinen istek/koleksiyon).
+    func retain(only paths: Set<String>) {
+        entries = entries.filter { paths.contains($0.key) }
     }
 }
