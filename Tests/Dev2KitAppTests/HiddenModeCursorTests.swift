@@ -74,6 +74,38 @@ final class HiddenModeCursorTests: XCTestCase {
         XCTAssertEqual(leakingOwners(root), [])
     }
 
+    /// Kullanıcı bildirimi (2026-10-24): Gönder'de I-beam yine. Gizli
+    /// Workbench sonradan YENİ editör kuruyordu (araç değişimi); eşitleme
+    /// yalnızca mod değişiminde çalıştığı için yeni editörler saydam ama
+    /// imleç alanıyla kalıyordu. Artık pencere güncellemesinde de eşitlenir
+    /// (testte olay döngüsü yok; `window.update()` onu taklit eder).
+    func testTextViewsCreatedLaterInHiddenModeAreAlsoHidden() throws {
+        harness.addRequest(named: "R", url: "https://api.example.com/users")
+        harness.state.mode = .workbench
+        let workbench = WorkbenchState()
+        let controller = NSHostingController(rootView: ContentView().environment(harness.state).environment(workbench))
+        let window = NSWindow(contentRect: NSRect(x: -5000, y: -5000, width: 1140, height: 600),
+                              styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+        window.contentViewController = controller
+        window.orderFrontRegardless()
+        defer { window.orderOut(nil) }
+        let root = try XCTUnwrap(window.contentView)
+        settle()
+        harness.state.mode = .apiClient
+        settle()
+        XCTAssertEqual(leakingOwners(root), [])
+
+        // Gizliyken Workbench araçları değişir: yeni editörler kurulur.
+        for tool in WorkbenchCatalog.all.suffix(4) {
+            workbench.select(toolID: tool.id)
+            settle(0.15)
+        }
+        window.update()
+        settle(0.4)
+        XCTAssertEqual(leakingOwners(root), [], "sonradan kurulan gizli editörler de imleci almamalı")
+        XCTAssertTrue(visibleOwners(root).contains { $0 is AddressTextView }, "API Client adres alanı etkin kalır")
+    }
+
     /// Saydam düğmeler (⌘K'nın görünmez düğmesi) gizlenmez: kısayolları çalışır.
     func testOnlyTextOwnersAreAffected() {
         let container = NSView(frame: NSRect(x: 0, y: 0, width: 200, height: 100))

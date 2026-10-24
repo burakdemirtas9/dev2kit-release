@@ -85,8 +85,53 @@ struct HiddenModeCursorGuardView: NSViewRepresentable {
     }
 }
 
-/// Tıklamayı ve odağı hiç almayan boş görünüm.
+/// Tıklamayı ve odağı hiç almayan boş görünüm; pencere güncellendikçe
+/// eşitlemeyi tekrarlar.
+///
+/// Neden yalnızca mod değişiminde değil (kullanıcı bildirimi, 2026-10-24:
+/// Gönder'de I-beam yine): gizli mod da canlı ve sonradan YENİ metin
+/// görünümleri kurabiliyor (Workbench aracı ya da sekmesi değişince, durumu
+/// açılışta geri yüklenince). Onlar `alphaValue = 0` ile doğup imleç alanı
+/// kuruyordu; eşitleme bir sonraki mod değişimine kadar onları görmüyordu.
+/// Ekran dışı pencerede ölçüldü: gizli Workbench'te araç değişince iki
+/// `NSTextView` ve bir metin alanı API Client'ın üstünde saydam kaldı.
+///
+/// Pencerenin her güncellemesinde (`didUpdateNotification`, olay döngüsü
+/// turu sonu) en çok 150 ms'de bir eşitlenir. Maliyet ölçüldü: 309
+/// görünümlü ağaçta tek eşitleme ~0,26 ms (debug), yani etkinlik sırasında
+/// saniyede 2 ms'den az; fare her kıpırdadığında ağaç taranmaz.
 private final class PassThroughView: NSView {
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
     override var acceptsFirstResponder: Bool { false }
+
+    static let syncInterval: TimeInterval = 0.15
+    private var observer: NSObjectProtocol?
+    private var syncScheduled = false
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if let observer { NotificationCenter.default.removeObserver(observer) }
+        observer = nil
+        guard let window else { return }
+        observer = NotificationCenter.default.addObserver(
+            forName: NSWindow.didUpdateNotification, object: window, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.scheduleSync() }
+        }
+    }
+
+    private func scheduleSync() {
+        guard !syncScheduled else { return }
+        syncScheduled = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.syncInterval) { [weak self] in
+            guard let self else { return }
+            self.syncScheduled = false
+            guard let root = self.window?.contentView else { return }
+            HiddenModeCursorGuard.sync(root)
+        }
+    }
+
+    deinit {
+        if let observer { NotificationCenter.default.removeObserver(observer) }
+    }
 }
