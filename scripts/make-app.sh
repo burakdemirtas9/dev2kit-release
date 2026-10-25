@@ -16,6 +16,9 @@ VERSION="${VERSION:-0.0.0}"
 # commit sayısı anlamsız). Yoksa eski yol: commit sayısı.
 BUILD_NUMBER="$(sed -n 's/.*static let build = "\(.*\)".*/\1/p' Sources/Dev2KitCore/Networking/Dev2KitIdentity.swift)"
 BUILD_NUMBER="${BUILD_NUMBER:-$(git rev-list --count HEAD 2>/dev/null || echo 1)}"
+# Bundle kimliği de tek yerde (Keychain ve ayarlar buna bağlı).
+BUNDLE_ID="$(sed -n 's/.*static let bundleIdentifier = "\(.*\)".*/\1/p' Sources/Dev2KitCore/Networking/Dev2KitIdentity.swift)"
+[ -n "$BUNDLE_ID" ] || { echo "Hata: Dev2KitIdentity.bundleIdentifier okunamadı." >&2; exit 1; }
 APP="build/dev2kit.app"
 ENTITLEMENTS="Sources/Dev2KitApp/Resources/Dev2Kit.entitlements"
 
@@ -39,7 +42,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>CFBundleExecutable</key>
     <string>dev2kit</string>
     <key>CFBundleIdentifier</key>
-    <string>com.dev2kit.app</string>
+    <string>${BUNDLE_ID}</string>
     <key>CFBundleName</key>
     <string>dev2kit</string>
     <key>CFBundleDisplayName</key>

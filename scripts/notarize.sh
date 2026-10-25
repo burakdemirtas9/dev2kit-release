@@ -47,4 +47,4 @@ spctl --assess --type execute --verbose=2 "$APP"
 
 echo
 echo "Hazır: $APP notarize edildi ve biletlendi."
-echo "Dağıtım için: ditto -c -k --keepParent $APP build/dev2kit-dagitim.zip"
+echo "Dağıtım paketleri (pkg + zip) için: ./scripts/make-pkg.sh"

@@ -66,8 +66,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 @main
 struct Dev2KitApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @State private var appState = AppState()
-    @State private var workbench = WorkbenchState()
+    // Değerleri init'te atanır: eski ayarlar taşınmadan okunmasınlar.
+    @State private var appState: AppState
+    @State private var workbench: WorkbenchState
 
     /// Pencerenin en küçük hali; sabit. Workbench kendi asgari genişliğini
     /// pencereye bildirmiyor, 900 puntoda en geniş üst çubuk (JSON Biçimlendir,
@@ -83,6 +84,16 @@ struct Dev2KitApp: App {
     private var apiClientCommandsDisabled: Bool { !appState.isAPIClient }
 
     init() {
+        // Bundle kimliği değişti (2026-10-25): eski alandaki ayarlar, herhangi
+        // bir ayar okunmadan önce bir kez taşınır. Yalnızca gerçek pakette;
+        // `swift run` ve testlerin alanı farklı.
+        if Bundle.main.bundleIdentifier == Dev2KitIdentity.bundleIdentifier {
+            LegacyDefaultsMigration.migrate(
+                from: UserDefaults.standard.persistentDomain(forName: LegacyDefaultsMigration.legacyDomain),
+                into: .standard)
+        }
+        _appState = State(initialValue: AppState())
+        _workbench = State(initialValue: WorkbenchState())
         // macOS'un akıllı tırnak/tire/metin düzeltmesi JSON ve header değerlerini
         // bozuyor (" → "). API istemcisinde her alan kod benzeri metin aldığı
         // için uygulama genelinde kapatılır. NSTextView bu ayarları oluşturulurken

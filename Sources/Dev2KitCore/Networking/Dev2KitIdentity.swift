@@ -17,6 +17,11 @@ public enum Dev2KitIdentity {
     /// eskiden commit sayısından türetiliyordu; tek commit'lik release
     /// deposunda "1" çıkardı (2026-10-25, release 1.2 (177)).
     public static let build = "177"
+    /// `CFBundleIdentifier` (scripts/make-app.sh buradan okur). Keychain
+    /// kayıtları ve ayarlar (UserDefaults) buna bağlı; değiştirmek taşıma
+    /// gerektirir. 2026-10-25'e kadar `com.dev2kit.app` (alan adı bizim
+    /// değildi); eski ayarlar `LegacyDefaultsMigration` ile taşınır.
+    public static let bundleIdentifier = "com.burakdemirtas.dev2kit"
     public static let userAgent = "dev2kit-v\(version)"
     public static let userAgentHeader = "User-Agent"
 
