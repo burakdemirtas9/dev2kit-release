@@ -22,8 +22,24 @@ BUNDLE_ID="$(sed -n 's/.*static let bundleIdentifier = "\(.*\)".*/\1/p' Sources/
 APP="build/dev2kit.app"
 ENTITLEMENTS="Sources/Dev2KitApp/Resources/Dev2Kit.entitlements"
 
-swift build -c release
-BIN="$(swift build -c release --show-bin-path)/Dev2KitApp"
+# En düşük macOS (Package.swift .macOS(.v14) ve Info.plist ile aynı).
+MIN_MACOS="14.0"
+SDK_VERSION="$(xcrun --sdk macosx --show-sdk-version)"
+# SDK sürümü bağlayıcıya açıkça verilir. swiftbuild (Swift 6.4 / Xcode 27.1)
+# binary'ye SDK olarak en düşük sürümü (14.0) yazıyordu; macOS 26 öncesi
+# SDK görünce uygulamayı eski görünümde (Liquid Glass'sız) açıyor. Dün
+# native derlemede sdk 26.5'ti (2026-10-25 ölçüldü, vtool -show-build).
+LINK_FLAGS=(-Xlinker -platform_version -Xlinker macos -Xlinker "$MIN_MACOS" -Xlinker "$SDK_VERSION")
+swift build -c release "${LINK_FLAGS[@]}"
+BIN="$(swift build -c release "${LINK_FLAGS[@]}" --show-bin-path)/Dev2KitApp"
+
+# İmzadan önce denetim: kayıtlı SDK, kullanılan SDK değilse dur.
+BUILT_SDK="$(vtool -show-build "$BIN" | awk '$1 == "sdk" { print $2 }')"
+if [ "$BUILT_SDK" != "$SDK_VERSION" ]; then
+    echo "Hata: binary'de SDK $BUILT_SDK kayıtlı, beklenen $SDK_VERSION." >&2
+    echo "  macOS uygulamayı eski görünümde açar; imzalanmadı." >&2
+    exit 1
+fi
 
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
@@ -56,7 +72,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>CFBundleVersion</key>
     <string>${BUILD_NUMBER}</string>
     <key>LSMinimumSystemVersion</key>
-    <string>14.0</string>
+    <string>${MIN_MACOS}</string>
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.developer-tools</string>
     <key>NSHighResolutionCapable</key>
