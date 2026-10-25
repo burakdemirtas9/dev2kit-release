@@ -251,7 +251,7 @@ final class ResponseExamplesTests: XCTestCase {
         var move = try XCTUnwrap(RequestTreeRows.requestMove(source: [3], destination: 0, in: rows))
         XCTAssertEqual(move.source, [1]); XCTAssertEqual(move.destination, 0)
         var requests = [a, b, c]
-        requests.move(fromOffsets: move.source, toOffset: move.destination)
+        requests.applyListMove(fromOffsets: move.source, toOffset: move.destination)
         XCTAssertEqual(requests.map(\.name), ["b", "a", "c"])
 
         // a (satır 0) en sona.
@@ -277,5 +277,17 @@ final class ResponseExamplesTests: XCTestCase {
         try WorkspaceStore(directory: directory).save(workspace)
         let reopened = try WorkspaceStore(directory: directory).load()
         XCTAssertEqual(reopened.collections.first?.requests.first?.examples, request.examples)
+    }
+}
+
+private extension Array {
+    /// SwiftUI `move(fromOffsets:toOffset:)` ile aynı anlam (hedef, taşınmadan
+    /// önceki dizine göre). Core testi SwiftUI'ye bağlanamaz: swiftbuild
+    /// (Swift 6.4 varsayılanı) SwiftUICore'a doğrudan bağlanmaya izin vermiyor.
+    mutating func applyListMove(fromOffsets source: IndexSet, toOffset destination: Int) {
+        let moved = source.map { self[$0] }
+        let shift = source.count(in: 0..<destination)
+        for index in source.reversed() { remove(at: index) }
+        insert(contentsOf: moved, at: destination - shift)
     }
 }
