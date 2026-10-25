@@ -16,7 +16,9 @@ public enum Dev2KitIdentity {
     /// Derleme numarası (`CFBundleVersion`). Elle, sürümle birlikte artırılır:
     /// eskiden commit sayısından türetiliyordu; tek commit'lik release
     /// deposunda "1" çıkardı (2026-10-25, release 1.2 (177)).
-    public static let build = "177"
+    /// 178: ilk Developer ID paketi; 177 paketi eski görünümle açılıyordu
+    /// (binary'de yanlış SDK sürümü, make-app.sh).
+    public static let build = "178"
     /// `CFBundleIdentifier` (scripts/make-app.sh buradan okur). Keychain
     /// kayıtları ve ayarlar (UserDefaults) buna bağlı; değiştirmek taşıma
     /// gerektirir. 2026-10-25'e kadar `com.dev2kit.app` (alan adı bizim
