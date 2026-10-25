@@ -25,7 +25,10 @@ if [ ! -d "$APP" ]; then
 fi
 
 # Ad-hoc imzalı bundle notarize edilemez; önden yakala.
-if ! codesign -dv --verbose=2 "$APP" 2>&1 | grep -q "Authority=Developer ID Application"; then
+# Çıktı önce değişkene alınır: `codesign | grep -q` pipefail ile eşleşme
+# BULUNDUĞUNDA başarısız oluyordu (grep erken çıkar, codesign SIGPIPE 141).
+SIGNATURE="$(codesign -dv --verbose=2 "$APP" 2>&1 || true)"
+if ! grep -q "Authority=Developer ID Application" <<<"$SIGNATURE"; then
     echo "Hata: $APP Developer ID ile imzalanmamış." >&2
     echo "  Sertifika kurulu mu? security find-identity -v -p codesigning" >&2
     exit 1
