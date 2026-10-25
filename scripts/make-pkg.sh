@@ -52,11 +52,14 @@ trap 'rm -rf "$WORK"' EXIT
 echo "→ Bileşen paketi"
 mkdir -p "$WORK/root"
 ditto "$APP" "$WORK/root/dev2kit.app"
-# Taşınabilirlik kapalı: varsayılan davranışta Installer aynı bundle kimliğini
+# Taşınabilirlik kapalı: taşınabilir pakette Installer aynı bundle kimliğini
 # diskte başka bir yerde (ör. build/ klasörü) bulursa uygulamayı ORAYA
-# kurar; paket hep /Applications'a kursun.
+# kurar; paket hep /Applications'a kursun. macOS 27'de --analyze anahtarı
+# hiç yazmıyor ve paket zaten taşınamaz çıkıyor (PackageInfo: <relocate/>,
+# 2026-10-25 ölçüldü); eski sürümler için açıkça yazılır. `plutil -replace`
+# anahtar yoksa ekler (PlistBuddy Set yok diye duruyordu).
 pkgbuild --analyze --root "$WORK/root" "$WORK/component.plist" >/dev/null
-/usr/libexec/PlistBuddy -c 'Set :0:BundleIsRelocatable false' "$WORK/component.plist"
+plutil -replace 0.BundleIsRelocatable -bool false "$WORK/component.plist"
 pkgbuild --root "$WORK/root" \
     --component-plist "$WORK/component.plist" \
     --install-location /Applications \
