@@ -27,7 +27,7 @@ public struct ContactInfo: Equatable, Sendable {
     /// Değişince yalnızca burası güncellenir.
     public static let current = ContactInfo(
         name: "Burak Demirtaş",
-        slackLink: "https://getirfinans.slack.com/archives/D0ATG80SP8D",
+        slackLink: "https://getirfinans.slack.com/app_redirect?channel=D0AQVG31007",
         email: "burak.demirtas@getirfinans.com"
     )
 
