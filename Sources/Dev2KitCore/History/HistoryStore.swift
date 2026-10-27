@@ -104,18 +104,24 @@ public final class HistoryStore: @unchecked Sendable {
         let encodedPayload = payload.flatMap { try? JSONEncoder().encode($0) }
         var all = current
         all.insert(IndexRecord(entry: stripped, payloadBytes: encodedPayload?.count ?? 0), at: 0)
-        let kept = Self.prune(all, settings: settings, now: Date())
+        let now = Date()
+        let kept = Self.prune(all, settings: settings, now: now)
         let dropped = Set(all.map(\.entry.id)).subtracting(kept.map(\.entry.id))
         records = kept
         enqueueWrite(index: kept, payload: payload.map { (entry.id, $0) }, deleting: dropped)
+        removeExpiredMigrationBackup(before: Self.retentionCutoff(settings, now: now))
         return kept.map(\.entry)
     }
 
+    /// Her şeyi siler: dizin, içerikler ve eski şemadan kalan kopyalar
+    /// (taşınmamış `history.enc` dahil; kalsaydı sonraki açılışta taşınıp
+    /// silinen kayıtları geri getirirdi).
     public func deleteAll() {
         lock.lock(); defer { lock.unlock() }
         records = []
-        queue.async { [directory] in
+        queue.async { [directory, root] in
             try? FileManager.default.removeItem(at: directory)
+            for url in Self.legacyCopies(in: root) { try? FileManager.default.removeItem(at: url) }
         }
     }
 
@@ -147,8 +153,12 @@ public final class HistoryStore: @unchecked Sendable {
 
     /// Yaş, adet ve toplam boyut; hangisi önce dolarsa. Boyuta içerik
     /// dosyaları da sayılır.
+    static func retentionCutoff(_ settings: HistorySettings, now: Date) -> Date {
+        now.addingTimeInterval(-Double(settings.retentionDays) * 86_400)
+    }
+
     static func prune(_ records: [IndexRecord], settings: HistorySettings, now: Date) -> [IndexRecord] {
-        let cutoff = now.addingTimeInterval(-Double(settings.retentionDays) * 86_400)
+        let cutoff = retentionCutoff(settings, now: now)
         let byAgeAndCount = records
             .sorted { $0.entry.date > $1.entry.date }
             .filter { $0.entry.date >= cutoff }
@@ -212,6 +222,24 @@ public final class HistoryStore: @unchecked Sendable {
         let kept = all.filter { !removed.contains($0.entry.id) }
         records = kept
         enqueueWrite(index: kept, payload: nil, deleting: removed)
+        // Taşıma yedeği silinen kaydın kopyasını taşır ve seçerek
+        // düzenlenemez; içeriği zaten dizinde olduğu için tümüyle silinir.
+        queue.async { [migrationBackup] in try? FileManager.default.removeItem(at: migrationBackup) }
+    }
+
+    /// Şema 1'den taşımanın yedeği (`migrateLegacyLocked`).
+    private var migrationBackup: URL { root.appendingPathComponent("history.v1.enc") }
+
+    /// Taşıma yedeği donmuş bir kopyadır: içindeki en yeni kayıt dosyanın son
+    /// yazımından yeni değil. Saklama süresini geçince silinir; yoksa süre
+    /// kuralı ona hiç uygulanmazdı.
+    private func removeExpiredMigrationBackup(before cutoff: Date) {
+        queue.async { [migrationBackup] in
+            let manager = FileManager.default
+            guard let modified = (try? manager.attributesOfItem(atPath: migrationBackup.path))?[.modificationDate] as? Date,
+                  modified < cutoff else { return }
+            try? manager.removeItem(at: migrationBackup)
+        }
     }
 
     /// İçerik → dizin (önceki dizin yedeğe) → düşen içerikler silinir.
@@ -321,7 +349,8 @@ public final class HistoryStore: @unchecked Sendable {
     }
 
     /// Şema 1 `history.enc` → dizin + içerikler. Eski dosya `history.v1.enc`
-    /// olarak kalır (yedek); okunamazsa kenara alınır, boş başlanır.
+    /// olarak kalır (yedek; kayıt silinince ya da saklama süresi geçince
+    /// silinir); okunamazsa kenara alınır, boş başlanır.
     private func migrateLegacyLocked() -> [IndexRecord] {
         let legacyURL = root.appendingPathComponent("history.enc")
         guard let legacy = try? legacyFile.load(fallback: []) else {
@@ -341,9 +370,8 @@ public final class HistoryStore: @unchecked Sendable {
             try indexFile.save(result)
             // Doğrulama: yeni dizin okunuyor ve kayıt sayısı tutuyor.
             guard try indexFile.load(fallback: []).count == legacy.count else { return result }
-            let backup = root.appendingPathComponent("history.v1.enc")
-            try? FileManager.default.removeItem(at: backup)
-            try FileManager.default.moveItem(at: legacyURL, to: backup)
+            try? FileManager.default.removeItem(at: migrationBackup)
+            try FileManager.default.moveItem(at: legacyURL, to: migrationBackup)
         } catch {
             // Eski dosya yerinde kalır; sonraki açılışta yeniden denenir
             // (aynı kimlikler: kayıt çoğalmaz).
