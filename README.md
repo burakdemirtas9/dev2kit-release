@@ -24,8 +24,10 @@ dev2kit iki moddan oluşur:
   adresler dışında yalnızca kullanıcı açıkça isterse ağa çıkar (Postman
   hesabından içe aktarma, OpenAPI dokümanı indirme).
 - **Secret'lar koleksiyonda durmaz.** İsteklerde `{{secret:ad}}` referansı
-  bulunur; değer şifreli vault'ta tutulur ve yalnızca gönderim anında
-  çözülür. Koleksiyon dosyaları okunabilir JSON'dur ve güvenle paylaşılabilir.
+  bulunur; değer vault'ta tutulur ve yalnızca gönderim anında çözülür.
+  Developer ID ile imzalı pakette vault macOS Keychain'dir; imzasız
+  derlemede şifreli bir dosyadır ve sınırı vardır (bkz. Güvenlik modeli).
+  Koleksiyon dosyaları okunabilir JSON'dur ve güvenle paylaşılabilir.
 - **Güvenli varsayılanlar.** Gönderim öncesi denetim, yönlendirmede kimlik
   başlıklarının düşürülmesi, https → http düşüşünün engellenmesi, yönetici
   host politikası.
@@ -89,12 +91,13 @@ dev2kit iki moddan oluşur:
 
 | Konu | Davranış |
 |---|---|
-| Secret'lar | Şifreli vault'ta; koleksiyonda yalnızca `{{secret:ad}}` referansı |
+| Secret'lar | Koleksiyonda yalnızca `{{secret:ad}}` referansı. İmzalı pakette değerler macOS Keychain'de. İmzasız derlemede AES-GCM şifreli dosyada, anahtarı aynı klasörde: paylaşıma ve yedeğe karşı korur, bu Mac'te kullanıcının hesabıyla çalışan programlara karşı **korumaz** |
 | Gönderim öncesi denetim | http/https dışı şema, politika dışı host, görünmez karakter ve başlıkta CR/LF **engellenir**; şifresiz kimlik bilgisi, bulut metadata adresi, IDN alan adı, secret'ın yeni bir host'a gitmesi **onay ister** |
 | Yönlendirme | Farklı host'a geçişte kimlik başlıkları düşürülür; https → http engellenir |
 | Yönetici host politikası | `/Library/Application Support/dev2kit/policy.json` (root'a ait); yalnızca listedeki host'lara istek gönderilir. Bozuk dosyada tüm gönderimler durur. Örnek: `docs/policy/policy.example.json` |
 | TLS | Doğrulama her zaman çalışır; kurum CA'sı yalnızca ek çıpadır |
-| Geçmiş | Şifreli; kimlik bilgileri maskeli |
+| Geçmiş | Şifreli; kimlik bilgileri maskeli, yanıt önizlemesindeki kişisel veri maskelenmez. Anahtar imzalı pakette Keychain'de, imzasız derlemede dosyada. Temizlemek eski kopyaları da siler |
+| Yedek | Vault ve geçmiş dosyaları (veri ve anahtar birlikte) Time Machine dışı; yedekten kurulan Mac'te boş gelir. Workspace yedeğe gider |
 | Yanıtlar | Bellekte; kullanıcı kaydetmedikçe diske yazılmaz |
 | Workbench | Çevrimdışı; girdi diske yazılmaz, pano kendiliğinden okunmaz |
 | Telemetri | Yok |
@@ -132,6 +135,11 @@ ile imzalar ve `scripts/notarize.sh` ile notarization'a hazırlar; yoksa
 ad-hoc imzalar. Ad-hoc imzalı uygulama yalnızca derlendiği makinede
 sorunsuz açılır, başka bir Mac'te Gatekeeper tarafından engellenir.
 
+Secret'ların Keychain'de tutulması imzaya bağlıdır: imzasız derlemede vault
+şifreli dosyaya düşer (Keychain, kimliği her derlemede değişen uygulamaya
+parola sorar; uygulama parola ya da onay isteyen akış kullanmaz). Kurumda
+yalnızca Developer ID ile imzalı ve notarize edilmiş paket dağıtılmalı.
+
 ---
 
 ## Veri konumu
@@ -139,11 +147,18 @@ sorunsuz açılır, başka bir Mac'te Gatekeeper tarafından engellenir.
 ```
 ~/Library/Application Support/dev2kit/     dizinler 0700, dosyalar 0600
 ├── store/            workspace: koleksiyonlar, örnekler, environment'lar, ayarlar
-├── history/          şifreli istek geçmişi
+├── history/          şifreli istek geçmişi (Time Machine dışı)
 ├── backups/          son sağlam workspace kopyaları
 ├── cacerts/          kullanıcı güven deposu
-└── diagnostics/      yerel tanılama (hiçbir yere gönderilmez)
+├── diagnostics/      yerel tanılama (hiçbir yere gönderilmez)
+├── .history.key      geçmiş anahtarı (yalnızca imzasız derleme; Time Machine dışı)
+├── secrets.enc       vault (yalnızca imzasız derleme; Time Machine dışı)
+└── .secrets.key      vault anahtarı (yalnızca imzasız derleme; Time Machine dışı)
 ```
+
+İmzalı pakette secret'lar ve geçmiş anahtarı Keychain'dedir
+(`com.dev2kit.secrets`, `com.dev2kit.keys`); eski dosyalar ilk açılışta
+doğrulanarak taşınır ve silinir.
 
 Kayıt yalnızca değişen dosyaları yazar; çok dosyalı kayıt günlükle
 yapılır, yarıda kalırsa açılışta tamamlanır. Okunamayan dosya silinmez,

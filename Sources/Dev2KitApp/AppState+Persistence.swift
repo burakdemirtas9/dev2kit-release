@@ -141,6 +141,9 @@ extension AppState {
         }
     }
 
+    /// Vault ekranı korumayı kullanılan depoya göre anlatır.
+    var secretStorage: SecretStorageKind { SecretStorageKind(secretStore) }
+
     /// Geçmiş deposu: anahtar nerede?
     ///
     /// - Ekip kimlikli imza (Developer ID) ve varsayılan veri dizini: Keychain.

@@ -1,7 +1,8 @@
 import SwiftUI
 import Dev2KitCore
 
-/// Şifreli vault'taki secret'ları yönetir. Değerler listede asla gösterilmez;
+/// Vault'taki secret'ları yönetir (Keychain ya da şifreli dosya; açıklama
+/// hangisi olduğunu ve sınırını söyler). Değerler listede asla gösterilmez;
 /// yalnızca isimler listelenir, değer girişi tek yönlüdür (yaz ama okuma).
 struct SecretsView: View {
     @Environment(AppState.self) private var appState
@@ -16,7 +17,9 @@ struct SecretsView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Secrets")
                 .font(.title2).bold()
-            Text(L10n.t("secrets.subtitle"))
+            Text(appState.secretStorage == .keychain
+                 ? L10n.t("secrets.subtitle.keychain")
+                 : L10n.t("secrets.subtitle.file"))
                 .font(.secondaryText)
                 .foregroundStyle(.secondary)
 

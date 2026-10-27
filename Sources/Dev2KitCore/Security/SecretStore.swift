@@ -24,6 +24,22 @@ public enum SecretStoreError: Error, LocalizedError {
     }
 }
 
+/// Secret'ların nerede durduğu. Vault ekranı korumayı buna göre anlatır:
+/// imzasız derlemede olduğundan güçlü görünmesin (pentest bulgusu).
+public enum SecretStorageKind: Equatable, Sendable {
+    /// macOS Keychain (Developer ID ile imzalı sürüm). Başka bir uygulama
+    /// okumak isterse macOS sorar.
+    case keychain
+    /// AES-GCM şifreli dosya, anahtarı aynı klasörde (imzasız derleme).
+    /// Paylaşıma ve yedeğe karşı korur; aynı kullanıcıyla çalışan sürece karşı değil.
+    case encryptedFile
+
+    /// Keychain dışındaki her depo zayıf model sayılır: ekran fazla vaat etmesin.
+    public init(_ store: SecretStore) {
+        self = store is KeychainSecretStore ? .keychain : .encryptedFile
+    }
+}
+
 /// macOS Keychain tabanlı secret deposu.
 /// Tüm kayıtlar tek bir service adı altında generic password olarak tutulur;
 /// secret adı `account` alanına yazılır. Değerler asla diske/log'a düşmez.
