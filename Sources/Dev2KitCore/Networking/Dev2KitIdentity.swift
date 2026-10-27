@@ -20,7 +20,9 @@ public enum Dev2KitIdentity {
     /// (binary'de yanlış SDK sürümü, make-app.sh).
     /// 179: Slack iletişim bağlantısı düzeltildi; 178 dağıtıldığı için üzerine
     /// yükseltme.
-    public static let build = "179"
+    /// 180: pentest düzeltmeleri (geçmiş anahtarı Keychain'de, vault ve geçmiş
+    /// yedek dışı, eski geçmiş kopyalarının silinmesi, vault ekranı metni).
+    public static let build = "180"
     /// `CFBundleIdentifier` (scripts/make-app.sh buradan okur). Keychain
     /// kayıtları ve ayarlar (UserDefaults) buna bağlı; değiştirmek taşıma
     /// gerektirir. 2026-10-25'e kadar `com.dev2kit.app` (alan adı bizim
