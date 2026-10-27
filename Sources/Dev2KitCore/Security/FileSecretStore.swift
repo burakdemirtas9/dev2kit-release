@@ -13,6 +13,8 @@ public final class FileSecretStore: SecretStore, @unchecked Sendable {
     private let fileURL: URL
     private let keyURL: URL
     private let lock = NSLock()
+    /// Önceki sürümün yazdığı dosyalar ilk erişimde yedek dışı işaretlenir.
+    private var checkedBackupExclusion = false
 
     public init(directory: URL? = nil) {
         let dir = directory ?? AppPaths.supportDirectory
@@ -53,7 +55,11 @@ public final class FileSecretStore: SecretStore, @unchecked Sendable {
     }
 
     private func loadAll() throws -> [String: String] {
-        try file.load(fallback: [:])
+        if !checkedBackupExclusion {
+            file.excludeExistingFromBackup()
+            checkedBackupExclusion = true
+        }
+        return try file.load(fallback: [:])
     }
 
     private func saveAll(_ secrets: [String: String]) throws {

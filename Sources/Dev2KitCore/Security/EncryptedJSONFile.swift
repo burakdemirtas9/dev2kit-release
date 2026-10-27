@@ -61,8 +61,17 @@ struct EncryptedJSONFile<Value: Codable>: Sendable {
         let plain = try JSONEncoder().encode(value)
         let sealed = try AES.GCM.seal(plain, using: loadKey())
         guard let combined = sealed.combined else { throw FileError.encodingFailed }
-        // 0600 geçici dosya → fsync → rename (bkz. `AtomicFile`).
-        try AtomicFile.write(combined, to: fileURL)
+        // 0600 geçici dosya → fsync → rename (bkz. `AtomicFile`). Yedeğe
+        // gitmez: anahtar dosyadaysa ikisi aynı yedekte buluşmasın.
+        try AtomicFile.write(combined, to: fileURL, excludedFromBackup: true)
+    }
+
+    /// Var olan veri ve anahtar dosyasını yedek dışı işaretler: önceki
+    /// sürümün yazdıkları yeniden yazılana kadar beklemesin.
+    func excludeExistingFromBackup() {
+        var urls = [fileURL]
+        if case .file(let keyURL) = key { urls.append(keyURL) }
+        BackupExclusion.excludeExisting(urls)
     }
 
     func deleteFile() throws {
@@ -136,6 +145,7 @@ struct EncryptedJSONFile<Value: Codable>: Sendable {
         guard manager.createFile(atPath: temporary.path, contents: data, attributes: [.posixPermissions: 0o600]) else {
             throw CocoaError(.fileWriteUnknown, userInfo: [NSFilePathErrorKey: temporary.path])
         }
+        BackupExclusion.exclude(temporary)
         guard rename(temporary.path, keyURL.path) == 0 else {
             let code = errno
             try? manager.removeItem(at: temporary)

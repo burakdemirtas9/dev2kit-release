@@ -248,6 +248,7 @@ public final class HistoryStore: @unchecked Sendable {
 
     private func loadLocked() -> [IndexRecord] {
         if let records { return records }
+        excludeExistingFromBackup()
         let manager = FileManager.default
         // Anahtar gelmiyorsa (Keychain kilitli/erişilemez, anahtar dosyası
         // okunamıyor ya da yok) veri bozuk SAYILMAZ: kenara alınmaz ve bu
@@ -283,6 +284,27 @@ public final class HistoryStore: @unchecked Sendable {
         records = loaded
         if cleanLoad { removeOrphans(referenced: Set(loaded.map(\.entry.id))) }
         return loaded
+    }
+
+    /// Önceki sürümün yazdığı dosyalar yeniden yazılana kadar yedeğe
+    /// gitmesin: dizinin kendisi (içindeki her şey), anahtar dosyası ve eski
+    /// şemanın dosyaları. Yeni yazımlar zaten işaretli (`EncryptedJSONFile`).
+    private func excludeExistingFromBackup() {
+        queue.async { [root, directory, key] in
+            var urls = [directory] + Self.legacyCopies(in: root)
+            if case .file(let keyURL) = key { urls.append(keyURL) }
+            BackupExclusion.excludeExisting(urls)
+        }
+    }
+
+    /// Kök dizindeki eski şema dosyaları: taşınmamış `history.enc`, taşıma
+    /// yedeği `history.v1.enc` ve okunamayıp kenara alınmış kopyaları.
+    static func legacyCopies(in root: URL) -> [URL] {
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: root.path)) ?? []
+        return names
+            .filter { $0 == "history.enc" || $0 == "history.v1.enc" || $0.hasPrefix("history.enc.bozuk-") }
+            .sorted()
+            .map { root.appendingPathComponent($0) }
     }
 
     /// Dizinin göstermediği içerik dosyaları (yarıda kalan yazım, silinmiş kayıt).

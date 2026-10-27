@@ -11,7 +11,10 @@ import Foundation
 /// Bu yalnızca DOSYA BAŞINA atomikliktir; birden çok dosyalı işlemin
 /// atomikliği `StoreJournal` ile sağlanır.
 public enum AtomicFile {
-    public static func write(_ data: Data, to url: URL) throws {
+    /// `excludedFromBackup`: yedek dışı işareti geçici dosyaya, yerine
+    /// konmadan önce yazılır; yeni dosya hiçbir an işaretsiz görünmez
+    /// (bkz. `BackupExclusion`).
+    public static func write(_ data: Data, to url: URL, excludedFromBackup: Bool = false) throws {
         let manager = FileManager.default
         let directory = url.deletingLastPathComponent()
         try manager.createDirectory(at: directory, withIntermediateDirectories: true,
@@ -29,6 +32,7 @@ public enum AtomicFile {
             try? manager.removeItem(at: temporary)
             throw error
         }
+        if excludedFromBackup { BackupExclusion.exclude(temporary) }
         guard rename(temporary.path, url.path) == 0 else {
             let code = errno
             try? manager.removeItem(at: temporary)
