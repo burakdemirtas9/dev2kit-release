@@ -17,6 +17,8 @@ public struct DiagnosticEvent: Codable, Equatable, Sendable {
         case storageOpenFailed
         case storageSaveFailed
         case secretStoreUnavailable
+        /// Geçmişin anahtarı alınamadı ya da Keychain'e taşınamadı.
+        case historyKeyUnavailable
     }
 
     /// Kayıt açılışındaki durum ayrıntısı (`StoreNotice` türleri gibi).

@@ -308,7 +308,8 @@ final class AppState {
     let engine = RequestEngine()
     /// `private` değil: `AppState+History` uzantısı da kullanıyor.
     /// Uzantılar aynı modülde; dışarıya kapalılık modül sınırında korunuyor.
-    let historyStore = HistoryStore(queue: PersistenceQueue.shared)
+    /// Anahtarın yeri imzaya göre seçilir (bkz. `defaultHistoryStore`).
+    let historyStore: HistoryStore
     let approvalStore = SecurityApprovalStore()
 
     /// Yönetici politikası her kullanımda diskten okunur: yönetici dosyayı
@@ -343,6 +344,8 @@ final class AppState {
         self.saver = WorkspaceSaver(store: store, queue: PersistenceQueue.shared)
         let secrets = secretStore.map { ($0, nil as ResultMessage?, nil as String?) } ?? Self.defaultSecretStore()
         self.secretStore = secrets.0
+        let historyStore = Self.defaultHistoryStore()
+        self.historyStore = historyStore.0
         let collapsedStrings = UserDefaults.standard.stringArray(forKey: Self.collapsedKey) ?? []
         self.collapsedCollectionIDs = Set(collapsedStrings.compactMap(UUID.init(uuidString:)))
         let savedSettings = UserDefaults.standard.data(forKey: Self.historySettingsKey)
@@ -376,6 +379,10 @@ final class AppState {
             DiagnosticLog.shared.record(DiagnosticEvent(kind: .secretStoreUnavailable))
         }
         if let migrated = secrets.2 { startupMessage = Self.adding(MessageLine(.info, migrated), to: startupMessage) }
+        if let failure = historyStore.1 {
+            startupMessage = startupMessage ?? failure
+            DiagnosticLog.shared.record(DiagnosticEvent(kind: .historyKeyUnavailable))
+        }
         if workspace.collections.isEmpty {
             workspace.collections = [CollectionModel(name: L10n.t("collection.first"), requests: [RequestModel(name: L10n.t("request.newName"))])]
             persist()
@@ -385,7 +392,15 @@ final class AppState {
         if TokenFactoryMigration.migrate(&workspace) > 0 {
             persist()
         }
-        history = historyStore.entries()
+        history = self.historyStore.entries()
+        if let failure = self.historyStore.keyFailure {
+            startupMessage = startupMessage ?? ResultMessage(
+                kind: .warning,
+                title: L10n.t("history.keyUnavailable.title"),
+                message: L10n.t("history.keyUnavailable.message", failure.localizedDescription)
+            )
+            DiagnosticLog.shared.record(DiagnosticEvent(kind: .historyKeyUnavailable, error: failure))
+        }
         engine.tlsProfiles = workspace.tlsProfiles
         engine.trustStoreAllowsLongValidity = trustStoreAllowsLongValidity
         reloadTrustStore()

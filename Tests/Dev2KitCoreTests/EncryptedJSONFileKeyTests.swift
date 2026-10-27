@@ -70,6 +70,41 @@ final class EncryptedJSONFileKeyTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: dataURL), sealed)
     }
 
+    // MARK: - Anahtar secret deposunda (Developer ID'li sürümde Keychain)
+
+    private func stored(_ secrets: InMemorySecretStore) -> EncryptedJSONFile<[String: String]> {
+        EncryptedJSONFile(fileURL: dataURL, key: .stored(SecretStoreKey(store: secrets, name: "anahtar")))
+    }
+
+    func testStoredKeyIsCreatedOnceAndRoundTrips() throws {
+        let secrets = InMemorySecretStore()
+        try stored(secrets).save(["api": "değer"])
+        XCTAssertEqual(try stored(secrets).load(fallback: [:]), ["api": "değer"])
+        XCTAssertEqual(try secrets.listSecretNames(), ["anahtar"])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: keyURL.path), "anahtar dosyası yazılmaz")
+    }
+
+    func testMissingStoredKeyWithExistingDataIsAnError() throws {
+        try stored(InMemorySecretStore()).save(["api": "değer"])
+        let empty = InMemorySecretStore()
+        XCTAssertThrowsError(try stored(empty).save(["yeni": "x"])) { error in
+            guard case .keyMissing? = error as? EncryptedJSONFile<[String: String]>.FileError else {
+                return XCTFail("anahtar yok hatası bekleniyordu: \(error)")
+            }
+        }
+        XCTAssertEqual(try empty.listSecretNames(), [], "yeni anahtar üretilmez")
+    }
+
+    func testDamagedStoredKeyIsNotReplaced() throws {
+        let secrets = InMemorySecretStore(initial: ["anahtar": "kısa"])
+        XCTAssertThrowsError(try stored(secrets).save(["yeni": "x"])) { error in
+            guard case .keyUnreadable? = error as? EncryptedJSONFile<[String: String]>.FileError else {
+                return XCTFail("okunamayan anahtar hatası bekleniyordu: \(error)")
+            }
+        }
+        XCTAssertEqual(try secrets.secret(forName: "anahtar"), "kısa")
+    }
+
     func testNothingOnDiskStillLoadsTheFallback() throws {
         XCTAssertEqual(try file.load(fallback: ["boş": ""]), ["boş": ""])
         XCTAssertFalse(FileManager.default.fileExists(atPath: keyURL.path), "okumak anahtar üretmemeli")

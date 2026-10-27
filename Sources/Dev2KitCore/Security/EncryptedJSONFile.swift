@@ -1,16 +1,35 @@
 import CryptoKit
 import Foundation
 
+/// `EncryptedJSONFile` anahtarının yeri.
+enum EncryptionKeySource: Sendable {
+    /// Verinin yanında, yalnızca kullanıcının okuyabildiği (0600) dosya.
+    case file(URL)
+    /// Secret deposundaki kayıt: Developer ID ile imzalı sürümde Keychain.
+    case stored(SecretStoreKey)
+}
+
 /// AES-GCM ile şifrelenmiş JSON dosyası.
 ///
-/// Anahtar, veri dosyasının yanında ayrı ve yalnızca kullanıcının okuyabildiği
-/// (0600) bir dosyada durur. Bu model dosyanın yanlışlıkla paylaşılmasına
-/// (git, yedek, senkron klasörü) karşı korur; makineye erişen bir saldırgana
-/// karşı değil. Secret vault ve geçmiş kaydı aynı mekanizmayı kullanır ki
-/// ikisi ayrışıp biri korumasız kalmasın.
+/// Anahtar dosyadaysa veri dosyasının yanında ayrı ve yalnızca kullanıcının
+/// okuyabildiği (0600) bir dosyada durur. Bu model dosyanın yanlışlıkla
+/// paylaşılmasına (git, senkron klasörü) karşı korur; makineye erişen bir
+/// saldırgana ya da aynı kullanıcıyla çalışan bir sürece karşı değil.
+/// Anahtar Keychain'deyse dizini ele geçiren anahtarı bulamaz.
+/// Secret vault ve geçmiş kaydı aynı mekanizmayı kullanır ki ikisi ayrışıp
+/// biri korumasız kalmasın.
 struct EncryptedJSONFile<Value: Codable>: Sendable {
     let fileURL: URL
-    let keyURL: URL
+    let key: EncryptionKeySource
+
+    init(fileURL: URL, key: EncryptionKeySource) {
+        self.fileURL = fileURL
+        self.key = key
+    }
+
+    init(fileURL: URL, keyURL: URL) {
+        self.init(fileURL: fileURL, key: .file(keyURL))
+    }
 
     enum FileError: Error, LocalizedError, Equatable {
         case encodingFailed
@@ -51,27 +70,56 @@ struct EncryptedJSONFile<Value: Codable>: Sendable {
         try FileManager.default.removeItem(at: fileURL)
     }
 
+    /// Anahtarın alınabildiğini doğrular; veriyi okumaz.
+    ///
+    /// Okuyan taraf anahtar sorununu bozuk veriden ayırabilsin diye: anahtar
+    /// gelmiyorsa veri kenara alınmamalı, üzerine yazılmamalı.
+    func requireKey() throws {
+        _ = try loadKey()
+    }
+
     /// Anahtarı okur; YALNIZCA hiç anahtar ve hiç şifreli veri yoksa yenisini üretir.
     ///
     /// Önceden okuma `try?` ile yapılıyordu: anahtar dosyası bir kez
     /// okunamayınca (izin değişikliği, EDR kilidi, bozulma) yeni anahtar
     /// üretilip eskisinin ÜZERİNE yazılıyordu — vault ve geçmiş bir daha
     /// açılamaz hale geliyordu, sessizce ve geri dönüşsüz. Artık okunamayan
-    /// anahtar hata verir; veri ve anahtar dosyası olduğu gibi kalır.
+    /// anahtar hata verir; veri ve anahtar olduğu gibi kalır.
     private func loadKey() throws -> SymmetricKey {
-        let manager = FileManager.default
-        if manager.fileExists(atPath: keyURL.path) {
-            guard let data = try? Data(contentsOf: keyURL), data.count == 32 else {
-                throw FileError.keyUnreadable(path: keyURL.path)
-            }
+        if let data = try storedKey() {
+            guard data.count == 32 else { throw FileError.keyUnreadable(path: keyLocation) }
             return SymmetricKey(data: data)
         }
-        guard !manager.fileExists(atPath: fileURL.path) else {
-            throw FileError.keyMissing(path: keyURL.path)
+        guard !FileManager.default.fileExists(atPath: fileURL.path) else {
+            throw FileError.keyMissing(path: keyLocation)
         }
-        let key = SymmetricKey(size: .bits256)
-        try writeKey(key.withUnsafeBytes { Data($0) })
-        return key
+        let newKey = SymmetricKey(size: .bits256)
+        let data = newKey.withUnsafeBytes { Data($0) }
+        switch key {
+        case .file(let url): try writeKey(data, to: url)
+        case .stored(let store): try store.save(data)
+        }
+        return newKey
+    }
+
+    /// Kayıtlı anahtar; hiç yoksa `nil`. Var ama okunamıyorsa hata.
+    private func storedKey() throws -> Data? {
+        switch key {
+        case .file(let url):
+            guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+            guard let data = try? Data(contentsOf: url) else { throw FileError.keyUnreadable(path: url.path) }
+            return data
+        case .stored(let store):
+            return try store.load()
+        }
+    }
+
+    /// Hata mesajlarında gösterilen yer.
+    private var keyLocation: String {
+        switch key {
+        case .file(let url): return url.path
+        case .stored(let store): return store.location
+        }
     }
 
     /// Anahtarı baştan 0600 izinle ve atomik yazar.
@@ -80,7 +128,7 @@ struct EncryptedJSONFile<Value: Codable>: Sendable {
     /// arada başka kullanıcıların okuyabildiği bir an vardı. Geçici dosya
     /// 0600 ile oluşturulur ve `rename(2)` ile yerine konur: yarım anahtar
     /// dosyası da kalmaz.
-    private func writeKey(_ data: Data) throws {
+    private func writeKey(_ data: Data, to keyURL: URL) throws {
         let manager = FileManager.default
         try manager.createDirectory(at: keyURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         let temporary = keyURL.deletingLastPathComponent()

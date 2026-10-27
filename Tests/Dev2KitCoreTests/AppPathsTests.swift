@@ -24,4 +24,11 @@ final class AppPathsTests: XCTestCase {
         let url = AppPaths.directory(environment: [AppPaths.directoryEnvironmentKey: "   "])
         XCTAssertTrue(url.path.contains("Application Support"))
     }
+
+    /// Keychain yalnızca varsayılan dizinde kullanılır; değişiklik doğru anlaşılmalı.
+    func testOverrideIsDetectedOnlyWhenSet() {
+        XCTAssertNil(AppPaths.override(environment: [:]))
+        XCTAssertNil(AppPaths.override(environment: [AppPaths.directoryEnvironmentKey: "  "]))
+        XCTAssertEqual(AppPaths.override(environment: [AppPaths.directoryEnvironmentKey: "/tmp/x"]), "/tmp/x")
+    }
 }

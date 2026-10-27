@@ -141,6 +141,30 @@ extension AppState {
         }
     }
 
+    /// Geçmiş deposu: anahtar nerede?
+    ///
+    /// - Ekip kimlikli imza (Developer ID) ve varsayılan veri dizini: Keychain.
+    ///   Eski `.history.key` doğrulanarak taşınır; başarısızsa bu oturum
+    ///   dosyayla devam eder, dosya yerinde kalır.
+    /// - Diğer her derleme ya da `DEV2KIT_DATA_DIR`: anahtar dosyası, soru yok.
+    ///   Keychain kullanıcı başına tektir; deneme dizini gerçek anahtara dokunmasın.
+    static func defaultHistoryStore() -> (HistoryStore, ResultMessage?) {
+        let fileBased = HistoryStore(queue: PersistenceQueue.shared)
+        guard CodeSigningStatus.hasTeamIdentity, !AppPaths.isOverridden else { return (fileBased, nil) }
+        let keychain = SecretStoreKey.keychain(name: HistoryKeyMigration.keychainName)
+        do {
+            try HistoryKeyMigration.migrate(directory: AppPaths.supportDirectory, to: keychain)
+            return (HistoryStore(key: keychain, queue: PersistenceQueue.shared), nil)
+        } catch {
+            let message = ResultMessage(
+                kind: .warning,
+                title: L10n.t("historyKey.migrationFailed.title"),
+                message: L10n.t("historyKey.migrationFailed.message", error.localizedDescription)
+            )
+            return (fileBased, message)
+        }
+    }
+
     /// Mesaja satır ekler; mesaj yoksa bilgi mesajı kurar.
     static func adding(_ line: MessageLine, to message: ResultMessage?) -> ResultMessage {
         guard let message else {

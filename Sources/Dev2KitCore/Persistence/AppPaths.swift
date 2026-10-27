@@ -18,13 +18,27 @@ public enum AppPaths {
         directory(environment: ProcessInfo.processInfo.environment)
     }
 
+    /// Veri dizini `DEV2KIT_DATA_DIR` ile değiştirildi mi.
+    ///
+    /// Keychain kullanıcı başına tektir, veri dizini başına değil: deneme
+    /// dizininde açılan uygulama gerçek dizinin Keychain anahtarına dokunmasın.
+    public static var isOverridden: Bool {
+        override(environment: ProcessInfo.processInfo.environment) != nil
+    }
+
     /// Test edilebilmesi için ortam dışarıdan verilebilir.
     static func directory(environment: [String: String]) -> URL {
-        if let override = environment[directoryEnvironmentKey],
-           !override.trimmingCharacters(in: .whitespaces).isEmpty {
+        if let override = override(environment: environment) {
             return URL(fileURLWithPath: (override as NSString).expandingTildeInPath, isDirectory: true)
         }
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         return base.appendingPathComponent("dev2kit")
+    }
+
+    /// Boş değişken "varsayılanı kullan" demektir.
+    static func override(environment: [String: String]) -> String? {
+        guard let value = environment[directoryEnvironmentKey],
+              !value.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
+        return value
     }
 }

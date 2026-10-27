@@ -6,7 +6,7 @@ import Foundation
 /// <kök>/history/index.enc        liste: tarih, durum, adres, gövdesiz anlık görüntü
 /// <kök>/history/index.prev.enc   bir önceki sağlam dizin (yedek)
 /// <kök>/history/bodies/<id>.enc  yanıt önizlemesi + istek gövdesi
-/// <kök>/.history.key             anahtar (0600)
+/// <kök>/.history.key             anahtar (0600); Developer ID'li sürümde Keychain
 /// ```
 /// Neden ayrı: eskiden tek `history.enc` her gönderimde baştan yazılıyor ve
 /// liste açılınca tüm yanıt önizlemeleri (kayıt başına 20.000 karaktere
@@ -34,34 +34,39 @@ public final class HistoryStore: @unchecked Sendable {
 
     private let root: URL
     private let directory: URL
-    private let keyURL: URL
+    private let key: EncryptionKeySource
     private let lock = NSLock()
     private let queue: DispatchQueue
     private var records: [IndexRecord]?
     /// Okunamayan dizin kenara alındıysa yeri (kullanıcıya söylenir).
     public private(set) var recoveryNotice: URL?
+    /// Şifreli geçmiş var ama anahtarı alınamadıysa nedeni. O oturumda
+    /// geçmiş boş görünür ve hiç yazılmaz; dosyalara dokunulmaz.
+    public private(set) var keyFailure: Error?
 
-    public init(directory: URL? = nil, queue: DispatchQueue? = nil) {
+    /// `key` verilmezse anahtar `<kök>/.history.key` dosyasındadır.
+    /// Developer ID'li sürümde Keychain'deki anahtar verilir (bkz. `HistoryKeyMigration`).
+    public init(directory: URL? = nil, key: SecretStoreKey? = nil, queue: DispatchQueue? = nil) {
         let base = directory ?? AppPaths.supportDirectory
         self.root = base
         self.directory = base.appendingPathComponent("history", isDirectory: true)
-        self.keyURL = base.appendingPathComponent(".history.key")
+        self.key = key.map(EncryptionKeySource.stored) ?? .file(base.appendingPathComponent(HistoryKeyMigration.fileName))
         self.queue = queue ?? DispatchQueue(label: "com.dev2kit.history", qos: .utility)
     }
 
     private var indexFile: EncryptedJSONFile<[IndexRecord]> {
-        EncryptedJSONFile(fileURL: directory.appendingPathComponent("index.enc"), keyURL: keyURL)
+        EncryptedJSONFile(fileURL: directory.appendingPathComponent("index.enc"), key: key)
     }
     private var previousIndexFile: EncryptedJSONFile<[IndexRecord]> {
-        EncryptedJSONFile(fileURL: directory.appendingPathComponent("index.prev.enc"), keyURL: keyURL)
+        EncryptedJSONFile(fileURL: directory.appendingPathComponent("index.prev.enc"), key: key)
     }
     private var bodies: URL { directory.appendingPathComponent("bodies", isDirectory: true) }
     private func payloadFile(_ id: UUID) -> EncryptedJSONFile<Payload> {
-        EncryptedJSONFile(fileURL: bodies.appendingPathComponent("\(id.uuidString).enc"), keyURL: keyURL)
+        EncryptedJSONFile(fileURL: bodies.appendingPathComponent("\(id.uuidString).enc"), key: key)
     }
     /// Şema 1'in tek dosyası.
     private var legacyFile: EncryptedJSONFile<[HistoryEntry]> {
-        EncryptedJSONFile(fileURL: root.appendingPathComponent("history.enc"), keyURL: keyURL)
+        EncryptedJSONFile(fileURL: root.appendingPathComponent("history.enc"), key: key)
     }
 
     // MARK: - Okuma
@@ -93,10 +98,11 @@ public final class HistoryStore: @unchecked Sendable {
     @discardableResult
     public func append(_ entry: HistoryEntry, settings: HistorySettings) -> [HistoryEntry] {
         lock.lock(); defer { lock.unlock() }
-        guard settings.isEnabled else { return loadLocked().map(\.entry) }
+        let current = loadLocked()
+        guard settings.isEnabled, keyFailure == nil else { return current.map(\.entry) }
         let (stripped, payload) = Self.split(entry)
         let encodedPayload = payload.flatMap { try? JSONEncoder().encode($0) }
-        var all = loadLocked()
+        var all = current
         all.insert(IndexRecord(entry: stripped, payloadBytes: encodedPayload?.count ?? 0), at: 0)
         let kept = Self.prune(all, settings: settings, now: Date())
         let dropped = Set(all.map(\.entry.id)).subtracting(kept.map(\.entry.id))
@@ -200,6 +206,7 @@ public final class HistoryStore: @unchecked Sendable {
     private func remove(where predicate: (IndexRecord) -> Bool) {
         lock.lock(); defer { lock.unlock() }
         let all = loadLocked()
+        guard keyFailure == nil else { return }
         let removed = Set(all.filter(predicate).map(\.entry.id))
         guard !removed.isEmpty else { return }
         let kept = all.filter { !removed.contains($0.entry.id) }
@@ -242,6 +249,21 @@ public final class HistoryStore: @unchecked Sendable {
     private func loadLocked() -> [IndexRecord] {
         if let records { return records }
         let manager = FileManager.default
+        // Anahtar gelmiyorsa (Keychain kilitli/erişilemez, anahtar dosyası
+        // okunamıyor ya da yok) veri bozuk SAYILMAZ: kenara alınmaz ve bu
+        // oturumda yazılmaz. Yazılsaydı, anahtar sonradan gelince yeni dizin
+        // eskisinin üzerine geçerdi.
+        do {
+            if manager.fileExists(atPath: directory.appendingPathComponent("index.enc").path) {
+                try indexFile.requireKey()
+            } else if manager.fileExists(atPath: root.appendingPathComponent("history.enc").path) {
+                try legacyFile.requireKey()
+            }
+        } catch {
+            keyFailure = error
+            records = []
+            return []
+        }
         var loaded: [IndexRecord]
         var cleanLoad = true
         if manager.fileExists(atPath: directory.appendingPathComponent("index.enc").path) {
