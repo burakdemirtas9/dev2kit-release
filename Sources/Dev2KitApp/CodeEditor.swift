@@ -148,6 +148,36 @@ enum SyntaxHighlighter {
         storage.endEditing()
     }
 
+    /// `{{değişken}}` vurgusu (yalnızca API Client gövdesi): adres alanıyla
+    /// aynı renk ve zemin; tanımlı mor, tanımsız kırmızı. Sözdizimi renginden
+    /// SONRA çağrılır, değişkenin rengi string rengini ezer. Aynı genişletilmiş
+    /// bölge (görünen alan); zemin her seferinde sıfırlanır, silinen
+    /// değişkenin zemini kalmaz. Kuralı olmayan dilde (düz metin) renk de
+    /// sıfırlanır: orada `colorize` hiç boyamıyor.
+    static func highlightVariables(
+        _ storage: NSTextStorage,
+        language: CodeLanguage,
+        range: NSRange,
+        defined: TemplateVariables.DefinedNames
+    ) {
+        guard storage.length > 0 else { return }
+        let target = expand(range, in: storage.string)
+        let variables = TemplateVariables.variableRanges(in: (storage.string as NSString).substring(with: target))
+        storage.beginEditing()
+        storage.removeAttribute(.backgroundColor, range: target)
+        if rules(for: language).isEmpty {
+            storage.addAttribute(.foregroundColor, value: Theme.editorText, range: target)
+        }
+        for variable in variables {
+            let isDefined = defined.contains(variable.name)
+            storage.addAttributes([
+                .foregroundColor: isDefined ? Theme.variableNS : Theme.undefinedVariableNS,
+                .backgroundColor: isDefined ? Theme.variableBackgroundNS : Theme.undefinedVariableBackgroundNS,
+            ], range: NSRange(location: variable.range.location + target.location, length: variable.range.length))
+        }
+        storage.endEditing()
+    }
+
     /// Verilen aralığı (satır sınırlarına genişleterek) renklendirir.
     static func colorize(_ storage: NSTextStorage, language: CodeLanguage, range: NSRange) {
         let rules = rules(for: language)
@@ -259,6 +289,10 @@ struct CodeEditor: NSViewRepresentable {
     /// Değiştikçe editör odak alır (imleç yanıp söner). Workbench araç,
     /// sekme ya da mod değişince artırır; ilk kurulumda da uygulanır.
     var focusRequest: Int?
+    /// Verilirse `{{değişken}}`ler adres alanındaki gibi renkli ve tıklanınca
+    /// baloncuk açılır (⌥⏎ klavyeden). Yalnızca API Client gövdesi verir;
+    /// Workbench'te değişken yok (kullanıcı kararı, 2026-10-28).
+    var variables: CodeEditorVariables?
 
     /// Yazı boyutu (⌘+ / ⌘− / ⌘0, bkz. `EditorZoom`): tüm editörler ortak.
     @AppStorage(EditorZoom.key) private var fontSize = EditorZoom.standard
@@ -268,8 +302,10 @@ struct CodeEditor: NSViewRepresentable {
     }
 
     func makeNSView(context: Context) -> NSScrollView {
-        let scrollView = NSTextView.scrollableTextView()
-        let textView = scrollView.documentView as! NSTextView
+        // Alt sınıf: değişkene tıklamayı bildirir (`variables` yoksa davranış
+        // değişmez). Sınıf kurucusu alt sınıfın örneğini üretiyor (ölçüldü).
+        let scrollView = CodeTextView.scrollableTextView()
+        let textView = scrollView.documentView as! CodeTextView
         // Katlı bölge özetini ("… 30 keys") çizen yerleşim yöneticisi.
         textView.textContainer?.replaceLayoutManager(FoldingLayoutManager())
         // Sarılan uzun satırın devamı satırın girintisinden başlasın.
@@ -346,6 +382,7 @@ struct CodeEditor: NSViewRepresentable {
             }
         }
 
+        context.coordinator.configureVariables(textView)
         context.coordinator.textChanged(textView)
         // Kaydırdıkça yeni görünen bölge boyanır.
         scrollView.contentView.postsBoundsChangedNotifications = true
@@ -378,6 +415,10 @@ struct CodeEditor: NSViewRepresentable {
             context.coordinator.textChanged(textView)
         } else if context.coordinator.lastLanguage != language {
             context.coordinator.textChanged(textView)
+        }
+        // Environment ya da secret değişti: değişkenlerin rengi yeniden.
+        if let codeTextView = textView as? CodeTextView, context.coordinator.configureVariables(codeTextView) {
+            context.coordinator.colorizeVisible(textView)
         }
         context.coordinator.markError(at: errorOffset, in: textView)
         if let focusRequest, focusRequest != context.coordinator.appliedFocusRequest {
@@ -433,6 +474,43 @@ struct CodeEditor: NSViewRepresentable {
 
         private var markedErrorRange: NSRange?
         private var markedErrorOffset: Int?
+        /// Son boyamada kullanılan tanımlı adlar (değişince yeniden boyanır).
+        private var appliedDefinedVariables: TemplateVariables.DefinedNames?
+
+        /// Değişken tıklamasını kurar; tanımlı adlar değiştiyse `true`.
+        @discardableResult
+        func configureVariables(_ textView: CodeTextView) -> Bool {
+            guard let variables = parent.variables else {
+                textView.onVariableClick = nil
+                return false
+            }
+            textView.onVariableClick = { [weak self, weak textView] hit in
+                guard let self, let textView else { return }
+                self.presentVariable(hit, in: textView)
+            }
+            guard variables.defined != appliedDefinedVariables else { return false }
+            appliedDefinedVariables = variables.defined
+            return true
+        }
+
+        func presentVariable(_ hit: VariableHitTesting.Hit, in textView: NSTextView) {
+            guard parent.variables != nil else { return }
+            VariableHitTesting.present(hit, in: textView) { [weak self] name, rect, view in
+                self?.parent.variables?.onClick(name, rect, view)
+            }
+        }
+
+        /// ⌥⏎: imleç bir değişkendeyse baloncuğu açar (klavye ve VoiceOver
+        /// yolu, adres alanıyla aynı). Değilse ve gövde değişkensizse
+        /// davranış değişmez.
+        func textView(_ textView: NSTextView, doCommandBy selector: Selector) -> Bool {
+            guard parent.variables != nil,
+                  selector == #selector(NSResponder.insertNewlineIgnoringFieldEditor(_:)),
+                  let hit = VariableHitTesting.variableAtCursor(of: textView)
+            else { return false }
+            presentVariable(hit, in: textView)
+            return true
+        }
 
         /// Hata satırını işaretler; konum değişmediyse dokunmaz (her
         /// güncellemede yeniden kaydırmak kullanıcının kaydırmasını ezerdi).
@@ -684,6 +762,9 @@ struct CodeEditor: NSViewRepresentable {
             // kapsıyor; "tümünü katla"da bu bütün belge demekti.
             for piece in Self.visiblePieces(of: visibleRange(of: textView), excluding: foldingDelegate.hiddenRanges) {
                 SyntaxHighlighter.colorize(storage, language: parent.language, range: piece)
+                if let variables = parent.variables {
+                    SyntaxHighlighter.highlightVariables(storage, language: parent.language, range: piece, defined: variables.defined)
+                }
             }
             // Kaydırınca yeni görünen satırlardaki eşleşmeler de boyanmalı.
             applySearchHighlights(textView)
@@ -820,5 +901,32 @@ struct CodeEditor: NSViewRepresentable {
                 MainActor.assumeIsolated { self.colorizeVisible(textView) }
             }
         }
+    }
+}
+
+/// Gövde editöründe `{{değişken}}` vurgusu ve tıklama (yalnızca API Client).
+struct CodeEditorVariables {
+    /// Tanımlı adlar (mor; diğerleri kırmızı). Metinden bağımsız küçük küme:
+    /// değişince editör yeniden boyanır (environment değişimi, yeni secret).
+    let defined: TemplateVariables.DefinedNames
+    /// Değişkene tıklandı ya da ⌥⏎: ad, tıklanan parçanın dikdörtgeni
+    /// (metin görünümü koordinatında) ve metin görünümü. Baloncuk buna bağlanır.
+    let onClick: (String, NSRect, NSView) -> Void
+}
+
+/// Kod editörünün metin görünümü: değişkene tıklamayı bildirir.
+/// `onVariableClick` yoksa (Workbench, yanıt) davranış `NSTextView` ile aynı.
+final class CodeTextView: NSTextView {
+    var onVariableClick: ((VariableHitTesting.Hit) -> Void)?
+
+    /// Tıklama tıklama BİTİNCE değerlendirilir (bkz. `AddressTextView`):
+    /// önce olağan tıklama (imleç, sürükleyerek seçim) çalışır; tek tıklama
+    /// ve seçim boşsa baloncuk açılır. Hit-test tıklama anındaki düzene göre.
+    override func mouseDown(with event: NSEvent) {
+        guard let onVariableClick else { return super.mouseDown(with: event) }
+        let hit = VariableHitTesting.variable(at: convert(event.locationInWindow, from: nil), in: self)
+        super.mouseDown(with: event)
+        guard let hit, event.clickCount == 1, selectedRange().length == 0 else { return }
+        onVariableClick(hit)
     }
 }

@@ -135,19 +135,7 @@ struct TemplateTextField: View {
     /// baloncukta "Environment değişkeni ekle" (pencere yalnızca o düğmeyle
     /// açılır, kullanıcı isteği 2026-10-20).
     private func openVariable(_ name: String, at rect: NSRect, in view: NSView) {
-        let presenter = popover
-        popover.show(
-            VariablePreviewCard(
-                name: name,
-                preview: appState.variablePreview(for: name),
-                token: appState.cachedToken(forVariable: name),
-                onDefine: VariableDefinition.key(from: name) == nil ? nil : {
-                    presenter.close()
-                    appState.defineVariable(name)
-                }
-            ),
-            at: rect, in: view
-        )
+        popover.showVariable(name, appState: appState, at: rect, in: view)
     }
 
     @ViewBuilder

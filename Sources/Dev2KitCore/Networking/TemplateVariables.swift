@@ -33,6 +33,34 @@ public enum TemplateVariables {
     }
 
 
+    /// Tanımlı adlar: `preview(for:…).isDefined` ile AYNI kural, ama metinden
+    /// bağımsız ve küçük (environment, secret ve Token Factory adları).
+    ///
+    /// Neden: istek gövdesi MB'larca olabilir; vurgu için "metindeki adları
+    /// bul, her birine sor" her çizimde tüm gövdeyi taramak demekti (adres
+    /// alanı kısa olduğu için orada sorun değil). Küme değişince editör
+    /// yeniden boyanır (environment değişimi, secret eklenmesi).
+    public struct DefinedNames: Equatable, Sendable {
+        private let variables: Set<String>
+        private let secrets: Set<String>
+
+        public init(environment: EnvironmentModel?, tokenVariables: [String], secretNames: [String]) {
+            var names = Set(tokenVariables)
+            for entry in environment?.variables ?? [] where entry.enabled {
+                names.insert(entry.key)
+            }
+            variables = names
+            secrets = Set(secretNames)
+        }
+
+        public func contains(_ name: String) -> Bool {
+            if name.hasPrefix("secret:") {
+                return secrets.contains(String(name.dropFirst("secret:".count)).trimmingCharacters(in: .whitespaces))
+            }
+            return variables.contains(name)
+        }
+    }
+
     public static func containsVariable(_ text: String) -> Bool {
         text.contains("{{") && text.contains("}}")
     }

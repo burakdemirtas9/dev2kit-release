@@ -204,54 +204,17 @@ struct URLEditor: NSViewRepresentable {
             parent.onEditingChange(editing)
         }
 
-        // MARK: Değişkene tıklama
+        // MARK: Değişkene tıklama (gövde editörüyle ortak: VariableHitTesting)
 
-        /// Noktadaki değişken ve tıklanan karakter (yoksa `nil`). Değişken
-        /// birden çok görsel satıra bölünse de her parçası aynı aralıkta.
-        func variable(at point: NSPoint) -> (name: String, range: NSRange, index: Int)? {
-            guard let textView, let layoutManager = textView.layoutManager, let container = textView.textContainer else { return nil }
-            let origin = textView.textContainerOrigin
-            let local = NSPoint(x: point.x - origin.x, y: point.y - origin.y)
-            var fraction: CGFloat = 0
-            let index = layoutManager.characterIndex(for: local, in: container, fractionOfDistanceBetweenInsertionPoints: &fraction)
-            guard index < (textView.string as NSString).length else { return nil }
-            // Satır sonundaki boşluğa tıklama en yakın karakteri verir; yalnızca
-            // karakterin kendi kutusu sayılır.
-            let glyphs = layoutManager.glyphRange(forCharacterRange: NSRange(location: index, length: 1), actualCharacterRange: nil)
-            guard layoutManager.boundingRect(forGlyphRange: glyphs, in: container).contains(local) else { return nil }
-            return variable(containing: index)
-        }
-
-        func variable(containing index: Int) -> (name: String, range: NSRange, index: Int)? {
+        func variable(at point: NSPoint) -> VariableHitTesting.Hit? {
             guard let textView else { return nil }
-            for variable in TemplateVariables.variableRanges(in: textView.string) where NSLocationInRange(index, variable.range) {
-                return (variable.name, variable.range, index)
-            }
-            return nil
+            return VariableHitTesting.variable(at: point, in: textView)
         }
 
-        /// Baloncuğu, düzen oturduktan sonra (tıklama alanı genişletmiş
-        /// olabilir) tıklanan karakterin bulunduğu satır parçasına bağlar.
-        func present(_ hit: (name: String, range: NSRange, index: Int)) {
-            DispatchQueue.main.async { [weak self] in
-                DispatchQueue.main.async {
-                    guard let self, let textView = self.textView,
-                          let layoutManager = textView.layoutManager, let container = textView.textContainer,
-                          NSMaxRange(hit.range) <= (textView.string as NSString).length else { return }
-                    layoutManager.ensureLayout(for: container)
-                    textView.scrollRangeToVisible(NSRange(location: hit.index, length: 0))
-                    // Değişkenin, tıklanan karakterle aynı görsel satırdaki parçası.
-                    let glyph = layoutManager.glyphIndexForCharacter(at: hit.index)
-                    var lineGlyphs = NSRange()
-                    layoutManager.lineFragmentRect(forGlyphAt: glyph, effectiveRange: &lineGlyphs)
-                    let variableGlyphs = layoutManager.glyphRange(forCharacterRange: hit.range, actualCharacterRange: nil)
-                    let piece = NSIntersectionRange(variableGlyphs, lineGlyphs)
-                    var rect = layoutManager.boundingRect(forGlyphRange: piece.length > 0 ? piece : NSRange(location: glyph, length: 1), in: container)
-                    let origin = textView.textContainerOrigin
-                    rect.origin.x += origin.x
-                    rect.origin.y += origin.y
-                    self.parent.onVariableClick(hit.name, rect, textView)
-                }
+        func present(_ hit: VariableHitTesting.Hit) {
+            guard let textView else { return }
+            VariableHitTesting.present(hit, in: textView) { [weak self] name, rect, view in
+                self?.parent.onVariableClick(name, rect, view)
             }
         }
 
@@ -285,8 +248,7 @@ struct URLEditor: NSViewRepresentable {
             case #selector(NSResponder.insertNewlineIgnoringFieldEditor(_:)):
                 // ⌥⏎: imleç bir değişkendeyse baloncuğu açar (klavye yolu);
                 // değilse ⏎ gibi gönderir.
-                if let hit = variable(containing: textView.selectedRange().location) ?? variable(containing: max(0, textView.selectedRange().location - 1)),
-                   textView.selectedRange().length == 0 {
+                if let hit = VariableHitTesting.variableAtCursor(of: textView) {
                     present(hit)
                 } else {
                     parent.onSubmit()

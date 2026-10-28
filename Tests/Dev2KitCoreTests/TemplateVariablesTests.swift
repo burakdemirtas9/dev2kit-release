@@ -47,6 +47,17 @@ final class TemplateVariablesTests: XCTestCase {
         XCTAssertEqual(preview("secret: yok"), .secret(name: "yok", exists: false))
         XCTAssertFalse(preview("secret: yok").isDefined)
     }
+
+    /// Gövde vurgusunun kümesi baloncukla (`preview`) her ad için aynı
+    /// sonucu verir: biri mor, öteki "tanımsız" demesin.
+    func testDefinedNamesAgreeWithPreview() {
+        let defined = TemplateVariables.DefinedNames(environment: environment, tokenVariables: ["token"], secretNames: ["api-key"])
+        for name in ["host", "kapali", "token", "yok", "secret:api-key", "secret: api-key ", "secret:yok", "api-key", ""] {
+            XCTAssertEqual(defined.contains(name), preview(name).isDefined, name)
+        }
+        let noEnvironment = TemplateVariables.DefinedNames(environment: nil, tokenVariables: [], secretNames: [])
+        XCTAssertFalse(noEnvironment.contains("host"))
+    }
 }
 
 final class TemplateVariableRangeTests: XCTestCase {

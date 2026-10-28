@@ -20,6 +20,9 @@ struct BodyEditor: View {
     @StateObject private var folding = CodeFoldingController()
     /// Gövdenin KENDİ araması; yanıttaki aramadan bağımsızdır.
     @StateObject private var search = EditorSearchController()
+    /// Gövdedeki `{{değişken}}`e tıklanınca açılan baloncuk (header ve
+    /// param alanlarıyla aynı kart).
+    @State private var variablePopover = VariablePopoverPresenter()
 
     init(body: Binding<RequestBody>) {
         self._body_ = body
@@ -194,7 +197,15 @@ struct BodyEditor: View {
                             onRejected: { formatError = $0.localized },
                             onLongLine: { rawContent.wrappedValue = $0 }
                         ),
-                        onCursorChange: { cursor = ($0, $1) }
+                        onCursorChange: { cursor = ($0, $1) },
+                        // Header, param ve adres alanı gibi: değişken renkli,
+                        // tıklanınca değer / kaynak / "Environment değişkeni ekle".
+                        variables: CodeEditorVariables(
+                            defined: appState.definedVariables,
+                            onClick: { name, rect, view in
+                                variablePopover.showVariable(name, appState: appState, at: rect, in: view)
+                            }
+                        )
                     )
                         .background(Theme.editorBackground)
                         .overlay(alignment: .topLeading) {

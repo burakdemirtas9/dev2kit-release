@@ -537,6 +537,16 @@ final class AppState {
         )
     }
 
+    /// Etkin environment'ta tanımlı adlar (gövde editöründeki vurgu için;
+    /// `variablePreview` ile aynı kural, metni taramadan).
+    var definedVariables: TemplateVariables.DefinedNames {
+        TemplateVariables.DefinedNames(
+            environment: activeEnvironment,
+            tokenVariables: tokenSources(for: activeEnvironment).map(\.variable),
+            secretNames: secretNames
+        )
+    }
+
     func templateSuggestions(matching token: String) -> [String] {
         TemplateSuggestions.options(
             environment: activeEnvironment,
