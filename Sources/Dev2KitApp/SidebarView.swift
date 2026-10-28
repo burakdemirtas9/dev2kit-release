@@ -128,10 +128,10 @@ struct SidebarView: View {
                 let collection = match.collection
                 Section {
                     if !isCollapsedForDisplay(collection.id) {
-                        // İstek ve hemen altında kayıtlı örnekleri. Satır
-                        // listesi koleksiyon başına bir kez kurulur.
+                        // İstek ve, örnekleri açıksa, hemen altında kayıtlı
+                        // örnekleri. Satır listesi koleksiyon başına bir kez kurulur.
                         let requestsByID = Dictionary(match.requests.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-                        let rows = RequestTreeRows.rows(for: match.requests)
+                        let rows = RequestTreeRows.rows(for: match.requests, expanded: appState.expandedExampleRequestIDs)
                         ForEach(rows) { row in
                             switch row {
                             case .request(let id):
@@ -140,6 +140,7 @@ struct SidebarView: View {
                                         request: request,
                                         collection: collection,
                                         isDirty: dirty.contains(request.id),
+                                        examplesExpanded: appState.areExamplesExpanded(request.id),
                                         onDelete: { deleteRequestTargets = $0 }
                                     )
                                     .tag(request.id)

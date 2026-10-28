@@ -261,6 +261,19 @@ final class AppState {
 
     private static let collapsedKey = "collapsedCollections"
 
+    /// Örnekleri açık istekler; diğerlerinin örnekleri katlı (varsayılan,
+    /// kullanıcı kararı 2026-10-28). UserDefaults'ta saklanır.
+    var expandedExampleRequestIDs: Set<UUID> = [] {
+        didSet {
+            UserDefaults.standard.set(
+                expandedExampleRequestIDs.map(\.uuidString),
+                forKey: Self.expandedExamplesKey
+            )
+        }
+    }
+
+    static let expandedExamplesKey = "expandedExampleRequests"
+
     /// Secret adları yazarken `{{` önerileri için sürekli isteniyor; her seferinde
     /// diskten okuyup AES-GCM çözmek tuş başına I/O demekti. Bellekte tutulur,
     /// secret değiştiğinde `invalidateSecretNames()` ile düşürülür.
@@ -387,6 +400,10 @@ final class AppState {
             workspace.collections = [CollectionModel(name: L10n.t("collection.first"), requests: [RequestModel(name: L10n.t("request.newName"))])]
             persist()
         }
+        // Silinmiş isteklerin kimlikleri birikmesin: yalnızca var olanlar.
+        let savedExpanded = UserDefaults.standard.stringArray(forKey: Self.expandedExamplesKey) ?? []
+        let requestIDs = Set(workspace.collections.flatMap { $0.requests.map(\.id) })
+        self.expandedExampleRequestIDs = Set(savedExpanded.compactMap(UUID.init(uuidString:))).intersection(requestIDs)
         // Eski environment "token değişkenleri" Token Factory'ye taşınır; bir
         // kez çalışır (taşınanlar environment'tan silinir).
         if TokenFactoryMigration.migrate(&workspace) > 0 {

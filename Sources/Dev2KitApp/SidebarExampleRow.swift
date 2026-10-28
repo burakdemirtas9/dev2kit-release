@@ -22,9 +22,9 @@ struct SidebarExampleRow: View {
                 .font(.system(size: 10, weight: .semibold, design: .monospaced))
                 .foregroundStyle(Theme.statusColor(example.statusCode))
         }
-        // İstek satırındaki metot sütununun hizasından başlar: altında
-        // olduğu görülsün.
-        .padding(.leading, 24)
+        // İstek satırındaki okun ardından, metot sütununun biraz içinden
+        // başlar: altında olduğu görülsün.
+        .padding(.leading, SidebarRequestRow.toggleWidth + 24)
         .help(example.name)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(L10n.t("example.accessibility", example.name, ResponseExamples.statusLabel(example.statusCode)))

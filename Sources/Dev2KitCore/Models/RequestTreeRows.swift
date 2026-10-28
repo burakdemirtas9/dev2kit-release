@@ -1,7 +1,10 @@
 import Foundation
 
-/// Kenar çubuğunda bir koleksiyonun satırları: her istek ve hemen altında
-/// kayıtlı örnekleri.
+/// Kenar çubuğunda bir koleksiyonun satırları: her istek ve, örnekleri
+/// açıksa, hemen altında kayıtlı örnekleri.
+///
+/// Örnekler varsayılan olarak katlıdır (kullanıcı kararı, 2026-10-28): her
+/// isteğin örnekleri listeyi kalabalıklaştırıyordu. Açık olanlar `expanded`.
 ///
 /// Neden Core'da: liste sürükle-bırak sırasında GÖRÜNEN satır indeksleri
 /// verir; örnek satırları araya girdiği için bu indeksler istek dizisindeki
@@ -26,9 +29,11 @@ public enum RequestTreeRows {
         }
     }
 
-    public static func rows(for requests: [RequestModel]) -> [Row] {
-        requests.flatMap { request in
-            [Row.request(request.id)] + request.examples.map { .example(requestID: request.id, exampleID: $0.id) }
+    /// `expanded`: örnekleri açık istekler; diğerlerinin yalnızca kendi satırı var.
+    public static func rows(for requests: [RequestModel], expanded: Set<UUID>) -> [Row] {
+        requests.flatMap { request -> [Row] in
+            guard expanded.contains(request.id) else { return [.request(request.id)] }
+            return [.request(request.id)] + request.examples.map { .example(requestID: request.id, exampleID: $0.id) }
         }
     }
 

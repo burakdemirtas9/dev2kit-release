@@ -4,6 +4,11 @@
 
 extension L10nTable {
     static let examples: [String: L10nEntry] = [
+        // Kenar çubuğunda katlama (örnekler varsayılan olarak katlı)
+        "example.fold.show": L10nEntry("Örnekleri Göster", "Show Examples"),
+        "example.fold.hide": L10nEntry("Örnekleri Gizle", "Hide Examples"),
+        "example.count.one": L10nEntry("%1$@ örnek", "%1$@ example"),
+        "example.count.other": L10nEntry("%1$@ örnek", "%1$@ examples"),
         // Kaydetme
         "example.save": L10nEntry("Örnek Olarak Kaydet", "Save as Example"),
         "example.save.help": L10nEntry("Bu response'u request'in altına örnek olarak kaydeder", "Saves this response as an example under the request"),

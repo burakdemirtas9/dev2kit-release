@@ -62,6 +62,8 @@ extension AppState {
     /// örnek görünür; isteğin kendisi ve canlı yanıtı olduğu gibi kalır.
     func openExample(_ ref: ExampleRef) {
         guard example(ref) != nil else { return }
+        // Açılan örneğin satırı görünsün (örnekler varsayılan olarak katlı).
+        expandedExampleRequestIDs.insert(ref.requestID)
         selectedRequestID = ref.requestID
         selectedRequestIDs = [ref.requestID]
         openExample = ref
@@ -146,11 +148,13 @@ extension AppState {
         return outcome
     }
 
-    /// Yeni örnek kenar çubuğunda görünsün: kapalı koleksiyon açılır.
+    /// Yeni örnek kenar çubuğunda görünsün: kapalı koleksiyon ve isteğin
+    /// katlı örnekleri açılır.
     private func revealExamples(of requestID: UUID) {
         if let collection = collection(containing: requestID) {
             collapsedCollectionIDs.remove(collection.id)
         }
+        expandedExampleRequestIDs.insert(requestID)
         sidebarRevealID = requestID
     }
 

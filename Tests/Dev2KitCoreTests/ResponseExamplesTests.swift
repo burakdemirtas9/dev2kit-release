@@ -236,7 +236,7 @@ final class ResponseExamplesTests: XCTestCase {
     func testTreeRowsPlaceExamplesUnderTheirRequest() {
         let a = RequestModel(name: "a", examples: [example("a1"), example("a2")])
         let b = RequestModel(name: "b")
-        let rows = RequestTreeRows.rows(for: [a, b])
+        let rows = RequestTreeRows.rows(for: [a, b], expanded: [a.id, b.id])
         XCTAssertEqual(rows.map(\.id), [a.id, a.examples[0].id, a.examples[1].id, b.id])
         XCTAssertEqual(RequestTreeRows.exampleOwners(in: [a, b])[a.examples[1].id], a.id)
     }
@@ -245,7 +245,7 @@ final class ResponseExamplesTests: XCTestCase {
         let a = RequestModel(name: "a", examples: [example("a1"), example("a2")])
         let b = RequestModel(name: "b")
         let c = RequestModel(name: "c", examples: [example("c1")])
-        let rows = RequestTreeRows.rows(for: [a, b, c])   // a a1 a2 b c c1
+        let rows = RequestTreeRows.rows(for: [a, b, c], expanded: [a.id, c.id])   // a a1 a2 b c c1
 
         // b (satır 3) en başa.
         var move = try XCTUnwrap(RequestTreeRows.requestMove(source: [3], destination: 0, in: rows))
@@ -263,6 +263,29 @@ final class ResponseExamplesTests: XCTestCase {
         XCTAssertEqual(move.destination, 1)
 
         XCTAssertNil(RequestTreeRows.requestMove(source: [1], destination: 0, in: rows), "örnek satırı taşınmaz")
+    }
+
+    /// Örnekler varsayılan olarak katlı: listede yalnızca istek satırları.
+    func testFoldedRequestsShowOnlyTheirOwnRow() {
+        let a = RequestModel(name: "a", examples: [example("a1"), example("a2")])
+        let b = RequestModel(name: "b", examples: [example("b1")])
+        XCTAssertEqual(RequestTreeRows.rows(for: [a, b], expanded: []).map(\.id), [a.id, b.id])
+        XCTAssertEqual(RequestTreeRows.rows(for: [a, b], expanded: [b.id]).map(\.id), [a.id, b.id, b.examples[0].id])
+    }
+
+    /// Katlı ve açık istekler karışıkken de taşıma doğru isteği taşır.
+    func testMoveWithMixedFoldingMovesTheRightRequest() throws {
+        let a = RequestModel(name: "a", examples: [example("a1")])
+        let b = RequestModel(name: "b", examples: [example("b1"), example("b2")])
+        let c = RequestModel(name: "c")
+        let rows = RequestTreeRows.rows(for: [a, b, c], expanded: [b.id])   // a b b1 b2 c
+
+        // c (satır 4) a'nın ardına.
+        let move = try XCTUnwrap(RequestTreeRows.requestMove(source: [4], destination: 1, in: rows))
+        var requests = [a, b, c]
+        requests.applyListMove(fromOffsets: move.source, toOffset: move.destination)
+        XCTAssertEqual(requests.map(\.name), ["a", "c", "b"])
+        XCTAssertNil(RequestTreeRows.requestMove(source: [2], destination: 0, in: rows), "örnek satırı taşınmaz")
     }
 
     // MARK: - Diskte kalıcılık

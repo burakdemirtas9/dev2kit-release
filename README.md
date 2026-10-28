@@ -53,6 +53,7 @@ dev2kit iki moddan oluşur:
   kapalı, dış kaynak yüklenmez).
 - **Response örnekleri:** yanıt, onu üreten request ile birlikte isteğin
   altına kaydedilir (istek başına en çok 5); iki tarafı da düzenlenebilir.
+  Kenar çubuğunda varsayılan olarak katlıdır, isteğin solundaki okla açılır.
 - Şifreli istek geçmişi; kimlik bilgileri maskelenerek saklanır.
 
 ### Workbench
