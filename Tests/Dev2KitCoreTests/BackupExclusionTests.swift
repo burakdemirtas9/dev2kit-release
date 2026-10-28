@@ -29,10 +29,28 @@ final class BackupExclusionTests: XCTestCase {
     /// ikinci yazımı bazen hatasız atlıyor (ölçüldü: 300 denemede 23; test
     /// kararsızdı). Gerçek kullanımda işaret hiç kaldırılmadığı için bu yol
     /// yok; dışarıdan kaldırılmış işaret 300/300 yeniden konuyor.
+    ///
+    /// macOS işareti kaldırıldıktan birkaç ms sonra bir kez daha yazıyor
+    /// (ölçüldü 2026-10-28: 300 denemede 299, en geç 4,7 ms; ikinci
+    /// kaldırmadan sonra 299/299 kalıcı). Tek kaldırma test %10 düşürüyordu
+    /// ve işaret kendiliğinden geri geldiği için "eski sürümün dosyası
+    /// işaretlenir" testleri yanlış sebeple de geçebiliyordu. Kaldır, geri
+    /// gelmesini bekle, yeniden kaldır; kalıcı olduğunu doğrula.
     private func clearMark(_ name: String) throws {
         let path = directory.appendingPathComponent(name).path
-        // İşaret yoksa (ENOATTR) zaten istenen durum.
-        _ = removexattr(path, "com.apple.metadata:com_apple_backup_excludeItem", 0)
+        let attribute = "com.apple.metadata:com_apple_backup_excludeItem"
+        for _ in 0..<5 {
+            // İşaret yoksa (ENOATTR) zaten istenen durum.
+            _ = removexattr(path, attribute, 0)
+            let deadline = Date().addingTimeInterval(0.1)
+            var cameBack = false
+            while Date() < deadline {
+                if getxattr(path, attribute, nil, 0, 0, 0) >= 0 { cameBack = true; break }
+                usleep(1_000)
+            }
+            if !cameBack { break }
+        }
+        XCTAssertLessThan(getxattr(path, attribute, nil, 0, 0, 0), 0, "işaret kalıcı olarak kalktı")
         XCTAssertFalse(try isExcluded(name))
     }
 
