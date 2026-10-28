@@ -22,12 +22,17 @@ final class BackupExclusionTests: XCTestCase {
         return try XCTUnwrap(url.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup)
     }
 
-    /// Önceki sürümün yazdığı, işaretsiz dosyayı taklit eder.
+    /// Önceki sürümün (başka bir sürecin) yazdığı, işaretsiz dosyayı taklit eder.
+    ///
+    /// İşaret Foundation ile DEĞİL, doğrudan kaldırılır: aynı süreçte
+    /// `isExcludedFromBackup = false` ardından `true` yazılınca Foundation
+    /// ikinci yazımı bazen hatasız atlıyor (ölçüldü: 300 denemede 23; test
+    /// kararsızdı). Gerçek kullanımda işaret hiç kaldırılmadığı için bu yol
+    /// yok; dışarıdan kaldırılmış işaret 300/300 yeniden konuyor.
     private func clearMark(_ name: String) throws {
-        var url = directory.appendingPathComponent(name)
-        var values = URLResourceValues()
-        values.isExcludedFromBackup = false
-        try url.setResourceValues(values)
+        let path = directory.appendingPathComponent(name).path
+        // İşaret yoksa (ENOATTR) zaten istenen durum.
+        _ = removexattr(path, "com.apple.metadata:com_apple_backup_excludeItem", 0)
         XCTAssertFalse(try isExcluded(name))
     }
 
