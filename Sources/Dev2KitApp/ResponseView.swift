@@ -137,6 +137,22 @@ struct ResponseView: View {
                     .help(L10n.t("response.getBodyOmitted.help"))
                     .accessibilityElement(children: .combine)
                 }
+                // JSON body bir değişken değeri yüzünden bozuluyordu, o değer
+                // kaçışlandı (JSONBodyResolution). Yalnızca adlar, değer yok.
+                if !response.requestBodyEscapedVariables.isEmpty {
+                    HStack(spacing: 6) {
+                        MessageIcon(kind: .info)
+                        Text(L10n.t("response.bodyEscaped", response.requestBodyEscapedVariables.joined(separator: ", ")))
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: 0)
+                    }
+                    .font(.secondaryText)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 5)
+                    .background(MessageKind.info.background)
+                    .help(L10n.t("response.bodyEscaped.help"))
+                    .accessibilityElement(children: .combine)
+                }
                 if !isExample, let id = appState.selectedRequestID, let advice = appState.tokenRetryAdvice[id] {
                     TokenRetryBanner(requestID: id, advice: advice)
                         .padding(.horizontal, 12)

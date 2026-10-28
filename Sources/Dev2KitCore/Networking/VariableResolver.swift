@@ -64,6 +64,13 @@ public struct VariableResolver: Sendable {
         return (value, usesSecret)
     }
 
+    /// Tek bir `{{…}}` ifadesinin değeri (`ad` ya da `secret:ad`); `resolve`
+    /// ile aynı kurallar. `JSONBodyResolution` değeri bağlamına göre koyar.
+    func resolveToken(_ token: String) throws -> String {
+        var usesSecret = false
+        return try resolveToken(token, depth: 0, usesSecret: &usesSecret)
+    }
+
     private func resolve(_ text: String, depth: Int, usesSecret: inout Bool) throws -> String {
         guard text.contains("{{") else { return text }
         guard depth < Self.maxDepth else { throw ResolveError.nestingTooDeep(text) }
@@ -72,28 +79,30 @@ public struct VariableResolver: Sendable {
         var lastIndex = text.startIndex
         for match in TemplateScanner.matches(in: text) {
             output += text[lastIndex..<match.range.lowerBound]
-            let token = String(match.name)
-            if token.hasPrefix("secret:") {
-                let name = String(token.dropFirst("secret:".count)).trimmingCharacters(in: .whitespaces)
-                guard let value = try secretStore.secret(forName: name) else {
-                    throw ResolveError.unknownSecret(name)
-                }
-                usesSecret = true
-                output += value
-            } else {
-                guard let value = variables[token] else {
-                    // Aynı isimde secret varsa kullanıcı büyük olasılıkla
-                    // {{secret:...}} önekini unutmuştur; doğru yazımı öner.
-                    if (try? secretStore.secret(forName: token)) != nil {
-                        throw ResolveError.variableIsSecret(token)
-                    }
-                    throw ResolveError.unknownVariable(token)
-                }
-                output += try resolve(value, depth: depth + 1, usesSecret: &usesSecret)
-            }
+            output += try resolveToken(String(match.name), depth: depth, usesSecret: &usesSecret)
             lastIndex = match.range.upperBound
         }
         output += text[lastIndex...]
         return output
+    }
+
+    private func resolveToken(_ token: String, depth: Int, usesSecret: inout Bool) throws -> String {
+        if token.hasPrefix("secret:") {
+            let name = String(token.dropFirst("secret:".count)).trimmingCharacters(in: .whitespaces)
+            guard let value = try secretStore.secret(forName: name) else {
+                throw ResolveError.unknownSecret(name)
+            }
+            usesSecret = true
+            return value
+        }
+        guard let value = variables[token] else {
+            // Aynı isimde secret varsa kullanıcı büyük olasılıkla
+            // {{secret:...}} önekini unutmuştur; doğru yazımı öner.
+            if (try? secretStore.secret(forName: token)) != nil {
+                throw ResolveError.variableIsSecret(token)
+            }
+            throw ResolveError.unknownVariable(token)
+        }
+        return try resolve(value, depth: depth + 1, usesSecret: &usesSecret)
     }
 }

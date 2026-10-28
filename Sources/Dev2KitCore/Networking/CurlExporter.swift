@@ -75,8 +75,13 @@ public enum CurlExporter {
         case .none:
             break
         case .raw(let content, let contentType):
-            // Gönderilenle aynı: yorumlar dışa aktarılmaz.
-            let resolved = try resolver.resolve(RequestBodyComments.sendable(content, contentType: contentType))
+            // Gönderilenle aynı: yorumlar dışa aktarılmaz; JSON gövdede bozan
+            // değer gönderimdeki gibi kaçışlanır (JSONBodyResolution).
+            let resolved = try JSONBodyResolution.resolve(
+                RequestBodyComments.sendable(content, contentType: contentType),
+                contentType: contentType,
+                resolver: resolver
+            ).text
             if !resolved.isEmpty {
                 parts.append("--data-raw \(shellQuote(resolved))")
             }

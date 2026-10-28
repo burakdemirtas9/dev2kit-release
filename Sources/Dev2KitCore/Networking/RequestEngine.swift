@@ -33,6 +33,9 @@ public struct ResponseData: Sendable {
     /// editörde duruyor. Arayüz yanıtın üstünde bildirir (sunucu yanıtına
     /// eklenmez). İstek kurulurken belirlenir, gönderilen isteği anlatır.
     public let requestBodyOmitted: Bool
+    /// JSON gövde değişkenlerle geçersiz kaldığı için değeri kaçışlanan
+    /// değişkenler (`JSONBodyResolution`; yalnızca adlar). Arayüz bildirir.
+    public let requestBodyEscapedVariables: [String]
 
     public init(
         statusCode: Int,
@@ -47,10 +50,12 @@ public struct ResponseData: Sendable {
         size: TransferSize? = nil,
         certificateValidationSkipped: Bool = false,
         bodyLimitExceeded: Bool = false,
-        requestBodyOmitted: Bool = false
+        requestBodyOmitted: Bool = false,
+        requestBodyEscapedVariables: [String] = []
     ) {
         self.bodyLimitExceeded = bodyLimitExceeded
         self.requestBodyOmitted = requestBodyOmitted
+        self.requestBodyEscapedVariables = requestBodyEscapedVariables
         self.statusCode = statusCode
         self.headers = headers
         self.body = body
@@ -391,7 +396,8 @@ public final class RequestEngine: @unchecked Sendable {
             certificateValidationSkipped: skipsValidation
                 && [urlRequest.url, http.url].contains { $0?.scheme?.lowercased() == "https" },
             bodyLimitExceeded: tracker.bodyLimitExceeded,
-            requestBodyOmitted: built.omittedBody
+            requestBodyOmitted: built.omittedBody,
+            requestBodyEscapedVariables: built.bodyEscapedVariables
         )
     }
 
@@ -434,9 +440,10 @@ public final class RequestEngine: @unchecked Sendable {
     }
 
     /// İsteği kurar; dolu gövde metot yüzünden dışarıda bırakıldıysa
-    /// `omittedBody` (yanıttaki bildirim buradan, gönderilen isteğe göre).
+    /// `omittedBody`, JSON gövdede değeri kaçışlanan değişkenler
+    /// `bodyEscapedVariables` (yanıttaki bildirimler buradan, gönderilen isteğe göre).
     func buildRequest(_ model: RequestModel, resolver: VariableResolver) throws
-        -> (request: URLRequest, omittedBody: Bool, credentialHeaders: [String]) {
+        -> (request: URLRequest, omittedBody: Bool, credentialHeaders: [String], bodyEscapedVariables: [String]) {
         // Yönlendirmede başka kaynağa taşınmayacak başlıklar. ÇÖZÜLMÜŞ haliyle
         // belirlenir (ham modelden değil): değişkenle verilen başlık adı,
         // secret'a çıkan environment değişkeni ve boşluklu referans da yakalanır
@@ -512,10 +519,11 @@ public final class RequestEngine: @unchecked Sendable {
             }
         }
 
-        let omittedBody = try attachBody(to: &request, model: model, resolver: resolver)
+        var bodyEscapedVariables: [String] = []
+        let omittedBody = try attachBody(to: &request, model: model, resolver: resolver, escapedVariables: &bodyEscapedVariables)
         // En sonda: Auth (API key başlığı) dahil hiçbir yol User-Agent'ı ezemez.
         Dev2KitIdentity.stamp(&request)
-        return (request, omittedBody, credentialHeaders)
+        return (request, omittedBody, credentialHeaders, bodyEscapedVariables)
     }
 
     /// Foundation satır sonu (CR/LF) içeren başlığı SESSİZCE düşürür: istek
@@ -540,7 +548,8 @@ public final class RequestEngine: @unchecked Sendable {
     private func attachBody(
         to request: inout URLRequest,
         model: RequestModel,
-        resolver: VariableResolver
+        resolver: VariableResolver,
+        escapedVariables: inout [String]
     ) throws -> Bool {
         guard model.method.allowsBody else {
             return model.body.hasSendableContent
@@ -553,8 +562,12 @@ public final class RequestEngine: @unchecked Sendable {
             // Yorumlar yalnızca kullanıcı için; çözümden ÖNCE kalkar (yorumdaki
             // tanımsız {{değişken}} isteği durdurmasın).
             let sendable = RequestBodyComments.sendable(content, contentType: contentType)
-            let data = Data(try resolver.resolve(sendable).utf8)
+            // JSON gövdede değişken değeri gövdeyi bozuyorsa yalnızca o değer
+            // kaçışlanır; geçerli gövde bayt bayt aynı gider (JSONBodyResolution).
+            let resolved = try JSONBodyResolution.resolve(sendable, contentType: contentType, resolver: resolver)
+            let data = Data(resolved.text.utf8)
             guard !data.isEmpty else { return false }
+            escapedVariables = resolved.escapedVariables
             setBody(data, contentType: contentType.isEmpty ? nil : contentType, on: &request)
 
         case .formURLEncoded(let fields):

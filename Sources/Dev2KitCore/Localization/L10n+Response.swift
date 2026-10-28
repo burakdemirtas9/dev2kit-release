@@ -16,6 +16,14 @@ extension L10nTable {
         "response.stopped.subtitle": L10nEntry("Göndermeden önce aşağıdakileri kontrol et. Onaylarsan aynı durum bir daha sorulmaz.", "Check the following before sending. Once you approve, you won’t be asked about the same situation again."),
         "response.sendAnyway": L10nEntry("Yine de Gönder", "Send Anyway"),
         "response.getBodyOmitted": L10nEntry("GET request'i body olmadan gönderildi. Body içeriği editörde korundu.", "The GET request was sent without a body. The body content was preserved in the editor."),
+        "response.bodyEscaped": L10nEntry(
+            "Body geçerli JSON olsun diye şu değişkenlerin değeri kaçışlandı: %1$@",
+            "These variables' values were escaped to keep the body valid JSON: %1$@"
+        ),
+        "response.bodyEscaped.help": L10nEntry(
+            "Değerde tırnak, ters bölü ya da satır sonu vardı ve body'yi bozuyordu. Body değişkenlerle zaten geçerli JSON ise hiçbir şey değiştirilmez.",
+            "The value contained a quote, backslash or line break that broke the body. If the body is already valid JSON with its variables, nothing is changed."
+        ),
         "response.getBodyOmitted.help": L10nEntry("macOS'un ağ katmanı body'li GET göndermiyor. Body'yi göndermek için metodu POST, PUT ya da PATCH yap.", "macOS’s networking layer doesn’t send a GET with a body. To send the body, change the method to POST, PUT or PATCH."),
         "response.hidden.title": L10nEntry("Response body gösterilmiyor: %1$@", "Response body not shown: %1$@"),
         "response.hidden.detail": L10nEntry("%1$@'tan büyük ya da %2$@'tan uzun satırlı metin (biçimlenemeyen sıkıştırılmış veri tek satırdır) editörde dev2kit'i dondurur. Body bellekte; kopyalayabilirsin.", "Text larger than %1$@ or with a line longer than %2$@ (minified data that can’t be formatted is one line) would freeze dev2kit in the editor. The body is in memory; you can copy it."),
