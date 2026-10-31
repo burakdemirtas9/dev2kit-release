@@ -47,10 +47,7 @@ struct APIClientLayout: View {
                     .frame(width: effectiveSidebarWidth(totalWidth: geometry.size.width))
                 sidebarDivider(totalWidth: geometry.size.width)
                 VStack(spacing: 0) {
-                    if !appState.openTabs.isEmpty {
-                        RequestTabBar()
-                        Divider()
-                    }
+                    RequestTabStrip()
                     if let content = appState.openExampleContent, let ref = appState.openExample,
                        let draft = appState.exampleBinding(ref) {
                         // Kayıtlı örnek: istek editörü (ve Gönder'i) yerinde yok.
@@ -149,5 +146,22 @@ private struct ExampleDialogs: ViewModifier {
             } message: {
                 Text(L10n.t("common.deletePermanent"))
             }
+    }
+}
+
+/// Sekme çubuğu ve altındaki çizgi; açık sekme yoksa ikisi de yok.
+///
+/// Ayrı görünüm (2026-10-31): sekme dizisini yalnızca bu okur. Kontrol
+/// `APIClientLayout` gövdesindeyken sürüklemedeki her yer değiştirme bütün
+/// düzeni (kenar çubuğu, istek editörü) yeniden değerlendiriyordu; tam
+/// pencerede taşıma başına ~13 ms (ölçüldü).
+private struct RequestTabStrip: View {
+    @Environment(AppState.self) private var appState
+
+    var body: some View {
+        if !appState.openTabs.isEmpty {
+            RequestTabBar()
+            Divider()
+        }
     }
 }

@@ -176,6 +176,37 @@ final class RequestTabsTests: XCTestCase {
         XCTAssertEqual(pruned.pinned, [], "silinen istek sabitlerden düşer")
     }
 
+    // MARK: - Sürükleyerek sıralama (2026-10-31)
+
+    /// Sekmeler 100 genişliğinde: a 0–100 (orta 50), b 100–200 (150), c 200–300 (250), d (350).
+    private var mids: [UUID: Double] { [a: 50, b: 150, c: 250, d: 350] }
+
+    func testDragSwapsOnlyAfterPassingTheNeighboursMiddle() {
+        let tabs = RequestTabs(tabs: [a, b, c, d])
+        XCTAssertNil(tabs.reorderTarget(for: a, center: 140, midX: mids), "b'nin ortasına varmadı")
+        XCTAssertEqual(tabs.reorderTarget(for: a, center: 151, midX: mids), b)
+        XCTAssertEqual(tabs.reorderTarget(for: d, center: 249, midX: mids), c, "sola doğru")
+        XCTAssertNil(tabs.reorderTarget(for: b, center: 150, midX: mids), "kendi yerinde")
+    }
+
+    func testFastDragSkipsSeveralTabs() {
+        var tabs = RequestTabs(tabs: [a, b, c, d])
+        let target = tabs.reorderTarget(for: a, center: 300, midX: mids)
+        XCTAssertEqual(target, c)
+        tabs.move(a, before: try! XCTUnwrap(target))
+        XCTAssertEqual(tabs.tabs, [b, c, a, d])
+        XCTAssertEqual(RequestTabs(tabs: [a, b, c, d]).reorderTarget(for: d, center: 10, midX: mids), a)
+    }
+
+    func testDragDoesNotCrossThePinnedBoundary() {
+        var tabs = RequestTabs(tabs: [a, b, c, d])
+        tabs.pin(a)
+        tabs.pin(b)            // [a, b | c, d]
+        XCTAssertNil(tabs.reorderTarget(for: c, center: 20, midX: mids), "sabitlerin arasına girmez")
+        XCTAssertNil(tabs.reorderTarget(for: b, center: 380, midX: mids), "sabit olmayanlara geçmez")
+        XCTAssertEqual(tabs.reorderTarget(for: b, center: 40, midX: mids), a)
+    }
+
     func testRestoredStateIsNormalized() {
         let tabs = RequestTabs(tabs: [a, b, c, b], preview: c, pinned: [c, d, c])
         XCTAssertEqual(tabs.tabs, [c, a, b], "tekrar atılır, sabit başa, açık olmayan sabit düşer")

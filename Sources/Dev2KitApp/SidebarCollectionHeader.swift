@@ -85,10 +85,10 @@ struct SidebarCollectionHeader: View {
             // (bkz. CollectionReorderDelegate) hiçbir şey yapmaz.
             guard !appState.isSearching, !collection.isUngrouped else { return NSItemProvider() }
             draggingCollectionID = collection.id
-            return NSItemProvider(object: collection.id.uuidString as NSString)
+            return InternalDrag.provider(for: collection.id)
         }
         .onDrop(
-            of: [.text],
+            of: [InternalDrag.type],
             delegate: CollectionReorderDelegate(
                 target: collection.id,
                 dragging: $draggingCollectionID,

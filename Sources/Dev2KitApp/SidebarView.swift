@@ -11,14 +11,14 @@ struct SidebarView: View {
     @State private var tokenFactoryDropTargeted = false
     @FocusState private var searchFocused: Bool
 
-    /// Bırakılan satır kimliklerini okuyup Token Factory'ye kopyalar. Metin
-    /// başka bir uygulamadan da gelebilir: yalnızca workspace'teki normal
+    /// Bırakılan satır kimliklerini okuyup Token Factory'ye kopyalar. Yük
+    /// uygulamaya özel (`InternalDrag`); yalnızca workspace'teki normal
     /// isteklere karşılık gelen kimlikler işlenir, gerisi yok sayılır.
     private func copyDroppedRequests(_ providers: [NSItemProvider]) {
         Task { @MainActor in
             var ids = Set<UUID>()
             for provider in providers {
-                if let text = await provider.loadText(), let id = UUID(uuidString: text) {
+                if let id = await InternalDrag.loadID(from: provider) {
                     ids.insert(id)
                 }
             }
@@ -83,7 +83,7 @@ struct SidebarView: View {
                 // (bkz. AppState.copyToTokenFactory). Koleksiyon başlığı
                 // da kimlik taşır; istek olmadığı için yok sayılır ama
                 // sürükleme durumu yine temizlenmeli.
-                .onDrop(of: [.text], isTargeted: $tokenFactoryDropTargeted) { providers in
+                .onDrop(of: [InternalDrag.type], isTargeted: $tokenFactoryDropTargeted) { providers in
                     draggingCollectionID = nil
                     copyDroppedRequests(providers)
                     return true
@@ -150,7 +150,7 @@ struct SidebarView: View {
                                     // Token Factory paneline bırakılınca kopyalanabilsin diye
                                     // satır kimliğini taşır; liste içi sıralama (`onMove`)
                                     // bundan etkilenmez.
-                                    .itemProvider { NSItemProvider(object: request.id.uuidString as NSString) }
+                                    .itemProvider { InternalDrag.provider(for: request.id) }
                                 }
                             case .example(let requestID, let exampleID):
                                 if let example = requestsByID[requestID]?.examples.first(where: { $0.id == exampleID }) {
@@ -230,7 +230,7 @@ struct SidebarView: View {
         }
         // Başlıklar dışında bir yere bırakılırsa sürükleme durumunu temizle;
         // sıralama zaten hover sırasında canlı yapıldı.
-        .onDrop(of: [.text], isTargeted: nil) { _ in
+        .onDrop(of: [InternalDrag.type], isTargeted: nil) { _ in
             draggingCollectionID = nil
             return true
         }
@@ -358,12 +358,3 @@ struct SidebarView: View {
     }
 }
 
-private extension NSItemProvider {
-    func loadText() async -> String? {
-        await withCheckedContinuation { continuation in
-            _ = loadObject(ofClass: NSString.self) { object, _ in
-                continuation.resume(returning: (object as? NSString).map(String.init))
-            }
-        }
-    }
-}

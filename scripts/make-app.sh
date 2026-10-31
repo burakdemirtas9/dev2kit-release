@@ -77,6 +77,21 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <string>public.app-category.developer-tools</string>
     <key>NSHighResolutionCapable</key>
     <true/>
+    <!-- Uygulama içi sürükle-bırak yükü (InternalDrag): metin değil, metin
+         alanlarına düşmez; yalnızca bu süreç görür. -->
+    <key>UTExportedTypeDeclarations</key>
+    <array>
+        <dict>
+            <key>UTTypeIdentifier</key>
+            <string>${BUNDLE_ID}.internal-id</string>
+            <key>UTTypeDescription</key>
+            <string>dev2kit internal drag item</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.data</string>
+            </array>
+        </dict>
+    </array>
 </dict>
 </plist>
 PLIST

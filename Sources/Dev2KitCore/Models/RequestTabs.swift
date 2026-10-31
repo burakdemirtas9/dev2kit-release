@@ -115,6 +115,30 @@ public struct RequestTabs: Equatable, Sendable {
         pinned = Array(tabs.prefix(pinned.count))
     }
 
+    /// Sürükleyerek sıralama (tarayıcı sekme şeridi gibi, 2026-10-31):
+    /// sürüklenen sekmenin görsel merkezi `center`, kendi grubundaki
+    /// komşusunun ortasını (`midX`) geçince onun yerine geçer. Hızlı
+    /// sürüklemede birden çok komşu geçilmişse en uzaktaki döner; sonuç
+    /// `move(_:before:)`'a verilir. Grup (sabit / sabit olmayan) sınırı aşılmaz.
+    public func reorderTarget(for id: UUID, center: Double, midX: [UUID: Double]) -> UUID? {
+        guard let index = tabs.firstIndex(of: id) else { return nil }
+        let pinnedGroup = isPinned(id)
+        func sameGroup(_ i: Int) -> Bool { tabs.indices.contains(i) && isPinned(tabs[i]) == pinnedGroup }
+        var target: UUID?
+        var right = index + 1
+        while sameGroup(right), let mid = midX[tabs[right]], center > mid {
+            target = tabs[right]
+            right += 1
+        }
+        if target != nil { return target }
+        var left = index - 1
+        while sameGroup(left), let mid = midX[tabs[left]], center < mid {
+            target = tabs[left]
+            left -= 1
+        }
+        return target
+    }
+
     /// Sonraki/önceki sekme; uçlarda başa sarar.
     public func adjacent(to selected: UUID?, offset: Int) -> UUID? {
         guard !tabs.isEmpty else { return nil }
