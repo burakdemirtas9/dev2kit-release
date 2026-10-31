@@ -126,4 +126,90 @@ final class VariableDefinitionFlowTests: XCTestCase {
         XCTAssertEqual(state.workspace.activeEnvironmentID, id)
         XCTAssertEqual(state.takeEnvironmentsFocusID(), id)
     }
+
+    // MARK: - Baloncukta düzenleme (2026-10-29)
+
+    /// Tanımlı environment değişkeninin baloncuğu: düzenle kaydeder, değer
+    /// açık istekte hemen çözülür ve diske yazılır. Aynı adın başka
+    /// environment'taki değeri değişmez.
+    func testEditingFromTheBubbleWritesTheActiveEnvironment() throws {
+        let active = environment("Dev", [KeyValueEntry(key: "host", value: "https://old.test")])
+        let other = environment("Prod", [KeyValueEntry(key: "host", value: "https://prod.test")])
+        state.workspace.activeEnvironmentID = active
+        let card = VariablePreviewCard(name: "host", appState: state) {}
+        let save = try XCTUnwrap(card.saveValue, "environment değişkeni düzenlenebilir")
+
+        XCTAssertNil(save("https://new.test"))
+
+        XCTAssertEqual(state.variablePreview(for: "host"), .environment(environmentName: "Dev", value: "https://new.test"))
+        XCTAssertEqual(state.workspace.environments.first { $0.id == other }?.variables.first?.value, "https://prod.test")
+        XCTAssertEqual(state.workspace.activeEnvironmentID, active)
+        let saved = try harness.savedWorkspace()
+        XCTAssertEqual(saved.environments.first { $0.id == active }?.variables.first?.value, "https://new.test")
+    }
+
+    /// Baloncuk açıkken environment silinirse: hata metni, hiçbir yere
+    /// yazılmaz, yeni environment oluşmaz.
+    func testEditingAfterTheEnvironmentIsDeletedWritesNothing() throws {
+        let id = environment("Dev", [KeyValueEntry(key: "host", value: "old")])
+        state.workspace.activeEnvironmentID = id
+        let card = VariablePreviewCard(name: "host", appState: state) {}
+        let save = try XCTUnwrap(card.saveValue)
+        state.deleteEnvironment(id)
+        let before = state.workspace.environments
+
+        XCTAssertEqual(save("new"), L10n.t("variable.edit.missing"))
+        XCTAssertEqual(state.workspace.environments, before)
+    }
+
+    /// Baloncuk açıkken etkin environment değişirse değer, açılırken
+    /// gösterilen environment'a yazılır.
+    func testEditingTargetsTheEnvironmentShownInTheBubble() throws {
+        let dev = environment("Dev", [KeyValueEntry(key: "host", value: "dev")])
+        let prod = environment("Prod", [KeyValueEntry(key: "host", value: "prod")])
+        state.workspace.activeEnvironmentID = dev
+        let save = try XCTUnwrap(VariablePreviewCard(name: "host", appState: state) {}.saveValue)
+        state.workspace.activeEnvironmentID = prod
+
+        XCTAssertNil(save("dev2"))
+
+        XCTAssertEqual(state.workspace.environments.first { $0.id == dev }?.variables.first?.value, "dev2")
+        XCTAssertEqual(state.workspace.environments.first { $0.id == prod }?.variables.first?.value, "prod")
+    }
+
+    /// "Environment'ta Aç": baloncuk kapanır, pencere değişkenin satırında açılır.
+    func testOpenInEnvironmentsGoesToTheRow() throws {
+        let id = environment("Dev", [KeyValueEntry(key: "host", value: "v")])
+        state.workspace.activeEnvironmentID = id
+        var closed = false
+        let card = VariablePreviewCard(name: "host", appState: state) { closed = true }
+        let request = state.environmentsRequest
+
+        try XCTUnwrap(card.openInEnvironments)()
+
+        XCTAssertTrue(closed)
+        XCTAssertEqual(state.environmentsRequest, request + 1)
+        XCTAssertEqual(state.takeVariableDefinitionRequest(), .init(key: "host", target: .environment(id)))
+    }
+
+    /// Token Factory değişkeni (environment'taki aynı adı ezse de) ve secret
+    /// baloncukta düzenlenmez; tanımsız değişkende yalnızca "ekle" var.
+    func testOnlyEnvironmentVariablesAreEditable() throws {
+        let id = environment("Dev", [KeyValueEntry(key: "token", value: "env-value")])
+        state.workspace.activeEnvironmentID = id
+        state.addTokenFactoryRequest()
+        XCTAssertEqual(state.variablePreview(for: "token"), .token(requestName: L10n.t("token.defaultName")))
+
+        let token = VariablePreviewCard(name: "token", appState: state) {}
+        XCTAssertNil(token.saveValue, "Token Factory değeri Token Factory'nin")
+
+        let secret = VariablePreviewCard(name: "secret:apiKey", appState: state) {}
+        XCTAssertNil(secret.saveValue)
+        XCTAssertNil(secret.openInEnvironments, "secret environment'a yazılmaz")
+
+        let undefined = VariablePreviewCard(name: "missing", appState: state) {}
+        XCTAssertNil(undefined.saveValue)
+        XCTAssertNotNil(undefined.openInEnvironments)
+        XCTAssertEqual(state.workspace.environments.first { $0.id == id }?.variables.map(\.value), ["env-value"])
+    }
 }

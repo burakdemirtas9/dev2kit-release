@@ -84,23 +84,12 @@ enum VariableHitTesting {
 }
 
 extension VariablePopoverPresenter {
-    /// Değişken baloncuğu: değer, kaynak, kopyala; tanımsızsa "Environment
-    /// değişkeni ekle" (pencere yalnızca o düğmeyle açılır). Alanlar ve gövde
-    /// aynı kartı gösterir.
+    /// Değişken baloncuğu: değer, kaynak, kopyala; environment değişkeninde
+    /// düzenle ve "Environment'ta Aç", tanımsızsa "Environment değişkeni ekle".
+    /// Alanlar ve gövde aynı kartı gösterir (`VariablePreviewCard(name:appState:close:)`).
     @MainActor
     func showVariable(_ name: String, appState: AppState, at rect: NSRect, in view: NSView) {
         let presenter = self
-        show(
-            VariablePreviewCard(
-                name: name,
-                preview: appState.variablePreview(for: name),
-                token: appState.cachedToken(forVariable: name),
-                onDefine: VariableDefinition.key(from: name) == nil ? nil : {
-                    presenter.close()
-                    appState.defineVariable(name)
-                }
-            ),
-            at: rect, in: view
-        )
+        show(VariablePreviewCard(name: name, appState: appState) { presenter.close() }, at: rect, in: view)
     }
 }

@@ -261,15 +261,7 @@ private struct VariableChip: View {
             .onTapGesture { showing = true }
             .help(defined ? L10n.t("variable.chip.help") : L10n.t("variable.chip.undefined"))
             .popover(isPresented: $showing, arrowEdge: .bottom) {
-                VariablePreviewCard(
-                    name: name,
-                    preview: appState.variablePreview(for: name),
-                    token: appState.cachedToken(forVariable: name),
-                    onDefine: VariableDefinition.key(from: name) == nil ? nil : {
-                        showing = false
-                        appState.defineVariable(name)
-                    }
-                )
+                VariablePreviewCard(name: name, appState: appState) { showing = false }
             }
     }
 }
@@ -279,10 +271,20 @@ struct VariablePreviewCard: View {
     let preview: TemplateVariables.Preview
     /// Token Factory değişkeninin bellekteki değeri (alınmadıysa `nil`).
     let token: TokenFactory.IssuedToken?
-    /// Tanımsızsa "Environment değişkeni ekle" (secret'larda yok).
-    var onDefine: (() -> Void)?
+    /// Environment'lar penceresi: tanımsızsa "Environment değişkeni ekle"
+    /// (taslakla), tanımlıysa "Environment'ta Aç" (satırında). Secret'larda yok.
+    var openInEnvironments: (() -> Void)?
+    /// Environment değişkeninin değerini yerinde kaydeder; hata metni döner.
+    /// Yalnızca environment değişkeninde (Token Factory ve secret'ta yok).
+    var saveValue: ((String) -> String?)?
 
     @State private var copied = false
+    @State private var editing = false
+    @State private var draft = ""
+    /// Kayıttan sonra gösterilen değer (`preview` açılıştaki anlık görüntü).
+    @State private var savedValue: String?
+    @State private var saveError: String?
+    @FocusState private var draftFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -290,11 +292,25 @@ struct VariablePreviewCard: View {
                 .font(.secondaryMono.weight(.semibold))
             switch preview {
             case .environment(let environmentName, let value):
-                valueRow(value)
-                source(L10n.t("variable.source.environment", environmentName.isEmpty ? L10n.t("common.unnamed") : environmentName))
+                let current = savedValue ?? value
+                if editing {
+                    editor(current)
+                } else {
+                    valueRow(current, editable: canEdit(current))
+                }
+                HStack(spacing: 12) {
+                    source(L10n.t("variable.source.environment", environmentName.isEmpty ? L10n.t("common.unnamed") : environmentName))
+                    if let openInEnvironments, !editing {
+                        Spacer(minLength: 0)
+                        Button(L10n.t("variable.openInEnvironments"), action: openInEnvironments)
+                            .buttonStyle(.link)
+                            .font(.secondaryText)
+                            .help(L10n.t("variable.openInEnvironments.help"))
+                    }
+                }
             case .token(let requestName):
                 if let token {
-                    valueRow(token.value)
+                    valueRow(token.value, editable: false)
                     source(token.needsRefresh() ? L10n.t("variable.source.tokenExpired", requestName) : L10n.t("variable.source.token", requestName))
                 } else {
                     Text(L10n.t("variable.token.notFetched"))
@@ -313,8 +329,8 @@ struct VariablePreviewCard: View {
                 missing(environmentName == nil
                         ? L10n.t("variable.noEnvironment")
                         : L10n.t("variable.undefined"))
-                if let onDefine {
-                    Button(L10n.t("variable.define"), action: onDefine)
+                if let openInEnvironments {
+                    Button(L10n.t("variable.define"), action: openInEnvironments)
                         .buttonStyle(PrimaryActionButtonStyle())
                         // Baloncuk anahtar pencere olunca ⏎ ile de çalışır.
                         .keyboardShortcut(.defaultAction)
@@ -326,9 +342,16 @@ struct VariablePreviewCard: View {
         .padding(12)
     }
 
-    /// Değer + kopyala (kullanıcı isteği, 2026-10-20).
-    private func valueRow(_ value: String) -> some View {
-        HStack(alignment: .top, spacing: 8) {
+    /// Çok satırlı değer tek satırlık alanda düzenlenmez (satır sonları
+    /// bozulmasın); onun için "Environment'ta Aç".
+    private func canEdit(_ value: String) -> Bool {
+        saveValue != nil && !value.contains(where: \.isNewline)
+    }
+
+    /// Değer + kopyala (kullanıcı isteği, 2026-10-20) + düzenle (2026-10-29).
+    private func valueRow(_ value: String, editable: Bool) -> some View {
+        // Simgeler değerin ilk satırıyla aynı hizada (çok satırlı değerde üstte).
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
             Text(value.isEmpty ? L10n.t("variable.emptyValue") : value)
                 .font(.system(.body, design: .monospaced))
                 .foregroundStyle(value.isEmpty ? .secondary : .primary)
@@ -344,11 +367,78 @@ struct VariablePreviewCard: View {
                 } label: {
                     Image(systemName: copied ? "checkmark" : "doc.on.doc")
                         .frame(width: 14)
+                        .iconHitTarget()
                 }
                 .buttonStyle(.borderless)
                 .help(copied ? L10n.t("common.copied") : L10n.t("variable.copyValue"))
+                .accessibilityLabel(L10n.t("variable.copyValue"))
+            }
+            if editable {
+                Button {
+                    startEditing(value)
+                } label: {
+                    Image(systemName: "pencil")
+                        .frame(width: 14)
+                        .iconHitTarget()
+                }
+                .buttonStyle(.borderless)
+                .help(L10n.t("variable.edit"))
+                .accessibilityLabel(L10n.t("variable.edit"))
             }
         }
+    }
+
+    /// Değer alanı: ⏎ kaydeder, Esc vazgeçer. Kaydet'e kadar hiçbir şey yazılmaz.
+    private func editor(_ current: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            TextField(L10n.t("environment.variable.value"), text: $draft)
+                .inputLimit(.secretValue)
+                .textFieldStyle(.input)
+                .font(.system(.body, design: .monospaced))
+                .frame(width: 360)
+                .focused($draftFocused)
+                .onSubmit { save(over: current) }
+            if let saveError {
+                Label(saveError, systemImage: MessageKind.error.symbol)
+                    .font(.secondaryText)
+                    .foregroundStyle(Theme.down)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: 360, alignment: .leading)
+            }
+            HStack {
+                Spacer()
+                Button(L10n.t("common.cancel")) {
+                    editing = false
+                    saveError = nil
+                }
+                .keyboardShortcut(.cancelAction)
+                Button(L10n.t("common.save")) { save(over: current) }
+                    .buttonStyle(PrimaryActionButtonStyle())
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(draft == current)
+            }
+        }
+    }
+
+    private func startEditing(_ value: String) {
+        draft = value
+        saveError = nil
+        editing = true
+        DispatchQueue.main.async { draftFocused = true }
+    }
+
+    private func save(over current: String) {
+        guard let saveValue, draft != current else {
+            editing = false
+            return
+        }
+        if let message = saveValue(draft) {
+            saveError = message
+            return
+        }
+        savedValue = draft
+        copied = false
+        editing = false
     }
 
     private var masked: some View {
@@ -368,6 +458,43 @@ struct VariablePreviewCard: View {
     }
 }
 
+extension VariablePreviewCard {
+    /// Alanlar, adres ve gövde aynı kartı aynı eylemlerle gösterir. `close`
+    /// baloncuğu kapatır (pencere açılmadan önce).
+    ///
+    /// Düzenleme yalnızca environment değişkeninde: Token Factory değeri
+    /// Token Factory'nin, secret değeri Secrets ekranının işi. Değer,
+    /// baloncuk açılırken etkin olan environment'a yazılır.
+    @MainActor
+    init(name: String, appState: AppState, close: @escaping () -> Void) {
+        let preview = appState.variablePreview(for: name)
+        let key = VariableDefinition.key(from: name)
+        var saveValue: ((String) -> String?)?
+        if case .environment = preview, let key, let environmentID = appState.activeEnvironment?.id {
+            saveValue = { value in
+                do {
+                    try appState.updateVariable(key: key, value: value, environmentID: environmentID)
+                    return nil
+                } catch VariableDefinition.SaveError.missing {
+                    return L10n.t("variable.edit.missing")
+                } catch {
+                    return error.localizedDescription
+                }
+            }
+        }
+        self.init(
+            name: name,
+            preview: preview,
+            token: appState.cachedToken(forVariable: name),
+            openInEnvironments: key == nil ? nil : {
+                close()
+                appState.defineVariable(name)
+            },
+            saveValue: saveValue
+        )
+    }
+}
+
 /// AppKit metin görünümündeki bir aralığa SwiftUI baloncuğu bağlar (adres
 /// düzenleyicisinde değişkene tıklama). Baloncuk açıkken referansı tutar.
 final class VariablePopoverPresenter {
@@ -380,7 +507,10 @@ final class VariablePopoverPresenter {
         popover?.close()
         let popover = NSPopover()
         popover.behavior = .transient
-        popover.contentViewController = NSHostingController(rootView: content)
+        let host = NSHostingController(rootView: content)
+        // Baloncuk içerikle büyüyüp küçülsün (değer düzenleme alanı açılınca).
+        host.sizingOptions = .preferredContentSize
+        popover.contentViewController = host
         popover.show(relativeTo: rect, of: view, preferredEdge: .maxY)
         popover.contentViewController?.view.window?.makeKey()
         self.popover = popover

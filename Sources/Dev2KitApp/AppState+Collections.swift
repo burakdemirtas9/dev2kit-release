@@ -75,9 +75,10 @@ extension AppState {
         let target: VariableDefinition.Target
     }
 
-    /// Alandaki tanımsız `{{ad}}`e tıklanınca: anahtar çıkarılır, hedef
-    /// environment belirlenir ve Environment'lar penceresi açılır. Burada
-    /// hiçbir şey yazılmaz; yeni değişken kullanıcı kaydedince eklenir.
+    /// Alandaki `{{ad}}`in baloncuğundan Environment'lar penceresi: anahtar
+    /// çıkarılır, hedef environment belirlenir. Değişken varsa pencere
+    /// satırında açılır, yoksa taslakla. Burada hiçbir şey yazılmaz; yeni
+    /// değişken kullanıcı kaydedince eklenir.
     func defineVariable(_ name: String) {
         guard let key = VariableDefinition.key(from: name) else { return }
         variableDefinitionRequest = VariableDefinitionRequest(
@@ -119,6 +120,17 @@ extension AppState {
         }
         persist()
         return id
+    }
+
+    /// Baloncukta değer düzenleme: değişkenin çözüldüğü satıra yazar
+    /// (`VariableDefinition.update`). `environmentID` baloncuk açılırken
+    /// etkin olan environment; arada silindiyse `missing`, hiçbir şey yazılmaz.
+    func updateVariable(key: String, value: String, environmentID: UUID) throws {
+        guard let index = workspace.environments.firstIndex(id: environmentID) else {
+            throw VariableDefinition.SaveError.missing
+        }
+        try VariableDefinition.update(key: key, value: value, in: &workspace.environments[index])
+        persist()
     }
 
     func environmentBinding(_ id: UUID) -> Binding<EnvironmentModel>? {

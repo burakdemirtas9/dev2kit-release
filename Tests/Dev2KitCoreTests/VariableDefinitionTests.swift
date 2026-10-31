@@ -74,4 +74,46 @@ final class VariableDefinitionTests: XCTestCase {
             XCTAssertEqual($0 as? VariableDefinition.SaveError, .emptyKey)
         }
     }
+
+    // MARK: - Baloncukta düzenleme (2026-10-29)
+
+    /// Değer, çözümün kullandığı satıra yazılır (son açık satır); kapalı ve
+    /// öteki satırlar değişmez, gönderim yeni değeri görür.
+    func testUpdateWritesTheRowThatResolves() throws {
+        let first = KeyValueEntry(key: "host", value: "a")
+        let used = KeyValueEntry(key: "host", value: "b")
+        let off = KeyValueEntry(key: "host", value: "c", enabled: false)
+        let other = KeyValueEntry(key: "other", value: "x")
+        var env = EnvironmentModel(name: "Dev", variables: [first, used, off, other])
+
+        try VariableDefinition.update(key: "host", value: "https://new.test", in: &env)
+
+        XCTAssertEqual(env.variables.map(\.value), ["a", "https://new.test", "c", "x"])
+        XCTAssertEqual(env.variables.map(\.id), [first.id, used.id, off.id, other.id], "satır eklenmez, sıra aynı")
+        XCTAssertEqual(TemplateVariables.preview(for: "host", environment: env, tokenVariables: [], secretNames: []),
+                       .environment(environmentName: "Dev", value: "https://new.test"))
+        XCTAssertEqual(try VariableResolver(environment: env, secretStore: InMemorySecretStore()).resolve("{{host}}/x"), "https://new.test/x")
+    }
+
+    func testUpdateKeepsValueAsTyped() throws {
+        var env = EnvironmentModel(variables: [KeyValueEntry(key: "name", value: "old")])
+        try VariableDefinition.update(key: "name", value: "", in: &env)
+        XCTAssertEqual(env.variables.first?.value, "", "boş değer de kaydedilir")
+        try VariableDefinition.update(key: "name", value: "  Ali \"Veli\" {{x}} ", in: &env)
+        XCTAssertEqual(env.variables.first?.value, "  Ali \"Veli\" {{x}} ", "kırpılmaz, kaçışlanmaz")
+    }
+
+    /// Açık satır yoksa (silinmiş ya da kapatılmış) yeni satır açılmaz,
+    /// kapalı satır da açılmaz.
+    func testUpdateRefusesMissingOrDisabledVariable() {
+        var env = EnvironmentModel(variables: [KeyValueEntry(key: "host", value: "old", enabled: false)])
+        let before = env
+        XCTAssertThrowsError(try VariableDefinition.update(key: "host", value: "new", in: &env)) {
+            XCTAssertEqual($0 as? VariableDefinition.SaveError, .missing)
+        }
+        XCTAssertThrowsError(try VariableDefinition.update(key: "absent", value: "new", in: &env)) {
+            XCTAssertEqual($0 as? VariableDefinition.SaveError, .missing)
+        }
+        XCTAssertEqual(env, before)
+    }
 }

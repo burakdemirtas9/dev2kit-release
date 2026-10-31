@@ -44,7 +44,9 @@ dev2kit iki moddan oluşur:
 - **Token Factory:** herhangi bir isteğin yanıtından token üretip
   `{{token}}` değişkeni olarak diğer isteklere bağlar; token yalnızca
   bellekte tutulur, süresi dolmadan yenilenir.
-- Environment'lar ve değişkenler, `{{` yazınca öneri.
+- Environment'lar ve değişkenler, `{{` yazınca öneri. Adres, header ya da
+  gövdedeki değişkene tıklayınca değeri görünür; environment değişkeni orada
+  düzenlenir ya da Environment'lar penceresinde açılır.
 - Koleksiyonlar, sekmeler, sürükle-sırala, arama (⌘F), "son gönderilenden
   farklı" işareti ve o hale dönüş, otomatik kayıt.
 - Yanıt: renklendirilmiş ve katlanabilir gövde, başlıklar, yönlendirme

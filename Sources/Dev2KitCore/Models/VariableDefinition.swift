@@ -63,6 +63,9 @@ public enum VariableDefinition {
         /// Taslak beklerken aynı adla satır eklenmiş: mevcut değerin üzerine
         /// sessizce yazılmaz.
         case duplicate
+        /// Düzenlenen değişkenin açık satırı artık yok (baloncuk açıkken
+        /// silindi ya da kapatıldı): yeni satır açılmaz.
+        case missing
     }
 
     /// Yeni değişkeni ekler (açık satır, environment'ın sonuna). Mevcut
@@ -72,5 +75,15 @@ public enum VariableDefinition {
         guard !key.isEmpty else { throw SaveError.emptyKey }
         guard !environment.variables.contains(where: { $0.key == key }) else { throw SaveError.duplicate }
         environment.variables.append(KeyValueEntry(key: key, value: value, enabled: true))
+    }
+
+    /// Kullanılan değeri değiştirir (baloncukta düzenleme, kullanıcı isteği
+    /// 2026-10-29). Çözümle aynı satır: SON açık satır. Kapalı satırlar ve
+    /// aynı adlı öteki satırlar değişmez; açık satır yoksa `missing`.
+    public static func update(key: String, value: String, in environment: inout EnvironmentModel) throws {
+        guard let index = environment.variables.lastIndex(where: { $0.enabled && $0.key == key }) else {
+            throw SaveError.missing
+        }
+        environment.variables[index].value = value
     }
 }
