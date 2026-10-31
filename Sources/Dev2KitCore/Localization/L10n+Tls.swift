@@ -68,6 +68,7 @@ extension L10nTable {
         "tls.host.placeholder": L10nEntry("api.firma.com", "api.company.com"),
         "tls.addCertificate": L10nEntry("Sertifika Ekle…", "Add Certificate…"),
         "tls.openFolder": L10nEntry("Dizini Aç", "Open Folder"),
+        "tls.openFolderFailed": L10nEntry("Dizin açılamadı: %1$@", "Couldn’t open the folder: %1$@"),
         "tls.cert.notCA": L10nEntry("CA değil", "Not a CA"),
         "tlsSuggestion.title": L10nEntry("Bu host'u “%1$@” profiline ekle?", "Add this host to the “%1$@” profile?"),
         "tlsSuggestion.message": L10nEntry("%1$@ için profil yok; “%2$@” %3$@ kalıbını içeriyor. Request kendiliğinden yeniden gönderilmez.", "There’s no profile for %1$@; “%2$@” contains the pattern %3$@. The request isn’t resent automatically."),

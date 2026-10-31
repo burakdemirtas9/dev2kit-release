@@ -520,8 +520,12 @@ private struct TrustStoreDetail: View {
                             hint: L10n.t("tls.dir.user.hint"))
                     Spacer()
                     Button {
-                        try? TrustStore.prepareUserDirectory()
-                        NSWorkspace.shared.open(TrustStore.userDirectory)
+                        // Dizin oluşturulamazsa sessiz kalma: Finder hiç açılmıyordu.
+                        do {
+                            NSWorkspace.shared.open(try TrustStore.prepareUserDirectory())
+                        } catch {
+                            notice = TrustStoreNotice(text: L10n.t("tls.openFolderFailed", error.localizedDescription), isError: true)
+                        }
                     } label: {
                         Label(L10n.t("tls.openFolder"), systemImage: "folder")
                     }
