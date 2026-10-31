@@ -29,6 +29,11 @@ struct TemplateTextField: View {
     @State private var addressRejections = 0
     @State private var addressFocusRequest = 0
     @State private var popover = VariablePopoverPresenter()
+    /// Öneri listesinde klavyeyle gezinme: vurgu, Esc ile kapatma (kural Core'da).
+    @State private var navigator = SuggestionNavigator()
+
+    /// Öneri listesindeki klavye komutları (alan türünden bağımsız).
+    enum SuggestionKey { case up, down, accept, dismiss }
 
     /// Son `{{`'den sonra henüz `}}` ile kapanmamış kısım; öneri tetiği.
     private var pendingToken: String? {
@@ -38,11 +43,20 @@ struct TemplateTextField: View {
         return String(after)
     }
 
+    /// Odaktaki alanın öneri tetiği. Yalnızca odaktaki alanda öner: aksi
+    /// halde başka alana geçince yarım kalmış {{ yüzünden liste açık kalıyordu.
+    private var activeToken: String? {
+        isFocused || isEditingAddress ? pendingToken : nil
+    }
+
     private var suggestions: [String] {
-        // Yalnızca odaktaki alanda öner: aksi halde başka alana geçince
-        // yarım kalmış {{ yüzünden liste açık kalıyordu.
-        guard isFocused || isEditingAddress, let token = pendingToken else { return [] }
+        guard let token = activeToken else { return [] }
         return appState.templateSuggestions(matching: token)
+    }
+
+    /// Ekrandaki liste (Esc ile kapatıldıysa boş).
+    private var visibleSuggestions: [String] {
+        navigator.visible(for: activeToken)
     }
 
     var body: some View {
@@ -81,6 +95,23 @@ struct TemplateTextField: View {
         }
         .onAppear { if focusRequested { requestFocus() } }
         .onChange(of: focusRequested) { _, requested in if requested { requestFocus() } }
+        .onChange(of: suggestions, initial: true) { navigator.update(suggestions, token: activeToken) }
+        .onChange(of: activeToken) { navigator.update(suggestions, token: activeToken) }
+    }
+
+    /// ↑/↓ vurguyu taşır, ⏎/⇥ vurgulananı tamamlar, Esc listeyi kapatır.
+    /// Liste açık değilse `false`: tuş her zamanki işini yapar (ör. adres
+    /// alanında ⏎ gönderir).
+    private func handleSuggestionKey(_ key: SuggestionKey) -> Bool {
+        guard !visibleSuggestions.isEmpty else { return false }
+        switch key {
+        case .up: navigator.move(-1)
+        case .down: navigator.move(1)
+        case .accept:
+            if let suggestion = navigator.selected { complete(with: suggestion) }
+        case .dismiss: navigator.dismiss(token: activeToken)
+        }
+        return true
     }
 
     /// Alanın kendisi (vurgu katmanıyla); kapsül ya da tek başına.
@@ -92,6 +123,16 @@ struct TemplateTextField: View {
             .foregroundStyle(showsHighlight ? AnyShapeStyle(.clear) : AnyShapeStyle(.primary))
             .autocorrectionDisabled()
             .focused($isFocused)
+            .onKeyPress(keys: [.upArrow, .downArrow, .return, .tab, .escape], phases: [.down, .repeat]) { press in
+                let key: SuggestionKey
+                switch press.key {
+                case .upArrow: key = .up
+                case .downArrow: key = .down
+                case .escape: key = .dismiss
+                default: key = .accept
+                }
+                return handleSuggestionKey(key) ? .handled : .ignored
+            }
             .onSubmit { onSubmit?() }
             .inputLimit(limit)
             .overlay(alignment: .leading) {
@@ -118,7 +159,8 @@ struct TemplateTextField: View {
             },
             onLimitRejected: { addressRejections += 1 },
             onVariableClick: { name, rect, view in openVariable(name, at: rect, in: view) },
-            focusRequest: addressFocusRequest
+            focusRequest: addressFocusRequest,
+            onSuggestionKey: { handleSuggestionKey($0) }
         )
         .overlay(alignment: .topLeading) {
             if text.isEmpty {
@@ -140,9 +182,11 @@ struct TemplateTextField: View {
 
     @ViewBuilder
     private var suggestionList: some View {
-        if !suggestions.isEmpty {
+        let visible = visibleSuggestions
+        if !visible.isEmpty {
             VStack(alignment: .leading, spacing: 0) {
-                ForEach(suggestions, id: \.self) { suggestion in
+                ForEach(Array(visible.enumerated()), id: \.element) { index, suggestion in
+                    let isHighlighted = index == navigator.index
                     Button {
                         complete(with: suggestion)
                     } label: {
@@ -156,9 +200,13 @@ struct TemplateTextField: View {
                         .padding(.vertical, 4)
                         .padding(.horizontal, 8)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        // Klavyeyle seçilecek satır (TASARIM: seçili satır 0.25).
+                        .background(isHighlighted ? Theme.purple.opacity(0.25) : Color.clear)
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .onHover { if $0 { navigator.highlight(index) } }
+                    .accessibilityAddTraits(isHighlighted ? .isSelected : [])
                 }
             }
             .background(Theme.editorBackground)

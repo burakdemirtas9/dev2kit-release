@@ -31,6 +31,9 @@ struct URLEditor: NSViewRepresentable {
     let onVariableClick: (String, NSRect, NSView) -> Void
     /// Arttıkça alan odak alır ve imleç sona gider (öneri tamamlanınca).
     var focusRequest = 0
+    /// `{{` önerileri açıkken ↑/↓/⏎/⇥/Esc önce listeye gider; liste kapalıysa
+    /// `false` döner ve tuş her zamanki işini yapar (⏎ gönderir).
+    var onSuggestionKey: ((TemplateTextField.SuggestionKey) -> Bool)?
 
     /// Tek satır yüksekliği: kapsülle aynı.
     static let lineHeight: CGFloat = 28
@@ -244,6 +247,15 @@ struct URLEditor: NSViewRepresentable {
         }
 
         func textView(_ textView: NSTextView, doCommandBy selector: Selector) -> Bool {
+            // Öneri listesi açıksa gezinme tuşları önce ona (2026-11-01).
+            let suggestionKey: TemplateTextField.SuggestionKey? = switch selector {
+            case #selector(NSResponder.moveUp(_:)): .up
+            case #selector(NSResponder.moveDown(_:)): .down
+            case #selector(NSResponder.insertNewline(_:)), #selector(NSResponder.insertTab(_:)): .accept
+            case #selector(NSResponder.cancelOperation(_:)): .dismiss
+            default: nil
+            }
+            if let suggestionKey, parent.onSuggestionKey?(suggestionKey) == true { return true }
             switch selector {
             case #selector(NSResponder.insertNewlineIgnoringFieldEditor(_:)):
                 // ⌥⏎: imleç bir değişkendeyse baloncuğu açar (klavye yolu);

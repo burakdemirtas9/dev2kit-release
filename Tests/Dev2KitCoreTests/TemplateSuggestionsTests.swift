@@ -51,4 +51,50 @@ final class TemplateSuggestionsTests: XCTestCase {
             ["secret:a"]
         )
     }
+
+    // MARK: - Klavyeyle gezinme (2026-11-01)
+
+    func testFirstSuggestionIsHighlightedAndArrowsWrap() {
+        var nav = SuggestionNavigator()
+        nav.update(["a", "b", "c"], token: "")
+        XCTAssertEqual(nav.selected, "a", "ilk öneri baştan vurgulu: ⏎ hemen tamamlar")
+        nav.move(1)
+        XCTAssertEqual(nav.selected, "b")
+        nav.move(1); nav.move(1)
+        XCTAssertEqual(nav.selected, "a", "aşağıda sona varınca başa sarar")
+        nav.move(-1)
+        XCTAssertEqual(nav.selected, "c", "yukarıda baştan sona sarar")
+    }
+
+    func testTypingResetsHighlightOnlyWhenTheListChanges() {
+        var nav = SuggestionNavigator()
+        nav.update(["base", "baseUrl", "token"], token: "")
+        nav.move(1)
+        nav.update(["base", "baseUrl", "token"], token: "")
+        XCTAssertEqual(nav.selected, "baseUrl", "aynı liste: vurgu korunur")
+        nav.update(["base", "baseUrl"], token: "ba")
+        XCTAssertEqual(nav.selected, "base", "liste değişti: başa döner")
+    }
+
+    func testEscapeHidesUntilTheUserTypesMore() {
+        var nav = SuggestionNavigator()
+        nav.update(["base", "baseUrl"], token: "ba")
+        XCTAssertEqual(nav.visible(for: "ba"), ["base", "baseUrl"])
+        nav.dismiss(token: "ba")
+        XCTAssertEqual(nav.visible(for: "ba"), [], "Esc: kapalı")
+        nav.update(["baseUrl"], token: "bas")
+        XCTAssertEqual(nav.visible(for: "bas"), ["baseUrl"], "yazmaya devam edince yeniden açılır")
+        XCTAssertEqual(nav.visible(for: nil), [], "{{ yoksa liste yok")
+    }
+
+    func testHoverMovesHighlightAndEmptyListIsSafe() {
+        var nav = SuggestionNavigator()
+        nav.move(1)
+        XCTAssertNil(nav.selected)
+        nav.update(["a", "b"], token: "")
+        nav.highlight(1)
+        XCTAssertEqual(nav.selected, "b")
+        nav.highlight(5)
+        XCTAssertEqual(nav.selected, "b", "geçersiz satır yok sayılır")
+    }
 }

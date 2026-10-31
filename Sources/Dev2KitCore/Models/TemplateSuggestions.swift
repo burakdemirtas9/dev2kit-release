@@ -26,3 +26,51 @@ public enum TemplateSuggestions {
         return Array(filtered.prefix(limit))
     }
 }
+
+/// Öneri listesinde klavyeyle gezinme (kullanıcı isteği, 2026-11-01):
+/// ↑/↓ vurguyu taşır (uçlarda başa sarar), ⏎/⇥ vurgulananı seçer, Esc o
+/// yazım için listeyi kapatır.
+///
+/// Kurallar: ilk öneri baştan vurgulu (VS Code gibi, ⏎ hemen tamamlar);
+/// liste değişince (yazdıkça) vurgu başa döner; Esc ile kapatılan liste aynı
+/// `{{…` için kapalı kalır, yazmaya devam edince yeniden açılır.
+public struct SuggestionNavigator: Equatable, Sendable {
+    public private(set) var items: [String] = []
+    public private(set) var index = 0
+    /// Esc'e basıldığındaki yazım (`{{`'den sonrası); aynıyken liste kapalı.
+    private var dismissedToken: String?
+
+    public init() {}
+
+    /// Görünen liste: yazım kapatılmışsa boş.
+    public func visible(for token: String?) -> [String] {
+        guard let token, token != dismissedToken else { return [] }
+        return items
+    }
+
+    public var selected: String? {
+        items.indices.contains(index) ? items[index] : nil
+    }
+
+    /// Yeni öneriler (yazdıkça). Liste aynıysa vurgu korunur.
+    public mutating func update(_ newItems: [String], token: String?) {
+        if token != dismissedToken { dismissedToken = nil }
+        guard newItems != items else { return }
+        items = newItems
+        index = 0
+    }
+
+    public mutating func move(_ delta: Int) {
+        guard !items.isEmpty else { return }
+        index = ((index + delta) % items.count + items.count) % items.count
+    }
+
+    /// Fareyle üzerine gelinen satır.
+    public mutating func highlight(_ newIndex: Int) {
+        if items.indices.contains(newIndex) { index = newIndex }
+    }
+
+    public mutating func dismiss(token: String?) {
+        dismissedToken = token
+    }
+}
