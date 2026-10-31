@@ -34,6 +34,9 @@ public enum WorkbenchLimits {
     public static let maxEditorLineBytes = 1_000_000
     /// Diff satır görünümünde bir satırın gösterilen kısmı.
     public static let maxDisplayedLineCharacters = 10_000
+    /// Aynı anda açık JSON sekmesi (kullanıcı kararı, 2026-10-31). Her sekme
+    /// 4 MB'a kadar girdi tutabildiği için bellek de sınırlı kalır.
+    public static let maxTabs = 6
 
     /// Değişiklik sonrası metnin UTF-8 boyutu.
     public static func resultingBytes(of current: NSString, replacing range: NSRange, with replacement: String) -> Int {

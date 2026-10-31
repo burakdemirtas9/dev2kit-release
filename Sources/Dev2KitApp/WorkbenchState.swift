@@ -190,9 +190,15 @@ final class WorkbenchState {
         documentChanged()
     }
 
+    /// Yeni sekme açılabilir mi: sekmeli araç ve sınırın altında
+    /// (`WorkbenchLimits.maxTabs`). "+" sınırda devre dışı.
+    var canAddDocument: Bool {
+        tool.supportsTabs && documents.count < WorkbenchLimits.maxTabs
+    }
+
     func newDocument() {
-        // Sekmeler yalnızca JSON'da (kullanıcı kararı, 2026-10-19).
-        guard tool.supportsTabs else { return }
+        // Sekmeler yalnızca JSON'da (kullanıcı kararı, 2026-10-19), en çok 6.
+        guard canAddDocument else { return }
         let doc = WorkbenchDocument(number: takeNumber(), options: tool.defaultOptions)
         documentsByTool[tool.id, default: []].append(doc)
         selectedDocumentByTool[tool.id] = doc.id

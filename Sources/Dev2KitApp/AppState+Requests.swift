@@ -55,7 +55,7 @@ extension AppState {
                 guard let current = self.locateRequest(id) else { return }
                 self.workspace.collections[current.collection].requests[current.request] = newValue
                 // Düzenlenen istek artık "bakılan" değil "kullanılan" istektir.
-                if self.previewTabID == id { self.pinTab(id) }
+                if self.previewTabID == id { self.keepTab(id) }
                 // Metin düzenlemesi: her tuşta diske yazma, geciktir.
                 self.persistSoon()
             }
@@ -104,7 +104,7 @@ extension AppState {
             return true
         }
         guard reverted == true else { return }
-        pinTab(id)
+        keepTab(id)
         persist()
     }
 

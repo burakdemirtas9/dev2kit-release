@@ -116,4 +116,13 @@ final class VariableDefinitionTests: XCTestCase {
         }
         XCTAssertEqual(env, before)
     }
+
+    // MARK: - Yeni environment adı (2026-10-31)
+
+    func testNewEnvironmentNameDoesNotRepeat() {
+        XCTAssertEqual(EnvironmentModel.newName(base: "Yeni", existing: []), "Yeni")
+        XCTAssertEqual(EnvironmentModel.newName(base: "Yeni", existing: ["Dev"]), "Yeni")
+        XCTAssertEqual(EnvironmentModel.newName(base: "Yeni", existing: ["Yeni"]), "Yeni 2")
+        XCTAssertEqual(EnvironmentModel.newName(base: "Yeni", existing: ["Yeni", "Yeni 2", "Yeni 4"]), "Yeni 3")
+    }
 }

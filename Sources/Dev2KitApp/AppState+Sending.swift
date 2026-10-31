@@ -35,7 +35,7 @@ extension AppState {
         }
         flushPendingWrites()
         // Gönderilen istek kullanılan istektir: önizleme sekmesi kalıcı olur.
-        pinTab(request.id)
+        keepTab(request.id)
         let id = request.id
         // Aynı isteğin önceki gönderimi hâlâ uçuyorsa iptal et.
         inFlight[id]?.cancel()

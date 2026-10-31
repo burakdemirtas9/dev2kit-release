@@ -64,6 +64,7 @@ extension L10nTable {
         "wb.structureOK": L10nEntry("Yapı tamam", "Structure OK"),
         "wb.structureOK.help": L10nEntry("Parantezler, tırnaklar ve yorumlar dengeli; tam sözdizimi denetlenmedi.", "Brackets, quotes and comments are balanced; the full syntax was not checked."),
         "wb.newTab": L10nEntry("Yeni sekme", "New tab"),
+        "wb.newTab.limit": L10nEntry("En fazla %1$@ sekme açılabilir; yenisi için birini kapat.", "Up to %1$@ tabs can be open; close one to open another."),
         "wb.closeTab.title": L10nEntry("\"%1$@\" kapatılsın mı?", "Close \"%1$@\"?"),
         "wb.closeTab.confirm": L10nEntry("Kapat ve Sil", "Close and Discard"),
         "wb.closeTab.message": L10nEntry("İçeriği hiçbir yere kaydedilmez ve kaybolur.", "Its content isn’t saved anywhere and will be lost."),

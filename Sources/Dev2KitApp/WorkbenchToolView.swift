@@ -21,7 +21,8 @@ struct WorkbenchToolView: View {
                     selectedID: workbench.document.id,
                     onSelect: { workbench.select(documentID: $0) },
                     onClose: { workbench.closeDocument($0) },
-                    onNew: { workbench.newDocument() }
+                    onNew: { workbench.newDocument() },
+                    canAddNew: workbench.canAddDocument
                 )
                 Divider()
             }
@@ -572,6 +573,8 @@ struct DocumentTabBar: View {
     let onSelect: (UUID) -> Void
     let onClose: (UUID) -> Void
     let onNew: () -> Void
+    /// Sınırda (`WorkbenchLimits.maxTabs`) "+" devre dışı; ipucu nedenini söyler.
+    var canAddNew = true
     @State private var pendingClose: Item?
 
     var body: some View {
@@ -594,7 +597,8 @@ struct DocumentTabBar: View {
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
             .padding(.horizontal, 8)
-            .help(L10n.t("wb.newTab"))
+            .disabled(!canAddNew)
+            .help(canAddNew ? L10n.t("wb.newTab") : L10n.t("wb.newTab.limit", L10n.number(WorkbenchLimits.maxTabs)))
             .accessibilityLabel(L10n.t("wb.newTab"))
         }
         .frame(height: 30)

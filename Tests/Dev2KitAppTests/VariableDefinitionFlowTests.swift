@@ -127,6 +127,26 @@ final class VariableDefinitionFlowTests: XCTestCase {
         XCTAssertEqual(state.takeEnvironmentsFocusID(), id)
     }
 
+    /// Environment'lar varken de "Yeni Environment…" (2026-10-31): yenisi
+    /// oluşur, adı tekrar etmez, etkin olan değişmez, pencere onu seçili ve
+    /// adı düzenlenmeye hazır açar.
+    func testNewEnvironmentFromThePickerWhenOthersExist() {
+        let first = state.addEnvironment()
+        let id = state.addEnvironment()
+        state.showEnvironments(focus: id, editName: true)
+
+        XCTAssertEqual(state.workspace.activeEnvironmentID, first, "etkin environment değişmez")
+        XCTAssertEqual(state.workspace.environments.map(\.name),
+                       [L10n.t("environment.defaultName"), L10n.t("environment.defaultName") + " 2"])
+        XCTAssertEqual(state.takeEnvironmentsFocusID(), id)
+        XCTAssertEqual(state.takeEnvironmentsNameEditID(), id)
+        XCTAssertNil(state.takeEnvironmentsNameEditID(), "bir kez okunur")
+
+        // Düzenle düğmesi adı düzenletmez.
+        state.showEnvironments(focus: first)
+        XCTAssertNil(state.takeEnvironmentsNameEditID())
+    }
+
     // MARK: - Baloncukta düzenleme (2026-10-29)
 
     /// Tanımlı environment değişkeninin baloncuğu: düzenle kaydeder, değer

@@ -15,7 +15,7 @@ final class RequestTabsTests: XCTestCase {
     func testUsedTabBecomesPermanentAndNextOpensBesideIt() {
         var tabs = RequestTabs()
         tabs.open(a)
-        tabs.pin(a)
+        tabs.keep(a)
         tabs.open(b)
         tabs.open(c)
         XCTAssertEqual(tabs.tabs, [a, c])
@@ -84,5 +84,102 @@ final class RequestTabsTests: XCTestCase {
         var tabs = RequestTabs(tabs: [a])
         tabs.open(b)
         XCTAssertEqual(tabs.permanent, [a])
+    }
+
+    // MARK: - Sabitleme (2026-10-31, Chrome / VS Code kuralları)
+
+    func testPinnedTabsComeFirstInPinOrder() {
+        var tabs = RequestTabs(tabs: [a, b, c, d])
+        tabs.pin(c)
+        tabs.pin(a)
+        XCTAssertEqual(tabs.tabs, [c, a, b, d], "sabitler başta, sabitlenme sırasıyla")
+        XCTAssertEqual(tabs.pinned, [c, a])
+        tabs.pin(c)
+        XCTAssertEqual(tabs.tabs, [c, a, b, d], "yeniden sabitlemek sırayı değiştirmez")
+    }
+
+    func testUnpinnedTabMovesToTheStartOfUnpinned() {
+        var tabs = RequestTabs(tabs: [a, b, c])
+        tabs.pin(b)
+        tabs.pin(c)            // [b, c, a]
+        tabs.unpin(b)
+        XCTAssertEqual(tabs.tabs, [c, b, a])
+        XCTAssertEqual(tabs.pinned, [c])
+        tabs.unpin(d)
+        XCTAssertEqual(tabs.tabs, [c, b, a], "sabit olmayan: değişmez")
+    }
+
+    func testPinningThePreviewKeepsIt() {
+        var tabs = RequestTabs(tabs: [a])
+        tabs.open(b)
+        tabs.pin(b)
+        XCTAssertNil(tabs.preview, "sabitlenen önizleme kalıcı olur")
+        XCTAssertEqual(tabs.tabs, [b, a])
+        XCTAssertEqual(tabs.permanent, [b, a])
+    }
+
+    func testPinningAClosedTabOpensIt() {
+        var tabs = RequestTabs(tabs: [a])
+        tabs.pin(b)
+        XCTAssertEqual(tabs.tabs, [b, a])
+        XCTAssertEqual(tabs.pinned, [b])
+    }
+
+    func testPreviewNeverLandsAmongPinned() {
+        var tabs = RequestTabs(tabs: [a, b])
+        tabs.pin(a)
+        tabs.open(c)           // önizleme: [a | b, c*]
+        tabs.open(d)           // önizlemenin yerine
+        XCTAssertEqual(tabs.tabs, [a, b, d])
+        XCTAssertEqual(tabs.preview, d)
+        XCTAssertFalse(tabs.isPinned(d))
+    }
+
+    func testMoveStaysWithinItsGroup() {
+        var tabs = RequestTabs(tabs: [a, b, c, d])
+        tabs.pin(a)
+        tabs.pin(b)            // [a, b | c, d]
+        tabs.move(c, before: a)
+        XCTAssertEqual(tabs.tabs, [a, b, c, d], "sabit olmayan sabitlerin arasına giremez")
+        tabs.move(a, before: d)
+        XCTAssertEqual(tabs.tabs, [a, b, c, d], "sabit, sabit olmayanların arasına giremez")
+        tabs.move(b, before: a)
+        XCTAssertEqual(tabs.tabs, [b, a, c, d])
+        XCTAssertEqual(tabs.pinned, [b, a], "sabit sırası da değişir")
+        tabs.move(d, before: c)
+        XCTAssertEqual(tabs.tabs, [b, a, d, c])
+    }
+
+    func testCloseOthersAndToTheRightSparePinned() {
+        var tabs = RequestTabs(tabs: [a, b, c, d])
+        tabs.pin(a)            // [a | b, c, d]
+        XCTAssertEqual(tabs.closeToRight(of: a, selected: d), a)
+        XCTAssertEqual(tabs.tabs, [a], "sağdakiler kapanır")
+
+        var others = RequestTabs(tabs: [a, b, c, d])
+        others.pin(d)          // [d | a, b, c]
+        XCTAssertEqual(others.closeOthers(keeping: b), b)
+        XCTAssertEqual(others.tabs, [d, b], "sabit kalır")
+    }
+
+    func testClosingAPinnedTabUnpinsIt() {
+        var tabs = RequestTabs(tabs: [a, b])
+        tabs.pin(b)            // [b | a]
+        XCTAssertEqual(tabs.close(b, selected: b), a, "⌘W sabiti de kapatır")
+        XCTAssertEqual(tabs.pinned, [])
+        tabs.keep(b)
+        XCTAssertFalse(tabs.isPinned(b), "yeniden açılınca sabit değildir")
+
+        var pruned = RequestTabs(tabs: [a, b, c])
+        pruned.pin(c)
+        _ = pruned.prune(keeping: [a, b], selected: a)
+        XCTAssertEqual(pruned.pinned, [], "silinen istek sabitlerden düşer")
+    }
+
+    func testRestoredStateIsNormalized() {
+        let tabs = RequestTabs(tabs: [a, b, c, b], preview: c, pinned: [c, d, c])
+        XCTAssertEqual(tabs.tabs, [c, a, b], "tekrar atılır, sabit başa, açık olmayan sabit düşer")
+        XCTAssertEqual(tabs.pinned, [c])
+        XCTAssertNil(tabs.preview, "sabit önizleme olamaz")
     }
 }

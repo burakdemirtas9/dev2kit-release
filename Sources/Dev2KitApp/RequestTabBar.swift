@@ -6,11 +6,38 @@ import Dev2KitCore
 /// Önizleme sekmesi italik görünür ve bir sonraki açılan istekle yer
 /// değiştirir; istek kullanılınca (düzenleme, gönderme, çift tıklama)
 /// kalıcı olur. Kalıcı sekmeler sürüklenerek sıralanır ve kapatılır.
+///
+/// Sabit sekmeler başta, sabitlenme sırasıyla (kural `RequestTabs`'ta);
+/// çarpının yerinde iğne durur. Sağdaki + koleksiyonsuz yeni istek açar
+/// (⌘T, boş ekrandaki bağlantıyla aynı).
 struct RequestTabBar: View {
     @Environment(AppState.self) private var appState
     @State private var dragging: UUID?
 
     var body: some View {
+        HStack(spacing: 0) {
+            tabs
+            Button {
+                appState.createUngroupedRequest()
+            } label: {
+                Image(systemName: "plus").iconHitTarget()
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 8)
+            .help(L10n.t("tabs.new.help"))
+            .accessibilityLabel(L10n.t("menu.newUngroupedRequest"))
+        }
+        .frame(height: 32)
+        .background(.bar)
+        // Sekmelerin dışına bırakılırsa sürükleme durumu temizlenir.
+        .onDrop(of: [.text], isTargeted: nil) { _ in
+            dragging = nil
+            return true
+        }
+    }
+
+    private var tabs: some View {
         ScrollViewReader { proxy in
             // Kirli istekler sekme başına değil, render başına tek kez.
             let dirty = appState.dirtyRequestIDs
@@ -22,6 +49,7 @@ struct RequestTabBar: View {
                                 request: request,
                                 isSelected: appState.selectedRequestID == id,
                                 isPreview: appState.previewTabID == id,
+                                isPinned: appState.isTabPinned(id),
                                 isDirty: dirty.contains(id)
                             )
                             .id(id)
@@ -42,13 +70,6 @@ struct RequestTabBar: View {
                 }
             }
         }
-        .frame(height: 32)
-        .background(.bar)
-        // Sekmelerin dışına bırakılırsa sürükleme durumu temizlenir.
-        .onDrop(of: [.text], isTargeted: nil) { _ in
-            dragging = nil
-            return true
-        }
     }
 }
 
@@ -57,6 +78,7 @@ private struct RequestTab: View {
     let request: RequestModel
     let isSelected: Bool
     let isPreview: Bool
+    let isPinned: Bool
     let isDirty: Bool
     @State private var hovering = false
     /// Çift tıklamayı kendimiz ölçüyoruz; bkz. `onTapGesture`.
@@ -71,28 +93,29 @@ private struct RequestTab: View {
                 .italic(isPreview)
                 .lineLimit(1)
                 .frame(maxWidth: 160, alignment: .leading)
-            ZStack {
-                // Kirli işaret ile kapat düğmesi aynı yeri paylaşır (Xcode/Safari gibi):
-                // üzerine gelince kapat düğmesine döner.
-                if isDirty && !hovering {
+            if isPinned {
+                // Sabit sekme (VS Code gibi): çarpının yerinde iğne; basınca
+                // sabitleme kalkar. Kapatma sağ tık menüsünden ya da ⌘W ile.
+                if isDirty {
                     Image(systemName: "circle.fill")
                         .font(.system(size: 6))
                         .foregroundStyle(Theme.warning)
-                } else if hovering || isSelected {
-                    Button {
-                        appState.closeTab(request.id)
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 14, height: 14)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .help(L10n.t("tabs.close.help"))
                 }
+                Button {
+                    appState.unpinTab(request.id)
+                } label: {
+                    Image(systemName: "pin.fill")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 14, height: 14)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(L10n.t("tabs.unpin"))
+                .accessibilityLabel(L10n.t("tabs.unpin"))
+            } else {
+                closeSlot
             }
-            .frame(width: 14)
         }
         .font(.callout)
         .padding(.horizontal, 10)
@@ -112,23 +135,54 @@ private struct RequestTab: View {
             let isDouble = lastTapAt.map { now.timeIntervalSince($0) <= NSEvent.doubleClickInterval } ?? false
             lastTapAt = now
             if isDouble {
-                appState.pinTab(request.id)
+                appState.keepTab(request.id)
             } else {
                 // Açık örneğin sekmesine basmak istek editörüne döner.
                 appState.openExample = nil
                 appState.selectedRequestID = request.id
             }
         }
-        .help(isPreview ? L10n.t("tabs.preview.help", request.name) : request.name)
+        .help(isPreview ? L10n.t("tabs.preview.help", request.name)
+              : isPinned ? L10n.t("tabs.pinned.help", request.name) : request.name)
         .contextMenu {
-            if isPreview {
+            if isPinned {
+                Button(L10n.t("tabs.unpin")) { appState.unpinTab(request.id) }
+            } else {
                 Button(L10n.t("tabs.pin")) { appState.pinTab(request.id) }
-                Divider()
             }
+            if isPreview {
+                Button(L10n.t("tabs.keep")) { appState.keepTab(request.id) }
+            }
+            Divider()
             Button(L10n.t("common.close")) { appState.closeTab(request.id) }
             Button(L10n.t("tabs.closeOthers")) { appState.closeOtherTabs(request.id) }
             Button(L10n.t("tabs.closeRight")) { appState.closeTabsToRight(of: request.id) }
         }
+    }
+
+    /// Kirli işaret ile kapat düğmesi aynı yeri paylaşır (Xcode/Safari gibi):
+    /// üzerine gelince kapat düğmesine döner.
+    private var closeSlot: some View {
+        ZStack {
+            if isDirty && !hovering {
+                Image(systemName: "circle.fill")
+                    .font(.system(size: 6))
+                    .foregroundStyle(Theme.warning)
+            } else if hovering || isSelected {
+                Button {
+                    appState.closeTab(request.id)
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 14, height: 14)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(L10n.t("tabs.close.help"))
+            }
+        }
+        .frame(width: 14)
     }
 }
 
@@ -152,7 +206,7 @@ private struct TabReorderDelegate: DropDelegate {
 
     func performDrop(info: DropInfo) -> Bool {
         // Sürüklenen önizleme sekmesi artık bilinçli yerleştirilmiş bir sekmedir.
-        if let dragging { appState.pinTab(dragging) }
+        if let dragging { appState.keepTab(dragging) }
         dragging = nil
         return true
     }

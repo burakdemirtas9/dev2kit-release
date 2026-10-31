@@ -49,8 +49,13 @@ extension AppState {
         persist()
     }
 
+    /// Yeni environment: adı tekrar etmez ("Yeni Environment 2"). Başka bir
+    /// etkin varsa etkin yapılmaz (seçicideki düzenle düğmesiyle tutarlı).
     func addEnvironment() -> UUID {
-        let environment = EnvironmentModel()
+        let environment = EnvironmentModel(name: EnvironmentModel.newName(
+            base: L10n.t("environment.defaultName"),
+            existing: workspace.environments.map(\.name)
+        ))
         workspace.environments.append(environment)
         if workspace.activeEnvironmentID == nil {
             workspace.activeEnvironmentID = environment.id

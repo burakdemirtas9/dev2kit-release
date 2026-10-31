@@ -47,6 +47,8 @@ dev2kit iki moddan oluşur:
 - Environment'lar ve değişkenler, `{{` yazınca öneri. Adres, header ya da
   gövdedeki değişkene tıklayınca değeri görünür; environment değişkeni orada
   düzenlenir ya da Environment'lar penceresinde açılır.
+- Sekme sabitleme (sabitler başta kalır), sekme çubuğundaki + ya da ⌘T ile
+  koleksiyonsuz yeni request; environment seçicisinden yeni environment.
 - Koleksiyonlar, sekmeler, sürükle-sırala, arama (⌘F), "son gönderilenden
   farklı" işareti ve o hale dönüş, otomatik kayıt.
 - Yanıt: renklendirilmiş ve katlanabilir gövde, başlıklar, yönlendirme

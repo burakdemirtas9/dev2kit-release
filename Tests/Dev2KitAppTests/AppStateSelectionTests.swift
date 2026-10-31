@@ -82,10 +82,10 @@ final class AppStateSelectionTests: XCTestCase {
         XCTAssertFalse(state.openTabs.contains(requests[1].id), "önceki önizleme kapanmalı")
     }
 
-    func testPinnedTabSurvivesNextSelection() {
+    func testKeptTabSurvivesNextSelection() {
         let requests = threeRequests()
         state.selectedRequestID = requests[1].id
-        state.pinTab(requests[1].id)
+        state.keepTab(requests[1].id)
 
         state.selectedRequestID = requests[2].id
 
@@ -94,7 +94,7 @@ final class AppStateSelectionTests: XCTestCase {
 
     func testClosingSelectedTabSelectsNeighbour() {
         let requests = threeRequests()
-        requests.forEach { state.pinTab($0.id) }
+        requests.forEach { state.keepTab($0.id) }
         state.selectedRequestID = requests[1].id
 
         state.closeTab(requests[1].id)
@@ -106,10 +106,61 @@ final class AppStateSelectionTests: XCTestCase {
 
     func testDeletingRequestRemovesItsTab() {
         let requests = threeRequests()
-        requests.forEach { state.pinTab($0.id) }
+        requests.forEach { state.keepTab($0.id) }
 
         state.deleteRequest(requests[0].id)
 
         XCTAssertFalse(state.openTabs.contains(requests[0].id))
+    }
+
+    // MARK: - Sabitleme (2026-10-31)
+
+    /// Sabitler başta ve sabitlenme sırasıyla; yeniden açılışta aynı sırayla gelir.
+    func testPinnedTabsComeFirstAndSurviveRelaunch() {
+        let requests = threeRequests()
+        requests.forEach { state.keepTab($0.id) }
+        state.pinTab(requests[2].id)
+        state.pinTab(requests[0].id)
+        XCTAssertEqual(state.openTabs, [requests[2].id, requests[0].id, requests[1].id])
+
+        state.waitForPendingWrites()
+        let reopened = AppState(store: harness.store, secretStore: FileSecretStore())
+        XCTAssertEqual(reopened.openTabs, [requests[2].id, requests[0].id, requests[1].id])
+        XCTAssertTrue(reopened.isTabPinned(requests[2].id))
+        XCTAssertTrue(reopened.isTabPinned(requests[0].id))
+        XCTAssertFalse(reopened.isTabPinned(requests[1].id))
+    }
+
+    func testDeletedPinnedRequestIsNotRestored() {
+        let requests = threeRequests()
+        requests.forEach { state.keepTab($0.id) }
+        state.pinTab(requests[1].id)
+        state.deleteRequest(requests[1].id)
+        XCTAssertFalse(state.isTabPinned(requests[1].id))
+
+        state.waitForPendingWrites()
+        let reopened = AppState(store: harness.store, secretStore: FileSecretStore())
+        XCTAssertFalse(reopened.openTabs.contains(requests[1].id))
+    }
+
+    func testMenuTogglesPinOfTheSelectedTab() {
+        let requests = threeRequests()
+        requests.forEach { state.keepTab($0.id) }
+        state.selectedRequestID = requests[1].id
+        state.toggleSelectedTabPin()
+        XCTAssertEqual(state.openTabs.first, requests[1].id)
+        state.toggleSelectedTabPin()
+        XCTAssertFalse(state.isTabPinned(requests[1].id))
+    }
+
+    /// "Diğerlerini Kapat" sabitleri korur; ⌘W sabiti de kapatır (kullanıcı kararı).
+    func testCloseOthersSparesPinnedButCloseTabClosesPinned() {
+        let requests = threeRequests()
+        requests.forEach { state.keepTab($0.id) }
+        state.pinTab(requests[0].id)
+        state.closeOtherTabs(requests[2].id)
+        XCTAssertEqual(state.openTabs, [requests[0].id, requests[2].id])
+        state.closeTab(requests[0].id)
+        XCTAssertEqual(state.openTabs, [requests[2].id])
     }
 }

@@ -99,6 +99,22 @@ final class WorkbenchStateTests: XCTestCase {
         XCTAssertEqual(state.documents.map(\.number), [1])
     }
 
+    /// En çok 6 JSON sekmesi (kullanıcı kararı, 2026-10-31); biri kapanınca yenisi açılır.
+    func testTabCountIsCappedAtSix() {
+        let state = WorkbenchState()
+        for _ in 0..<10 { state.newDocument() }
+        XCTAssertEqual(state.documents.count, WorkbenchLimits.maxTabs)
+        XCTAssertFalse(state.canAddDocument)
+        let selected = state.document.id
+        state.newDocument()
+        XCTAssertEqual(state.document.id, selected, "sınırda seçim değişmez")
+
+        state.closeDocument(state.documents[0].id)
+        XCTAssertTrue(state.canAddDocument)
+        state.newDocument()
+        XCTAssertEqual(state.documents.count, WorkbenchLimits.maxTabs)
+    }
+
     func testEditingATreeValueRewritesTheInput() async {
         let state = WorkbenchState()
         state.input = #"{"tutar":1,"ad":"Ali"}"#

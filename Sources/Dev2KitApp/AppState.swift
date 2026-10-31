@@ -177,10 +177,22 @@ final class AppState {
     /// "değerleri düzenle" düğmesi). Pencere açılırken bir kez okunur.
     private(set) var environmentsFocusID: UUID?
 
-    /// Environment'lar penceresini verilen environment seçili açar.
-    func showEnvironments(focus id: UUID?) {
+    /// Yeni oluşturulan environment: pencere açılınca ad alanı odak alır
+    /// (adı hemen yazılabilsin). Bir kez okunur.
+    private(set) var environmentsNameEditID: UUID?
+
+    /// Environment'lar penceresini verilen environment seçili açar;
+    /// `editName` ise adı düzenlenmeye hazır gelir.
+    func showEnvironments(focus id: UUID?, editName: Bool = false) {
         environmentsFocusID = id
+        environmentsNameEditID = editName ? id : nil
         environmentsRequest += 1
+    }
+
+    /// Adı düzenlenecek environment; bir kez okunur.
+    func takeEnvironmentsNameEditID() -> UUID? {
+        defer { environmentsNameEditID = nil }
+        return environmentsNameEditID
     }
 
     /// Seçilecek environment; yoksa ya da silinmişse `nil`.

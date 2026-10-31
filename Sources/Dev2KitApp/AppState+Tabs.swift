@@ -10,14 +10,37 @@ import Dev2KitCore
 extension AppState {
     static let openTabsKey = "openTabs"
     static let selectedTabKey = "selectedTab"
+    static let pinnedTabsKey = "pinnedTabs"
 
     func openTab(_ id: UUID) {
         tabs.open(id)
     }
 
-    /// Sekmeyi kalıcı yapar (açık değilse açar).
+    /// Sekmeyi sabitler: başa, sabitlerin sonuna (kalıcı da olur).
     func pinTab(_ id: UUID) {
         tabs.pin(id)
+        saveTabs()
+    }
+
+    /// Sabitlemeyi kaldırır: sekme sabit olmayanların başına geçer.
+    func unpinTab(_ id: UUID) {
+        tabs.unpin(id)
+        saveTabs()
+    }
+
+    func isTabPinned(_ id: UUID) -> Bool {
+        tabs.isPinned(id)
+    }
+
+    /// Menüdeki "Sekmeyi Sabitle / Sabitlemeyi Kaldır": seçili sekme.
+    func toggleSelectedTabPin() {
+        guard let id = selectedRequestID, openTabs.contains(id) else { return }
+        if isTabPinned(id) { unpinTab(id) } else { pinTab(id) }
+    }
+
+    /// Sekmeyi kalıcı yapar (açık değilse açar).
+    func keepTab(_ id: UUID) {
+        tabs.keep(id)
         saveTabs()
     }
 
@@ -53,7 +76,7 @@ extension AppState {
     /// "kullanılan" istektir.
     func showRequest(_ id: UUID) {
         selectedRequestID = id
-        pinTab(id)
+        keepTab(id)
     }
 
     /// Kalıcı sekmeler ve seçili sekme bir sonraki açılışa taşınır; önizleme
@@ -61,6 +84,7 @@ extension AppState {
     func saveTabs() {
         let permanent = tabs.permanent.map(\.uuidString)
         UserDefaults.standard.set(permanent, forKey: Self.openTabsKey)
+        UserDefaults.standard.set(tabs.pinned.map(\.uuidString), forKey: Self.pinnedTabsKey)
         let selected = selectedRequestID.flatMap { permanent.contains($0.uuidString) ? $0.uuidString : nil }
         UserDefaults.standard.set(selected, forKey: Self.selectedTabKey)
     }
@@ -77,9 +101,11 @@ extension AppState {
     /// silinmiş isteklerin sekmeleri atlanır.
     func restoreTabs() {
         let live = Set(workspace.collections.flatMap { $0.requests.map(\.id) })
-        tabs = RequestTabs(tabs: (UserDefaults.standard.stringArray(forKey: Self.openTabsKey) ?? [])
-            .compactMap(UUID.init(uuidString:))
-            .filter(live.contains))
+        func saved(_ key: String) -> [UUID] {
+            (UserDefaults.standard.stringArray(forKey: key) ?? []).compactMap(UUID.init(uuidString:)).filter(live.contains)
+        }
+        // Sabitler başa, sabitlenme sırasıyla (`RequestTabs` normalize eder).
+        tabs = RequestTabs(tabs: saved(Self.openTabsKey), pinned: saved(Self.pinnedTabsKey))
         let savedSelection = UserDefaults.standard.string(forKey: Self.selectedTabKey).flatMap(UUID.init(uuidString:))
         selectedRequestID = savedSelection.flatMap { openTabs.contains($0) ? $0 : nil } ?? openTabs.first
     }

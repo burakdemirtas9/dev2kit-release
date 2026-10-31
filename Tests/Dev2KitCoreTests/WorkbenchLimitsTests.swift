@@ -9,6 +9,8 @@ final class WorkbenchLimitsTests: XCTestCase {
         // Kullanıcı kararı (2026-10-18).
         XCTAssertEqual(TextStats.size(WorkbenchLimits.maxInputBytes), "4.0 MB")
         XCTAssertEqual(TextStats.size(WorkbenchLimits.maxEditorLineBytes), "1.0 MB")
+        // Kullanıcı kararı (2026-10-31): en çok 6 JSON sekmesi.
+        XCTAssertEqual(WorkbenchLimits.maxTabs, 6)
     }
 
     func testLineCountTreatsCRLFOnceAndLoneCRAsABreak() {

@@ -13,6 +13,8 @@ struct EnvironmentsView: View {
     @State private var focusEntryID: UUID?
     /// Satır var ama kapalı ya da az önce kaydedildi: kullanıcıya not.
     @State private var notice: (kind: MessageKind, text: String)?
+    /// Yeni oluşturulan environment: ad alanı odak alır (adı hemen yazılır).
+    @State private var nameEditID: UUID?
 
     var body: some View {
         @Bindable var state = appState
@@ -57,7 +59,9 @@ struct EnvironmentsView: View {
                     }
                     HStack {
                         Button {
-                            selectedID = appState.addEnvironment()
+                            let id = appState.addEnvironment()
+                            selectedID = id
+                            nameEditID = id
                         } label: {
                             Image(systemName: "plus")
                         }
@@ -81,7 +85,7 @@ struct EnvironmentsView: View {
 
                 if let selectedID, let binding = appState.environmentBinding(selectedID) {
                     EnvironmentDetail(environment: binding, isActive: appState.workspace.activeEnvironmentID == selectedID,
-                                      focusEntryID: focusEntryID) {
+                                      focusEntryID: focusEntryID, focusName: nameEditID == selectedID) {
                         state.workspace.activeEnvironmentID = selectedID
                         appState.persist()
                     }
@@ -108,6 +112,7 @@ struct EnvironmentsView: View {
         .onAppear {
             selectedID = appState.takeEnvironmentsFocusID()
                 ?? appState.workspace.activeEnvironmentID ?? appState.workspace.environments.first?.id
+            nameEditID = appState.takeEnvironmentsNameEditID()
             if let request = appState.takeVariableDefinitionRequest() {
                 start(request)
             }
@@ -116,6 +121,7 @@ struct EnvironmentsView: View {
         .onChange(of: appState.environmentsRequest) {
             // Pencere açıkken seçiciden başka bir environment istendi.
             if let id = appState.takeEnvironmentsFocusID() { selectedID = id }
+            nameEditID = appState.takeEnvironmentsNameEditID()
             if let request = appState.takeVariableDefinitionRequest() {
                 start(request)
             }
@@ -277,7 +283,11 @@ private struct EnvironmentDetail: View {
     @Binding var environment: EnvironmentModel
     let isActive: Bool
     var focusEntryID: UUID?
+    /// Yeni oluşturuldu: ad alanı odak alır (macOS içeriği seçili getirir,
+    /// yazınca varsayılan adın yerine geçer).
+    var focusName = false
     let makeActive: () -> Void
+    @FocusState private var nameFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -286,6 +296,10 @@ private struct EnvironmentDetail: View {
                     .inputLimit(.name)
                     .textFieldStyle(.input)
                     .font(.headline)
+                    .focused($nameFocused)
+                    // Alan bu turda henüz pencerede değil: bir sonraki turda.
+                    .onAppear { if focusName { DispatchQueue.main.async { nameFocused = true } } }
+                    .onChange(of: focusName) { _, focus in if focus { DispatchQueue.main.async { nameFocused = true } } }
                 if isActive {
                     Label(L10n.t("environment.isActive"), systemImage: "checkmark.circle.fill")
                         .foregroundStyle(Theme.up)

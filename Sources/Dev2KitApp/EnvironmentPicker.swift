@@ -58,7 +58,7 @@ struct EnvironmentPicker: View {
 }
 
 /// Popover içeriği: başlık, "Environment Yok", environment'lar (sağda
-/// düzenle düğmesi), environment yoksa en altta "Environment Ekle".
+/// düzenle düğmesi), en altta "Yeni Environment…".
 struct EnvironmentPickerList: View {
     @Environment(AppState.self) private var appState
     let close: () -> Void
@@ -87,21 +87,20 @@ struct EnvironmentPickerList: View {
                     select(environment.id)
                 }
             }
-            if environments.isEmpty {
-                Divider().padding(.vertical, 4)
-                Button {
-                    close()
-                    let id = appState.addEnvironment()
-                    // Yeni environment adlandırılsın ve değerleri girilsin.
-                    appState.showEnvironments(focus: id)
-                } label: {
-                    Label(L10n.t("environment.add"), systemImage: "plus")
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 10)
-                        .rowHitTarget()
-                }
-                .buttonStyle(PickerRowButtonStyle())
+            // Her zaman en altta (2026-10-31; önce yalnızca liste boşken).
+            Divider().padding(.vertical, 4)
+            Button {
+                close()
+                let id = appState.addEnvironment()
+                // Yeni environment adlandırılsın ve değerleri girilsin.
+                appState.showEnvironments(focus: id, editName: true)
+            } label: {
+                Label(L10n.t("environment.add"), systemImage: "plus")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 10)
+                    .rowHitTarget()
             }
+            .buttonStyle(PickerRowButtonStyle())
         }
         .padding(6)
         .frame(minWidth: 220, maxWidth: 320)

@@ -127,6 +127,13 @@ struct Dev2KitApp: App {
             }
             .keyboardShortcut("n", modifiers: .command)
             .disabled(apiClientCommandsDisabled)
+            // ⌘T: tarayıcılardaki "yeni sekme" — koleksiyon seçmeden, sekme
+            // çubuğundaki + ile aynı (Koleksiyonsuz grubuna).
+            Button(L10n.t("menu.newUngroupedRequest")) {
+                appState.createUngroupedRequest()
+            }
+            .keyboardShortcut("t", modifiers: .command)
+            .disabled(apiClientCommandsDisabled)
             Button(L10n.t("menu.newCollection")) {
                 appState.addCollection()
             }
@@ -224,6 +231,11 @@ struct Dev2KitApp: App {
             Button(L10n.t("menu.previousTab")) { appState.selectAdjacentTab(-1) }
                 .keyboardShortcut(.leftArrow, modifiers: [.command, .option])
                 .disabled(appState.openTabs.count < 2 || apiClientCommandsDisabled)
+            // Sabitlemenin klavye yolu (sekmenin sağ tık menüsüyle aynı).
+            Button(appState.selectedRequestID.map(appState.isTabPinned) == true ? L10n.t("tabs.unpin") : L10n.t("tabs.pin")) {
+                appState.toggleSelectedTabPin()
+            }
+            .disabled(!(appState.selectedRequestID.map(appState.openTabs.contains) ?? false) || apiClientCommandsDisabled)
             Divider()
             Button(L10n.t("menu.resetApprovals")) {
                 confirmResetSecurityApprovals()
@@ -269,7 +281,7 @@ struct Dev2KitApp: App {
                         // Workbench'in araç listesi de bir List: çift tık orada
                         // API Client sekmesine dokunmasın.
                         guard appState.isAPIClient else { return }
-                        if let id = appState.selectedRequestID { appState.pinTab(id) }
+                        if let id = appState.selectedRequestID { appState.keepTab(id) }
                     }
                 }
         }

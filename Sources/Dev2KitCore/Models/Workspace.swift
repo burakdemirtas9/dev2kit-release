@@ -32,6 +32,16 @@ public struct EnvironmentModel: Codable, Identifiable, Hashable, Sendable {
             tokenVariables: try container.decodeIfPresent([TokenVariable].self, forKey: .tokenVariables) ?? []
         )
     }
+
+    /// Yeni environment'ın adı (2026-10-31): `base` boştaysa o, değilse
+    /// "base 2", "base 3"… — aynı adlı iki environment seçicide ayırt edilmez.
+    public static func newName(base: String, existing: [String]) -> String {
+        let taken = Set(existing)
+        guard taken.contains(base) else { return base }
+        var number = 2
+        while taken.contains("\(base) \(number)") { number += 1 }
+        return "\(base) \(number)"
+    }
 }
 
 /// İstek koleksiyonu. Diske okunabilir JSON olarak yazılır (git-friendly).
