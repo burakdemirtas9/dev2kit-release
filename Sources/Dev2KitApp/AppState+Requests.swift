@@ -14,13 +14,11 @@ extension AppState {
     /// İsteğin güncel konumu. Index'ler binding içinde SAKLANMAZ: koleksiyon
     /// sürüklenince veya silinince eski index yanlış isteğe yazar ya da
     /// dizi sınırını aşıp çökertir. Her erişimde ID'den yeniden bulunur.
+    ///
+    /// Tarama yerine `RequestLocator` (2026-11-01): kayıtlı konum okurken
+    /// kimlikle doğrulanır (O(1)), tutmazsa tablo tek geçişte yeniden kurulur.
     func locateRequest(_ id: UUID) -> (collection: Int, request: Int)? {
-        for (ci, collection) in workspace.collections.enumerated() {
-            if let ri = collection.requests.firstIndex(id: id) {
-                return (ci, ri)
-            }
-        }
-        return nil
+        requestLocator.locate(id, in: workspace.collections).map { ($0.collection, $0.request) }
     }
 
     /// İsteği yerinde değiştirir. "Bul → kopyala → yaz" dansı on bir yerde

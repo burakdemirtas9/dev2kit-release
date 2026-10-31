@@ -97,6 +97,9 @@ final class AppState {
     /// Açık istek sekmeleri; kurallar `RequestTabs`'ta (Core, testli).
     /// Setter modül içi: `AppState+Tabs` yazıyor.
     var tabs = RequestTabs()
+    /// İstek kimliği → konum (`locateRequest`). Gözlenmez: aramada
+    /// güncellenir, çizim içinde durum değiştirip yeniden çizim tetiklemesin.
+    @ObservationIgnored var requestLocator = RequestLocator()
     var openTabs: [UUID] { tabs.tabs }
     var previewTabID: UUID? { tabs.preview }
 
