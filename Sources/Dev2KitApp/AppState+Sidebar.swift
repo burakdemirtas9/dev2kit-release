@@ -19,6 +19,33 @@ extension AppState {
         RequestSearch.filter(workspace.collections.filter { !$0.isTokenFactory }, query: searchQuery)
     }
 
+    /// Kenar çubuğunda gösterilen koleksiyonlar, özetten (Token Factory
+    /// hariç). Arama kapalıyken workspace OKUNMAZ: kenar çubuğu yazarken
+    /// yeniden çizilmez. Arama açıkken eşleşme tam modellerden (URL dahil)
+    /// bulunur, gösterilen bilgi yine özetten.
+    var sidebarCollections: [SidebarSnapshot.Collection] {
+        guard isSearching else { return sidebarSnapshot.collections.filter { !$0.isTokenFactory } }
+        return sidebarSnapshot.matching(visibleCollections)
+    }
+
+    /// Workspace değişti: özet aynı turun sonunda BİR kez yenilenir (toplu
+    /// işlemde her değişiklikte değil). Olaydan sonra, çizimden önce çalışır.
+    func scheduleSidebarSnapshot() {
+        guard !sidebarSnapshotScheduled else { return }
+        sidebarSnapshotScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            MainActor.assumeIsolated { self?.refreshSidebarSnapshot() }
+        }
+    }
+
+    /// Özeti hemen yeniler; yalnızca farklıysa atar (kenar çubuğu ancak o
+    /// zaman yeniden çizilir).
+    func refreshSidebarSnapshot() {
+        sidebarSnapshotScheduled = false
+        let snapshot = SidebarSnapshot(workspace: workspace)
+        if snapshot != sidebarSnapshot { sidebarSnapshot = snapshot }
+    }
+
     /// Arama sonucundaki ilk istek — arama alanında ⏎ ile seçilir.
     var firstSearchHit: RequestModel? {
         visibleCollections.first(where: { !$0.requests.isEmpty })?.requests.first

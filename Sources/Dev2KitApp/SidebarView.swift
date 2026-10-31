@@ -5,7 +5,7 @@ struct SidebarView: View {
     @Environment(AppState.self) private var appState
     @State private var renameTargetID: UUID?
     @State private var renameText = ""
-    @State private var deleteTarget: CollectionModel?
+    @State private var deleteTarget: SidebarSnapshot.Collection?
     @State private var deleteRequestTargets: Set<UUID> = []
     @State private var draggingCollectionID: UUID?
     @State private var tokenFactoryDropTargeted = false
@@ -95,10 +95,9 @@ struct SidebarView: View {
     }
 
     private var searchHitCount: Int {
-        let matches = appState.visibleCollections.filter {
-            !($0.collection.isUngrouped && $0.requests.isEmpty) && !$0.collection.isTokenFactory
-        }
-        return RequestSearch.totalRequests(in: matches)
+        appState.sidebarCollections
+            .filter { !($0.isUngrouped && $0.requests.isEmpty) }
+            .reduce(0) { $0 + $1.requests.count }
     }
 
     @ViewBuilder private var requestList: some View {
@@ -106,12 +105,11 @@ struct SidebarView: View {
         // eşleşme sayacı aynı sonucu kullanır.
         // Boş "Koleksiyonsuz" kabı gösterilmez: içinde istek yokken bölüm yoktur.
         // Token Factory listede değil, altta kendi bölümünde (TokenFactoryPanel).
-        let matches = appState.visibleCollections.filter {
-            !($0.collection.isUngrouped && $0.requests.isEmpty) && !$0.collection.isTokenFactory
-        }
-        // Kirli istekler render başına TEK kez hesaplanır; satırlar ve
-        // başlıklar bu kümeye bakar (bkz. AppState.dirtyRequestIDs).
-        let dirty = appState.dirtyRequestIDs
+        // Kenar çubuğu workspace'i değil özeti okur (`SidebarSnapshot`):
+        // yazarken (header, gövde, URL) liste yeniden kurulmaz (2026-11-01).
+        let matches = appState.sidebarCollections.filter { !($0.isUngrouped && $0.requests.isEmpty) }
+        // Kirli istekler özette, workspace değişince bir kez hesaplanmış.
+        let dirty = appState.sidebarSnapshot.dirty
         // ⇧/⌘ ile seçilen aralığın hangi uçta bittiğini bilmek için görünen sıra.
         let visibleOrder = matches.flatMap { $0.requests.map(\.id) }
         let exampleOwners = RequestTreeRows.exampleOwners(in: matches.flatMap(\.requests))
@@ -124,14 +122,13 @@ struct SidebarView: View {
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.vertical, 12)
             }
-            ForEach(matches) { match in
-                let collection = match.collection
+            ForEach(matches) { collection in
                 Section {
                     if !isCollapsedForDisplay(collection.id) {
                         // İstek ve, örnekleri açıksa, hemen altında kayıtlı
                         // örnekleri. Satır listesi koleksiyon başına bir kez kurulur.
-                        let requestsByID = Dictionary(match.requests.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-                        let rows = RequestTreeRows.rows(for: match.requests, expanded: appState.expandedExampleRequestIDs)
+                        let requestsByID = Dictionary(collection.requests.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+                        let rows = RequestTreeRows.rows(for: collection.requests, expanded: appState.expandedExampleRequestIDs)
                         ForEach(rows) { row in
                             switch row {
                             case .request(let id):
@@ -194,7 +191,7 @@ struct SidebarView: View {
                     }
                 } header: {
                     SidebarCollectionHeader(
-                        match: match,
+                        collection: collection,
                         isCollapsed: isCollapsedForDisplay(collection.id),
                         containsDirtyRequest: isCollapsedForDisplay(collection.id)
                             && collection.requests.contains(where: { dirty.contains($0.id) }),
@@ -275,7 +272,7 @@ struct SidebarView: View {
             }
             Button(L10n.t("common.cancel"), role: .cancel) { deleteTarget = nil }
         } message: {
-            Text(L10n.plural("collection.delete.message", count: deleteTarget?.requests.count ?? 0))
+            Text(L10n.plural("collection.delete.message", count: deleteTarget?.totalRequests ?? 0))
         }
         .alert(
             deleteRequestTitle,
@@ -298,7 +295,7 @@ struct SidebarView: View {
     /// Silme onayının başlığı: tek istekte adı, çoklu seçimde sayısı.
     private var deleteRequestTitle: String {
         if deleteRequestTargets.count == 1, let id = deleteRequestTargets.first {
-            return L10n.t("common.deleteNamed.title", appState.request(withID: id)?.name ?? "")
+            return L10n.t("common.deleteNamed.title", appState.sidebarSnapshot.requestName(id) ?? "")
         }
         return L10n.plural("request.deleteMany.title", count: deleteRequestTargets.count)
     }

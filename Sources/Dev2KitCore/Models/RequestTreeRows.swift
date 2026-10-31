@@ -10,6 +10,17 @@ import Foundation
 /// verir; örnek satırları araya girdiği için bu indeksler istek dizisindeki
 /// konuma karşılık gelmez. Yanlış çeviri yanlış isteği taşır — kural burada
 /// ve testli (`RequestTreeRowsTests`).
+/// Satır ağacı için gereken kadarı: kimlik ve örneklerin kimlikleri. Hem tam
+/// `RequestModel` hem kenar çubuğu özeti (`SidebarSnapshot.Request`) uyar.
+public protocol ExampleListing {
+    var id: UUID { get }
+    var exampleIDs: [UUID] { get }
+}
+
+extension RequestModel: ExampleListing {
+    public var exampleIDs: [UUID] { examples.map(\.id) }
+}
+
 public enum RequestTreeRows {
     public enum Row: Hashable, Identifiable, Sendable {
         case request(UUID)
@@ -30,18 +41,18 @@ public enum RequestTreeRows {
     }
 
     /// `expanded`: örnekleri açık istekler; diğerlerinin yalnızca kendi satırı var.
-    public static func rows(for requests: [RequestModel], expanded: Set<UUID>) -> [Row] {
+    public static func rows<R: ExampleListing>(for requests: [R], expanded: Set<UUID>) -> [Row] {
         requests.flatMap { request -> [Row] in
             guard expanded.contains(request.id) else { return [.request(request.id)] }
-            return [.request(request.id)] + request.examples.map { .example(requestID: request.id, exampleID: $0.id) }
+            return [.request(request.id)] + request.exampleIDs.map { .example(requestID: request.id, exampleID: $0) }
         }
     }
 
     /// Örnek kimliği → sahibi olan istek; görünen satırlar için tek geçişte.
-    public static func exampleOwners(in requests: [RequestModel]) -> [UUID: UUID] {
+    public static func exampleOwners<R: ExampleListing>(in requests: [R]) -> [UUID: UUID] {
         var owners: [UUID: UUID] = [:]
         for request in requests {
-            for example in request.examples { owners[example.id] = request.id }
+            for exampleID in request.exampleIDs { owners[exampleID] = request.id }
         }
         return owners
     }

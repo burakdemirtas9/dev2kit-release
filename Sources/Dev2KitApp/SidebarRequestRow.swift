@@ -12,8 +12,10 @@ import Dev2KitCore
 /// kutusu listenin sahibinde (`SidebarView`), burası yalnızca hedefi bildirir.
 struct SidebarRequestRow: View {
     @Environment(AppState.self) private var appState
-    let request: RequestModel
-    let collection: CollectionModel
+    /// Kenar çubuğu özeti: satır isteğin tamamını almaz (gövde, header…);
+    /// yazarken satırlar yeniden kurulmaz (`SidebarSnapshot`, 2026-11-01).
+    let request: SidebarSnapshot.Request
+    let collection: SidebarSnapshot.Collection
     let isDirty: Bool
     let examplesExpanded: Bool
     let onDelete: (Set<UUID>) -> Void
@@ -115,7 +117,7 @@ struct SidebarRequestRow: View {
                 Label(L10n.t("request.duplicate"), systemImage: "plus.square.on.square")
             }
         }
-        let targets = appState.workspace.regularCollections.filter { $0.id != collection.id }
+        let targets = appState.sidebarSnapshot.collections.filter { $0.isRegular && $0.id != collection.id }
         if !targets.isEmpty {
             Menu {
                 ForEach(targets) { target in

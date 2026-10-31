@@ -9,7 +9,9 @@ import Dev2KitCore
 /// yutuyor), Button alıyor — bkz. docs/UI-KURALLARI.md.
 struct SidebarCollectionHeader: View {
     @Environment(AppState.self) private var appState
-    let match: RequestSearch.Match
+    /// Kenar çubuğu özeti (`SidebarSnapshot`): arama açıkken `requests`
+    /// yalnızca eşleşenler, `totalRequests` koleksiyonun tamamı.
+    let collection: SidebarSnapshot.Collection
     /// Gösterimdeki hal: aramada daraltılmış koleksiyonlar da açık görünür.
     let isCollapsed: Bool
     /// Daraltılmışken içinde "son gönderilenden farklı" istek var mı.
@@ -20,8 +22,6 @@ struct SidebarCollectionHeader: View {
     @Binding var draggingCollectionID: UUID?
     let onRename: () -> Void
     let onDelete: () -> Void
-
-    private var collection: CollectionModel { match.collection }
 
     var body: some View {
         // Daralt/genişlet hedefi başlığın TAMAMI. Bunun Button olması
@@ -51,9 +51,9 @@ struct SidebarCollectionHeader: View {
                     Text(collection.displayName)
                 }
                 // Aramada "eşleşen/toplam", normalde yalnızca toplam.
-                Text(appState.isSearching && match.requests.count != collection.requests.count
-                     ? "\(match.requests.count)/\(collection.requests.count)"
-                     : "\(collection.requests.count)")
+                Text(appState.isSearching && collection.requests.count != collection.totalRequests
+                     ? "\(collection.requests.count)/\(collection.totalRequests)"
+                     : "\(collection.totalRequests)")
                     .font(.tinyText)
                     .foregroundStyle(.tertiary)
                 if isCollapsed, containsDirtyRequest {

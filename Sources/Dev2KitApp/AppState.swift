@@ -34,7 +34,17 @@ import Dev2KitCore
 @Observable
 @MainActor
 final class AppState {
-    var workspace: WorkspaceModel
+    var workspace: WorkspaceModel {
+        didSet { scheduleSidebarSnapshot() }
+    }
+
+    /// Kenar çubuğunun gösterdiği kadarı (`SidebarSnapshot`, Core). Kenar
+    /// çubuğu workspace'i DEĞİL bunu okur: yazarken (header, gövde, URL) bu
+    /// değişmez, 2000 satırlık liste her tuşta yeniden kurulmaz (2026-11-01).
+    /// Yalnızca farklıysa atanır; `AppState+Sidebar` yeniler.
+    var sidebarSnapshot = SidebarSnapshot()
+    /// Aynı turdaki çok sayıda workspace değişikliği için tek yenileme.
+    @ObservationIgnored var sidebarSnapshotScheduled = false
 
     /// Açık mod. Bir sonraki açılışta hatırlanır. Workbench'teyken API Client
     /// kısayolları devre dışıdır (menü komutları buna bakar); mod değişince
@@ -439,6 +449,8 @@ final class AppState {
         reloadTrustStore()
 
         restoreTabs()
+        // init içindeki atamalar didSet'i çağırmaz: ilk özet burada.
+        refreshSidebarSnapshot()
     }
 
     var activeEnvironment: EnvironmentModel? {

@@ -7,7 +7,7 @@ import Dev2KitCore
 struct SidebarExampleRow: View {
     @Environment(AppState.self) private var appState
     let ref: AppState.ExampleRef
-    let example: ResponseExample
+    let example: SidebarSnapshot.Example
 
     var body: some View {
         HStack(spacing: 6) {
