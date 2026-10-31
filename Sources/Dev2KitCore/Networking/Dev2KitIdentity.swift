@@ -24,7 +24,11 @@ public enum Dev2KitIdentity {
     /// yedek dışı, eski geçmiş kopyalarının silinmesi, vault ekranı metni).
     /// 181: gövdede değişken renkli ve tıklanabilir, JSON gövdede yalnızca
     /// gövdeyi bozan değerin kaçışlanması, response örnekleri katlı.
-    public static let build = "181"
+    /// 182: donma bekçisi, değişken baloncuğunda değer düzenleme, sekme
+    /// sabitleme ve fareyle sürükleme, + / ⌘T koleksiyonsuz request, seçiciden
+    /// yeni environment, `{{` önerilerinde klavye, Workbench'te en çok 6 JSON
+    /// sekmesi, büyük workspace'te yazma ve gezinme hızı.
+    public static let build = "182"
     /// `CFBundleIdentifier` (scripts/make-app.sh buradan okur). Keychain
     /// kayıtları ve ayarlar (UserDefaults) buna bağlı; değiştirmek taşıma
     /// gerektirir. 2026-10-25'e kadar `com.dev2kit.app` (alan adı bizim
