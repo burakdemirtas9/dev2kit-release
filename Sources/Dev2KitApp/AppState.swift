@@ -19,6 +19,7 @@ import Dev2KitCore
 //   AppState+Collections   koleksiyon ve environment yönetimi
 //   AppState+TLS           güven deposu, TLS profilleri, çerezler
 //   AppState+Examples      response örnekleri: kaydet, aç, "Dene", yeniden adlandır, sil
+//   AppState+Diagnostics   donma bekçisinin anlık durumu, "bekçi kapattı" açılış bildirimi
 //
 // Uzantılardan yazılan özellikler `private(set)` DEĞİL; uzantılar aynı
 // modülde, dışarıya kapalılık modül sınırında korunuyor.

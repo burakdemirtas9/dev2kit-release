@@ -45,6 +45,7 @@ public enum CrashReportText {
         var parts = [ISO8601DateFormatter().string(from: event.time), event.kind.rawValue]
         if let detail = event.detail { parts.append(detail.rawValue) }
         if let domain = event.errorDomain { parts.append("\(domain) \(event.errorCode.map(String.init) ?? "")".trimmingCharacters(in: .whitespaces)) }
+        if let context = event.context, !context.summary.isEmpty { parts.append(context.summary) }
         return parts.joined(separator: "  ")
     }
 }

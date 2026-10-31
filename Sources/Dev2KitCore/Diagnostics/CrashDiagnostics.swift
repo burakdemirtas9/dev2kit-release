@@ -219,11 +219,16 @@ public extension CrashDiagnostics {
     static func live(dataDirectory: URL = AppPaths.supportDirectory, log: DiagnosticLog?) -> CrashDiagnostics {
         let processName = ProcessInfo.processInfo.processName
         return CrashDiagnostics(
-            directory: dataDirectory.appendingPathComponent("diagnostics", isDirectory: true),
+            directory: defaultDirectory(dataDirectory: dataDirectory),
             locator: CrashReportLocator(processName: processName, bundleID: Bundle.main.bundleIdentifier),
             log: log,
             isRunningInstance: { pid in Self.isRunning(pid: pid, named: processName) }
         )
+    }
+
+    /// Tanılama dizini (oturum kayıtları, günlük, bekçi işareti).
+    static func defaultDirectory(dataDirectory: URL = AppPaths.supportDirectory) -> URL {
+        dataDirectory.appendingPathComponent("diagnostics", isDirectory: true)
     }
 
     /// pid yaşıyor VE aynı adlı yürütülebilir dosya (pid yeniden kullanılmış

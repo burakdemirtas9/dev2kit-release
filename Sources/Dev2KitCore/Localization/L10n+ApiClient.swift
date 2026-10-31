@@ -32,6 +32,11 @@ extension L10nTable {
         "crash.details.show": L10nEntry("Ayrıntılar", "Details"),
         "crash.details.hide": L10nEntry("Ayrıntıları Gizle", "Hide Details"),
         "crash.copy": L10nEntry("Raporu Kopyala", "Copy Report"),
+        "watchdog.terminated.title": L10nEntry("dev2kit yanıt vermediği için kapatıldı", "dev2kit was closed because it stopped responding"),
+        "watchdog.terminated.message": L10nEntry(
+            "Uygulama %1$@ saniye yanıt vermedi ve bellek kullanımı %2$@ GB'a ulaştı; Mac'in yavaşlamaması için kapatıldı. Kaydedilmemiş son düzenlemeler kaybolmuş olabilir. Ayrıntılar İletişim > Son çökme raporu'nda; \"Raporu Kopyala\" ile bize gönderebilirsin.",
+            "The app didn't respond for %1$@ seconds and its memory use reached %2$@ GB, so it was closed to keep your Mac responsive. Your last unsaved edits may be lost. Details are in Contact > Latest Crash Report; use \"Copy Report\" to send them to us."
+        ),
         "crash.clear": L10nEntry("Temizle", "Clear"),
         "crash.clear.help": L10nEntry("Kaydı uygulamadan kaldırır; macOS raporuna dokunulmaz", "Removes the record from the app; the macOS report is kept"),
         "crash.text.verifiedTitle": L10nEntry("dev2kit — Son çökme raporu (macOS raporuyla doğrulandı)", "dev2kit — Latest crash report (verified by macOS report)"),

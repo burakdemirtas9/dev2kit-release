@@ -28,6 +28,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if Bundle.main.bundleURL.pathExtension == "app" {
             CrashReportCenter.shared.start()
             handleTerminationSignal()
+            // Donma bekçisi: yanıtsızlığı içeriksiz kaydeder, kaçak durumda
+            // (donma + 2 GB) çökme raporu bırakarak kapatır.
+            HangWatchdog.shared.start { [weak self] in
+                self?.appState?.diagnosticContext ?? DiagnosticContext()
+            }
         }
     }
 
@@ -256,6 +261,10 @@ struct Dev2KitApp: App {
                 .frame(minWidth: Self.minimumWindowSize.width, minHeight: Self.minimumWindowSize.height)
                 .onAppear {
                     appDelegate.appState = appState
+                    // Bekçi son oturumu kapattıysa nedeni söylenir (bir kez).
+                    CrashReportCenter.shared.takeWatchdogTermination { [appState] record in
+                        appState.noteWatchdogTermination(record)
+                    }
                     SidebarDoubleClick.install {
                         // Workbench'in araç listesi de bir List: çift tık orada
                         // API Client sekmesine dokunmasın.

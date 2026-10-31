@@ -19,6 +19,14 @@ public struct DiagnosticEvent: Codable, Equatable, Sendable {
         case secretStoreUnavailable
         /// Geçmişin anahtarı alınamadı ya da Keychain'e taşınamadı.
         case historyKeyUnavailable
+        /// Ana iş parçacığı yanıt vermiyor (bekçi, `HangWatchdogPolicy`).
+        case mainThreadHang
+        /// Donma geçti; süre bağlamda.
+        case mainThreadRecovered
+        /// Uygulama yanıt verirken bellek sınırı aşıldı.
+        case memoryHigh
+        /// Donma + bellek sınırı: bekçi uygulamayı kapattı.
+        case watchdogTerminated
     }
 
     /// Kayıt açılışındaki durum ayrıntısı (`StoreNotice` türleri gibi).
@@ -35,11 +43,14 @@ public struct DiagnosticEvent: Codable, Equatable, Sendable {
     public var detail: Detail?
     public var errorDomain: String?
     public var errorCode: Int?
+    /// Bekçi olaylarında ekran, kaba boyutlar, bellek ve süre (içerik yok).
+    public var context: DiagnosticContext?
 
-    public init(kind: Kind, time: Date = Date(), detail: Detail? = nil, error: Error? = nil) {
+    public init(kind: Kind, time: Date = Date(), detail: Detail? = nil, error: Error? = nil, context: DiagnosticContext? = nil) {
         self.time = time
         self.kind = kind
         self.detail = detail
+        self.context = context
         if let error {
             let nsError = error as NSError
             self.errorDomain = Self.safeDomain(nsError.domain)

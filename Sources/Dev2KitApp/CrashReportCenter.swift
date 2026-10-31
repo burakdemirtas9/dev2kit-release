@@ -47,6 +47,19 @@ final class CrashReportCenter {
         run { diagnostics.launch(current: current) }
     }
 
+    /// Donma bekçisi önceki oturumu kapattıysa bir kez bildirir (işaret
+    /// okunup silinir; disk işi arka planda).
+    func takeWatchdogTermination(_ handler: @escaping @MainActor @Sendable (WatchdogTermination) -> Void) {
+        guard let diagnostics else { return }
+        let directory = diagnostics.directory
+        worker.async {
+            guard let record = WatchdogTermination.consume(in: directory) else { return }
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated { handler(record) }
+            }
+        }
+    }
+
     /// Pano açılınca: geç yazılan macOS raporu varsa kaydı yükseltir.
     func refresh() {
         guard let diagnostics else { return }
