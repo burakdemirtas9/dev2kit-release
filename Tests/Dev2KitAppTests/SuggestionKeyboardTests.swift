@@ -13,7 +13,11 @@ final class SuggestionKeyboardTests: XCTestCase {
     private var window: NSWindow!
     private var submits = 0
 
-    private final class Model: ObservableObject { @Published var text = "" }
+    /// Uygulamadaki gibi `@Observable` (alanlar `AppState`'e bağlı).
+    /// `ObservableObject` ile ⏎'deki yazım SwiftUI'nin "Publishing changes
+    /// from within view updates" uyarısını veriyordu; uygulamada o yol yok.
+    /// (`private` olamaz: makronun ürettiği uzantı erişemiyor.)
+    @Observable final class Model { var text = "" }
 
     override func setUp() async throws {
         harness = AppStateHarness()
@@ -35,7 +39,7 @@ final class SuggestionKeyboardTests: XCTestCase {
 
     private func host(_ model: Model, address: Bool) {
         struct Host: View {
-            @ObservedObject var model: Model
+            @Bindable var model: Model
             let address: Bool
             let onSubmit: () -> Void
             var body: some View {

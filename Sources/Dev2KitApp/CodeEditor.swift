@@ -678,7 +678,7 @@ struct CodeEditor: NSViewRepresentable {
         /// Düzenlenebilir editörde katlar açılır: gizli metnin içine yazmak
         /// kullanıcıyı şaşırtır, kaybolan aralıkları takip etmek de kırılgandır.
         func refreshRegions(_ textView: NSTextView) {
-            guard let gutter, let controller else { return }
+            guard let gutter, controller != nil else { return }
             regions = parent.language.foldableRegions(in: textView.string)
             if parent.isEditable, !foldedLines.isEmpty {
                 foldedLines.removeAll()
@@ -688,13 +688,29 @@ struct CodeEditor: NSViewRepresentable {
             }
             gutter.foldableLines = Set(regions.map(\.openLine))
             gutter.refresh(text: textView.string)
-            // Yalnızca gerçekten değiştiyse yayınla: her tazelemede yayın
-            // yapmak SwiftUI güncellemesi içinde güncelleme tetikliyor.
-            if controller.gutterWidth != gutter.ruleThickness {
-                controller.gutterWidth = gutter.ruleThickness
-            }
-            controller.isAvailable = !regions.isEmpty
             applyFolding(textView)
+        }
+
+        /// Katlama durumunu arayüze (`CodeFoldingController`) bildirir:
+        /// yalnızca değişen alan, bir sonraki turda.
+        ///
+        /// Neden ertelenir: buraya `makeNSView`/`updateNSView` içinden de
+        /// giriliyor (editör kurulurken, metin programla değişince). SwiftUI
+        /// güncellemesinin içinde @Published yazmak "Publishing changes from
+        /// within view updates" uyarısı ve fazladan bir güncelleme turu
+        /// demekti (2026-11-01). Değerler şimdi alınır; art arda gelen
+        /// bildirimler sırayla uygulanır, sonuncusu kalır.
+        private func publishFoldingState() {
+            guard let controller else { return }
+            let width = gutter?.ruleThickness ?? controller.gutterWidth
+            let available = !regions.isEmpty
+            let folded = !foldedLines.isEmpty
+            DispatchQueue.main.async { [weak controller] in
+                guard let controller else { return }
+                if controller.gutterWidth != width { controller.gutterWidth = width }
+                if controller.isAvailable != available { controller.isAvailable = available }
+                if controller.hasFolded != folded { controller.hasFolded = folded }
+            }
         }
 
         func toggleFold(line: Int, in textView: NSTextView) {
@@ -730,7 +746,7 @@ struct CodeEditor: NSViewRepresentable {
             let visibleFolded = FoldRegion.outermost(regions.filter { foldedLines.contains($0.openLine) })
             let hidden = visibleFolded.map(\.hiddenRange)
             gutter?.foldedLines = foldedLines
-            controller?.hasFolded = !foldedLines.isEmpty
+            publishFoldingState()
             guard hidden != foldingDelegate.hiddenRanges else { return }
             let text = textView.string as NSString
             foldingDelegate.placeholders = Dictionary(uniqueKeysWithValues: visibleFolded.map {
