@@ -220,7 +220,7 @@ struct ResponseView: View {
                             payload: response.body,
                             // HAM metin: biçimlendirilmiş HTML'de eklenen
                             // girinti <pre> gibi boşluğa duyarlı içeriği bozar.
-                            text: response.bodyText
+                            text: display.previewText
                         )
                     }
                 case .headers:
@@ -644,7 +644,7 @@ struct ResponseView: View {
     /// hiçbir yanıt kendiliğinden panoya ya da diske gitmez.
     private func responseActions(_ display: AppState.ResponseDisplay) -> some View {
         let response = display.data
-        let isText = !response.body.isEmpty && response.bodyText != nil
+        let isText = display.isText
         return HStack(spacing: 10) {
             if !isExample, let id = appState.selectedRequestID {
                 saveAsExampleButton(id)

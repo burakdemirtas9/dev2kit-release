@@ -57,6 +57,22 @@ final class XMLSecurityTests: XCTestCase {
         return paths
     }
 
+    /// Tek büyük iç varlığın binlerce kez anılması: libxml "billion laughs"ı
+    /// kesiyor ama bunu kesmiyordu (yeniden tarama, ölçüldü: 1 MB × 20 bin
+    /// anılma 9,8 sn). Her yol hızlı bitmeli; doğrulayıcı nedenini söyler.
+    func testLargeInternalEntityIsNotExpandedOnAnyPath() {
+        let big = String(repeating: "x", count: 1_000_000)
+        let xml = "<?xml version=\"1.0\"?><!DOCTYPE d [<!ENTITY e \"\(big)\">]><d>\(String(repeating: "&e;", count: 20_000))</d>"
+        for path in paths {
+            let start = Date()
+            _ = path.run(xml)
+            XCTAssertLessThan(Date().timeIntervalSince(start), 3, path.name)
+        }
+        guard case .invalid(let issue) = MarkupTools.validateXML(xml) else { return XCTFail("geçerli sayılmamalı") }
+        XCTAssertEqual(issue.message, L10n.t("xml.entityDeclaration"))
+        XCTAssertEqual(MarkupTools.validateXML("<r><a>1</a></r>"), .valid, "kontrol: sıradan XML geçerli")
+    }
+
     func testExternalEntitiesAndIncludesNeverLeak() {
         let leaks = ["DEV2KIT-GIZLI-ICERIK", "root:", "/bin/"]
         for attack in attacks {

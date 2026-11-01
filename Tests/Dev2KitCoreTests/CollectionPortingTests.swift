@@ -164,6 +164,20 @@ final class CollectionPortingTests: XCTestCase {
         XCTAssertEqual(outcome.collection.requests.count, 5)
     }
 
+    /// Klasör öneki her istek adına kopyalanır; sınırsızken 277 KB dosya
+    /// 501 MB ad üretiyordu (yeniden tarama).
+    func testDeepFolderPrefixIsBounded() throws {
+        var item = #"{"name": "R", "request": {"method": "GET", "url": "https://a.example.com"}}"#
+        for level in 0..<50 {
+            item = #"{"name": "\#(String(repeating: "k", count: 1000))\#(level)", "item": [\#(item)]}"#
+        }
+        let json = #"{"info": {"name": "Derin"}, "item": [\#(item)]}"#
+        let outcome = try CollectionPorting.importPostman(Data(json.utf8), existingNames: [])
+        let name = try XCTUnwrap(outcome.collection.requests.first?.name)
+        XCTAssertLessThanOrEqual(name.count, CollectionPorting.maxFolderPrefixLength + 10)
+        XCTAssertTrue(name.hasSuffix("… / R"), name)
+    }
+
     /// Postman uid'i doğrulanmadan adrese eklenmez (güvenlik taraması P9).
     func testPostmanUIDIsValidatedBeforeAnyRequest() async {
         let client = PostmanAPIClient(hostPolicy: { .notConfigured })

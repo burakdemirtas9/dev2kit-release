@@ -219,6 +219,16 @@ final class DamagedKibanaTests: XCTestCase {
         XCTAssertTrue(AutoImport.scan(#"{"_index": "test-x", bozuk"#).kibanaDocuments.isEmpty, "request_path yoksa kayıt kurulmaz")
     }
 
+    /// `tolerant` kapanış bulamayınca taradığı bütçeden düşülür; düşülmeyince
+    /// kapanmayan her `{` metnin sonuna kadar yeniden taranıyordu (yeniden
+    /// tarama: 320 KB 19 sn).
+    func testUnclosedRepairAttemptsAreBudgeted() {
+        let text = String(repeating: "{\"a\":\"x\n\"b\": \"\nzzz}\n", count: 16_000)
+        let start = Date()
+        _ = JSONBlockExtractor.blocks(in: text)
+        XCTAssertLessThan(Date().timeIntervalSince(start), 10, "tarama bütçeyle sınırlı")
+    }
+
     /// Sınıra gelince kurtarma durur (güvenlik taraması P6).
     func testLooseRecoveryStopsAtTheLimit() {
         let record = "\"_index\": \"x\",\n\"request_path\": \"/a\",\n"

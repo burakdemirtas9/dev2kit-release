@@ -18,15 +18,19 @@ struct ProjectIndex {
     /// Bean'in adres ifadesi kendi dosyasında (ör. `@Value` parametresiyle) çözülür.
     var sourcesByPath: [String: JavaSource] = [:]
 
+    // Regex'lerdeki niceleyiciler üst sınırlı: kapanış (`;`, `{`, `>`) yoksa
+    // sınırsız olanı her başlangıçta dosya sonuna kadar tarıyordu; 200 KB
+    // dosya 77 sn sürüyordu (yeniden tarama, 2026-11-01). Sınırlar gerçek
+    // Java bildirimlerinden çok büyük.
     init(sources: [JavaSource]) {
         for source in sources {
             sourcesByPath[source.path] = source
             let typeName = source.primaryTypeName ?? ""
-            for match in source.matches(#"\bstatic\s+final\s+String\s+([A-Za-z_]\w*)\s*=\s*([^;]+);"#) {
+            for match in source.matches(#"\bstatic\s+final\s+String\s+([A-Za-z_]\w*)\s*=\s*([^;]{1,2000});"#) {
                 fileConstants[source.path, default: [:]][match.groups[0]] = match.groups[1]
                 if !typeName.isEmpty { qualifiedConstants["\(typeName).\(match.groups[0])"] = match.groups[1] }
             }
-            for match in source.matches(#"@Value\s*\(\s*"\$\{([^"]+)\}"\s*\)\s*(?:(?:private|protected|public|final)\s+)*[\w.<>\[\]]+\s+([A-Za-z_]\w*)"#) {
+            for match in source.matches(#"@Value\s*\(\s*"\$\{([^"]{1,500})\}"\s*\)\s*(?:(?:private|protected|public|final)\s+)*[\w.<>\[\]]+\s+([A-Za-z_]\w*)"#) {
                 // Varsayılan değer korunur: anahtar ayarlarda yoksa Spring onu kullanır.
                 valueFields[source.path, default: [:]][match.groups[1]] = match.groups[0]
             }
@@ -36,16 +40,16 @@ struct ProjectIndex {
     }
 
     private mutating func indexTypes(in source: JavaSource) {
-        for match in source.matches(#"\benum\s+([A-Za-z_]\w*)[^{]*\{\s*([A-Z_][A-Z0-9_]*)"#) {
+        for match in source.matches(#"\benum\s+([A-Za-z_]\w*)[^{]{0,1000}\{\s*([A-Z_][A-Z0-9_]*)"#) {
             enums[match.groups[0]] = match.groups[1]
         }
-        for match in source.matches(#"\brecord\s+([A-Za-z_]\w*)\s*(?:<[^>]*>)?\s*\("#) {
+        for match in source.matches(#"\brecord\s+([A-Za-z_]\w*)\s*(?:<[^>]{0,500}>)?\s*\("#) {
             guard let paren = source.text.dropFirst(match.offset).firstIndex(of: "(") else { continue }
             let start = source.text.distance(from: source.text.startIndex, to: paren)
             guard let end = source.matching(from: start) else { continue }
             classes[match.groups[0]] = JavaSyntax.splitTopLevel(source.slice((start + 1)..<end)).compactMap(Self.field)
         }
-        for match in source.matches(#"\bclass\s+([A-Za-z_]\w*)\s*(?:<[^>]*>)?\s*(?:extends\s+([A-Za-z_][\w.]*))?[^{]*\{"#) {
+        for match in source.matches(#"\bclass\s+([A-Za-z_]\w*)\s*(?:<[^>]{0,500}>)?\s*(?:extends\s+([A-Za-z_][\w.]*))?[^{]{0,1000}\{"#) {
             let name = match.groups[0]
             if !match.groups[1].isEmpty { superclasses[name] = match.groups[1].split(separator: ".").last.map(String.init) }
             guard let brace = source.text.dropFirst(match.offset).firstIndex(of: "{") else { continue }
@@ -119,7 +123,7 @@ struct ProjectIndex {
 
     /// `@Bean WebClient partnerClient(...) { … .baseUrl(x) … }`
     private mutating func indexClientBeans(in source: JavaSource) {
-        for match in source.matches(#"@Bean\b[^;{]*?\b(WebClient|RestClient|RestTemplate)\s+([A-Za-z_]\w*)\s*\("#) {
+        for match in source.matches(#"@Bean\b[^;{]{0,1000}?\b(WebClient|RestClient|RestTemplate)\s+([A-Za-z_]\w*)\s*\("#) {
             // Gövde parametre listesinden sonra başlar; parametredeki
             // `@Value("${x}")` metnindeki süslü parantez gövde sanılmasın.
             guard let paren = source.text.dropFirst(match.offset).firstIndex(of: "(") else { continue }

@@ -48,13 +48,22 @@ extension AppState {
 
     /// Dokümandan koleksiyon kurar ve içe aktarma incelemesinden geçirir.
     func prepareOpenAPIImport(_ document: OpenAPIImporter.Document, variableName: String) -> Result<PreparedImport, ImportFailure> {
+        Self.prepareOpenAPI(document, variableName: variableName,
+                            existingNames: workspace.collections.map(\.name), context: importContext)
+    }
+
+    /// Saf hali: koleksiyon üretimi (50 MB'a kadar metin) arka planda çalışabilsin.
+    nonisolated static func prepareOpenAPI(
+        _ document: OpenAPIImporter.Document, variableName: String,
+        existingNames: [String], context: ImportReviewer.Context
+    ) -> Result<PreparedImport, ImportFailure> {
         do {
             let outcome = try OpenAPIImporter.makeCollection(
                 from: document,
                 variableName: variableName,
-                existingNames: workspace.collections.map(\.name)
+                existingNames: existingNames
             )
-            let review = ImportReviewer.review(collection: outcome.collection, notes: outcome.warnings, context: importContext)
+            let review = ImportReviewer.review(collection: outcome.collection, notes: outcome.warnings, context: context)
             return .success(PreparedImport(review: review, wasRenamed: outcome.wasRenamed))
         } catch {
             return .failure(ImportFailure(message: L10n.t("import.createFailed", error.localizedDescription)))
@@ -120,23 +129,40 @@ extension AppState {
         }
     }
 
+    /// Dosya okuma, çözümleme ve inceleme arka planda (`BackgroundWork`):
+    /// 20 MB'a kadar dosya ana iş parçacığında uygulamayı donduruyordu
+    /// (UI-KURALLARI §4; yeniden tarama, 2026-11-01). Ad ve bağlam önce
+    /// MainActor'da alınır; sonuç geri gelince eklenir.
     func importCollection(from url: URL, source: ImportSource) {
+        let existingNames = workspace.collections.map(\.name)
+        let context = importContext
+        Task { [weak self] in
+            let outcome = await BackgroundWork.run { Self.readAndPrepare(url, source: source, existingNames: existingNames, context: context) }
+            guard let self else { return }
+            switch outcome {
+            case .success(let prepared): self.importPrepared(prepared)
+            case .failure(let failure): self.portingMessage = self.importFailed(failure.message)
+            }
+        }
+    }
+
+    nonisolated static func readAndPrepare(
+        _ url: URL, source: ImportSource, existingNames: [String], context: ImportReviewer.Context
+    ) -> Result<PreparedImport, ImportFailure> {
+        // Okuma artık çağrıdan sonra: erişim okumanın kendisini sarar.
+        let accessing = url.startAccessingSecurityScopedResource()
+        defer { if accessing { url.stopAccessingSecurityScopedResource() } }
         let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
         guard size <= ImportReviewer.maxImportBytes else {
-            portingMessage = importFailed(L10n.t("import.fileTooLarge", ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file), L10n.number(ImportReviewer.maxImportBytes / 1_048_576)))
-            return
+            return .failure(ImportFailure(message: L10n.t("import.fileTooLarge", ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file), L10n.number(ImportReviewer.maxImportBytes / 1_048_576))))
         }
         let data: Data
         do {
             data = try Data(contentsOf: url)
         } catch {
-            portingMessage = importFailed(L10n.t("import.fileUnreadable", error.localizedDescription))
-            return
+            return .failure(ImportFailure(message: L10n.t("import.fileUnreadable", error.localizedDescription)))
         }
-        switch prepareImport(data, source: source) {
-        case .success(let prepared): importPrepared(prepared)
-        case .failure(let failure): portingMessage = importFailed(failure.message)
-        }
+        return prepare(data, source: source, existingNames: existingNames, context: context)
     }
 
     /// Hazırlanmış koleksiyonları ekler ya da birlikte incelemeye gönderir.
@@ -169,11 +195,17 @@ extension AppState {
     /// - Parameter reservedNames: Aynı turda hazırlanan diğer koleksiyonların
     ///   adları; birlikte onaylandıklarında ad çakışmasın.
     func prepareImport(_ data: Data, source: ImportSource, reservedNames: [String] = []) -> Result<PreparedImport, ImportFailure> {
+        Self.prepare(data, source: source, existingNames: workspace.collections.map(\.name) + reservedNames, context: importContext)
+    }
+
+    /// `prepareImport`'un saf hali: MainActor'a bağlı değil, arka planda çalışır.
+    nonisolated static func prepare(
+        _ data: Data, source: ImportSource, existingNames: [String], context: ImportReviewer.Context
+    ) -> Result<PreparedImport, ImportFailure> {
         guard data.count <= ImportReviewer.maxImportBytes else {
             return .failure(ImportFailure(message: L10n.t("import.collectionTooLarge", L10n.number(ImportReviewer.maxImportBytes / 1_048_576))))
         }
         do {
-            let existingNames = workspace.collections.map(\.name) + reservedNames
             let outcome: CollectionPorting.ImportOutcome
             switch source {
             case .dev2kit:
@@ -181,7 +213,7 @@ extension AppState {
             case .postman:
                 outcome = try CollectionPorting.importPostman(data, existingNames: existingNames)
             }
-            let review = ImportReviewer.review(collection: outcome.collection, notes: outcome.warnings, context: importContext)
+            let review = ImportReviewer.review(collection: outcome.collection, notes: outcome.warnings, context: context)
             return .success(PreparedImport(review: review, wasRenamed: outcome.wasRenamed))
         } catch {
             return .failure(ImportFailure(message: L10n.t("import.failed", error.localizedDescription)))
@@ -336,13 +368,13 @@ extension AppState {
         case selectedRequest
     }
 
-    enum ImportSource {
+    enum ImportSource: Sendable {
         case dev2kit
         case postman
     }
 
     /// İncelemeden geçmiş, onay bekleyen içe aktarma.
-    struct PreparedImport: Identifiable {
+    struct PreparedImport: Identifiable, Sendable {
         let review: CollectionReview
         let wasRenamed: Bool
         var id: UUID { review.id }
@@ -355,7 +387,7 @@ extension AppState {
         let items: [PreparedImport]
     }
 
-    struct ImportFailure: Error {
+    struct ImportFailure: Error, Sendable {
         let message: String
     }
 

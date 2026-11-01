@@ -9,12 +9,33 @@ import Foundation
 public enum HistoryRedactor {
     public static let mask = "••••••"
 
-    /// Değer bir şablon referansıysa gizli sayılmaz; ham değerse maskelenir.
+    /// Değer yalnızca şablon referansıysa (önünde kimlik şeması olabilir:
+    /// `Bearer {{token}}`) gizli sayılmaz; içinde düz metin varsa maskelenir.
+    /// Eskiden `{{` geçmesi yetiyordu: `p{{x}}gercekParola` açık kalıyordu.
     private static func maskIfLiteral(_ value: String) -> String {
         if value.isEmpty { return value }
-        if value.contains("{{") && value.contains("}}") { return value }
+        var rest = value.trimmingCharacters(in: .whitespaces)
+        if let scheme = HeaderClassifier.authSchemes.first(where: { rest.lowercased().hasPrefix($0) }) {
+            rest = String(rest.dropFirst(scheme.count))
+        }
+        let literal = rest.replacingOccurrences(of: #"\{\{[^{}]*\}\}"#, with: "", options: .regularExpression)
+        if rest != literal, literal.trimmingCharacters(in: .whitespaces).isEmpty { return value }
         return mask
     }
+
+    /// Adı ne olursa olsun değer bir token biçimindeyse (JWT, bilinen sağlayıcı
+    /// önekleri) maskelenir: `"data": "eyJ…"`. Ucuz önek denetimi; her
+    /// değerde regex derlenmez (yanıtlar büyük olabilir).
+    static func looksLikeToken(_ value: String) -> Bool {
+        let trimmed = value.hasPrefix("Bearer ") ? String(value.dropFirst(7)) : value
+        guard trimmed.count >= 20, !trimmed.contains(" ") else { return false }
+        if trimmed.hasPrefix("eyJ"), trimmed.filter({ $0 == "." }).count == 2 { return true }
+        return tokenPrefixes.contains(where: trimmed.hasPrefix)
+    }
+
+    static let tokenPrefixes = ["ghp_", "gho_", "ghu_", "ghs_", "ghr_", "github_pat_", "xoxa-", "xoxb-", "xoxp-",
+                                "xoxr-", "xoxs-", "sk_live_", "sk_test_", "rk_live_", "rk_test_", "AIza", "glpat-",
+                                "sk-", "AKIA", "ASIA"]
 
     public static func redact(_ model: RequestModel) -> RequestModel {
         var copy = model
@@ -99,15 +120,25 @@ public enum HistoryRedactor {
     /// da çalışır ve yapıyı bozmaz.
     public static func redactStructuredText(_ text: String) -> String {
         guard text.contains(":") else { return text }
-        let pattern = #/"([A-Za-z0-9_\-]+)"\s*:\s*"((?:\\.|[^"\\])*)"/#
+        // Değer metin ya da sayı: kimlik alanındaki sayı da (`"pin": 1234`) maskelenir.
+        let pattern = #/"([A-Za-z0-9_\-]+)"\s*:\s*(?:"((?:\\.|[^"\\])*)"|(-?\d+(?:\.\d+)?))/#
         var output = ""
         var lastIndex = text.startIndex
         for match in text.matches(of: pattern) {
             output += text[lastIndex..<match.range.lowerBound]
             let key = String(match.1)
-            let value = String(match.2)
-            if CredentialNames.isCredentialField(key) {
-                output += "\"\(key)\": \"\(maskIfLiteral(value))\""
+            let isCredential = CredentialNames.isCredentialField(key)
+            if let quoted = match.2 {
+                let value = String(quoted)
+                if isCredential {
+                    output += "\"\(key)\": \"\(maskIfLiteral(value))\""
+                } else if looksLikeToken(value) {
+                    output += "\"\(key)\": \"\(mask)\""
+                } else {
+                    output += text[match.range]
+                }
+            } else if isCredential {
+                output += "\"\(key)\": \"\(mask)\""
             } else {
                 output += text[match.range]
             }
@@ -117,10 +148,29 @@ public enum HistoryRedactor {
         return output
     }
 
+    /// Sınırın ötesinde maskelenen pay. Maskeleme önce metnin TAMAMINDA
+    /// çalışıp sonra kırpılıyordu: geçmiş MainActor'da yazıldığı için 5 MB
+    /// yanıt her gönderimde 2,2 sn, 20 MB 8,8 sn donduruyordu (yeniden
+    /// inceleme, 2026-11-01, ölçüldü). Artık sınır + pay kadarı maskelenir;
+    /// pay, sınırı kesen bir değerin tamamının görülmesi için. Bu paydan
+    /// uzun bir kimlik değeri sınırı keserse eşleşmeyebilir (gerçekçi değil).
+    static let redactionMargin = 65_536
+
     /// Yanıt önizlemesi: kimlik alanları maskelenir ve boyut sınırlanır.
     public static func redactResponse(_ text: String, limit: Int) -> String {
-        let masked = redactStructuredText(text)
-        guard masked.count > limit else { return masked }
-        return String(masked.prefix(limit)) + "\n" + L10n.plural("history.charsTrimmed", count: masked.count - limit)
+        let window = text.prefix(limit + redactionMargin)
+        let rest = text[window.endIndex...]
+        let masked = redactStructuredText(String(window))
+        guard masked.count > limit || !rest.isEmpty else { return masked }
+        let trimmed = masked.count - limit + rest.count
+        return String(masked.prefix(limit)) + "\n" + L10n.plural("history.charsTrimmed", count: trimmed)
+    }
+
+    /// Geçmişe yazılan istek kopyası: gövde önce sınır + pay kadar kırpılır,
+    /// maskelenir, sonra sınıra kırpılır (bkz. `redactionMargin`). Eskiden
+    /// tamamı maskelenip sonra kırpılıyordu.
+    public static func snapshot(_ model: RequestModel, maxBodyBytes: Int) -> RequestModel {
+        let window = HistoryTrimmer.trim(model, maxBodyBytes: maxBodyBytes + redactionMargin)
+        return HistoryTrimmer.trim(redact(window), maxBodyBytes: maxBodyBytes)
     }
 }

@@ -318,6 +318,11 @@ enum JSONBlockExtractor {
                     index += 1
                 }
             } else {
+                // `tolerant` yalnızca sınıra kadar tarayıp kapanış bulamayınca
+                // `nil` döner: taradığı kadar bütçeden düşülür. Düşülmeyince
+                // kapanmayan her `{` metnin sonuna kadar yeniden taranıyor,
+                // süre karesel büyüyordu (yeniden tarama: 320 KB 19 sn).
+                budget -= min(bytes.count, index + max(budget, 0)) - index
                 index += 1
             }
         }

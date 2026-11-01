@@ -209,8 +209,14 @@ public enum SQLFormatter {
     static func isWildcardPosition(_ text: String) -> Bool {
         guard let last = text.last else { return true }
         if last == "(" || last == "." { return true }
-        let currentLine = text.reversed().prefix { !$0.isNewline }
-        return currentLine.allSatisfy { $0 == " " || $0 == "\t" }
+        // Satırın başına kadar yalnızca boşluk mu: ilk boşluk olmayanda karar
+        // verilir. Eskiden her `*`'da satırın tamamı ayrılıp taranıyordu;
+        // `*` × 16000 3,7 sn sürüyordu (yeniden tarama, 2026-11-01).
+        for character in text.reversed() {
+            if character.isNewline { return true }
+            if character != " " && character != "\t" { return false }
+        }
+        return true
     }
 
     // MARK: - Sıkıştırma

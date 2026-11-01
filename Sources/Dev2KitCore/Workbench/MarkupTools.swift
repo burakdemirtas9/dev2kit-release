@@ -18,7 +18,11 @@ public enum MarkupTools {
         // sonunda genel bir kod (111) ile belgenin sonunu bildiriyor (ölçüldü).
         let recorder = FirstErrorRecorder()
         parser.delegate = recorder
-        if parser.parse() { return .valid }
+        let parsed = parser.parse()
+        if recorder.declaresEntity {
+            return .invalid(WorkbenchIssue(message: L10n.t("xml.entityDeclaration")))
+        }
+        if parsed { return .valid }
         let first = recorder.first
         let code = first?.code ?? (parser.parserError as NSError?)?.code ?? -1
         let message = L10n.t("beautify.invalid", "XML", xmlMessage(code))
@@ -30,10 +34,20 @@ public enum MarkupTools {
 
     private final class FirstErrorRecorder: NSObject, XMLParserDelegate {
         var first: (code: Int, line: Int, column: Int)?
+        var declaresEntity = false
 
         func parser(_ parser: XMLParser, parseErrorOccurred parseError: Error) {
             guard first == nil else { return }
             first = ((parseError as NSError).code, parser.lineNumber, parser.columnNumber)
+        }
+
+        /// İç varlık bildirimi görülünce durulur: libxml "billion laughs"ı
+        /// kesiyor ama tek büyük varlığın binlerce kez anılmasını kesmiyor
+        /// (ölçüldü: 1 MB × 20 bin anılma 9,8 sn; kesince 0,01 sn). Bildirim
+        /// kökten önce gelir, genişleme başlamadan durulur.
+        func parser(_ parser: XMLParser, foundInternalEntityDeclarationWithName name: String, value: String?) {
+            declaresEntity = true
+            parser.abortParsing()
         }
     }
 
@@ -135,7 +149,33 @@ public enum MarkupTools {
     }
 
     /// Etiketin `>` konumu; tırnak içindeki `>` sayılmaz.
-    private static func tagEnd(_ chars: [Character], from start: Int) -> Int? {
+    /// Her başlangıç için `tagEnd`'in sonucu (yoksa -1), sağdan sola tek
+    /// geçişte. `minify` kapanmamış her `<` için `tagEnd`'i baştan çağırıp
+    /// metnin sonuna kadar tarıyordu: 160 KB 54 sn (yeniden inceleme,
+    /// ölçüldü). Kural aynı: tırnak açan karakter eşine kadar atlanır, sonra
+    /// tırnaksız devam edilir; o yüzden sonuç `ends[eş + 1]`.
+    static func tagEnds(_ chars: [Character]) -> [Int] {
+        var ends = [Int](repeating: -1, count: chars.count)
+        var nextDouble = -1, nextSingle = -1
+        for i in stride(from: chars.count - 1, through: 0, by: -1) {
+            let ch = chars[i]
+            let after = i + 1 < chars.count ? ends[i + 1] : -1
+            switch ch {
+            case ">":
+                ends[i] = i
+            case "\"", "'":
+                let close = ch == "\"" ? nextDouble : nextSingle
+                ends[i] = close == -1 || close + 1 >= chars.count ? -1 : ends[close + 1]
+            default:
+                ends[i] = after
+            }
+            if ch == "\"" { nextDouble = i }
+            if ch == "'" { nextSingle = i }
+        }
+        return ends
+    }
+
+    static func tagEnd(_ chars: [Character], from start: Int) -> Int? {
         var quote: Character?
         var i = start
         while i < chars.count {
@@ -172,6 +212,10 @@ public enum MarkupTools {
         let language = html ? "HTML" : "XML"
         let chars = Array(try BeautifyError.requireContent(text, language: language))
         let scanner = CodeScanner(chars: chars)
+        let ends = tagEnds(chars)
+        // Bir konumdan bulunamayan kapanış etiketi sonrakilerden de bulunamaz:
+        // `<script>` × N kapanışsız her seferinde sona kadar aranıyordu.
+        var missingClose: [String: Int] = [:]
         var out = ""
         var index = 0
         var textRun = ""
@@ -209,9 +253,10 @@ public enum MarkupTools {
                 index = end + 1
                 continue
             }
-            guard let end = tagEnd(chars, from: index + 1) else {
+            guard index + 1 < chars.count, ends[index + 1] >= 0 else {
                 textRun.append(chars[index]); index += 1; continue
             }
+            let end = ends[index + 1]
             flushText()
             let tag = String(chars[index...end])
             out += tag
@@ -219,9 +264,13 @@ public enum MarkupTools {
             if html, !tag.hasPrefix("</") {
                 let name = tag.dropFirst().prefix { $0.isLetter || $0.isNumber || $0 == "-" }.lowercased()
                 if MarkupFormatter.rawTextElements.contains(name) || MarkupFormatter.verbatimElements.contains(name),
-                   let close = closingTag(chars, name: name, from: index) {
-                    out += String(chars[index..<close])
-                    index = close
+                   missingClose[name].map({ index < $0 }) ?? true {
+                    if let close = closingTag(chars, name: name, from: index) {
+                        out += String(chars[index..<close])
+                        index = close
+                    } else {
+                        missingClose[name] = index
+                    }
                 }
             }
         }

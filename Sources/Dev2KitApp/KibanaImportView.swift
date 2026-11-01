@@ -30,6 +30,9 @@ struct KibanaImportView: View {
     @State private var gatewayAddress = ""
     @State private var showingFilePicker = false
     @State private var importError: String?
+    /// Son başlayan ayrıştırma kazanır: geç biten eski sonuç yenisini ezmez.
+    @State private var parseGeneration = 0
+    @State private var parsing = false
 
     private var entry: KibanaImporter.Entry? {
         result?.entries.first { $0.id == entryID } ?? result?.entries.first
@@ -331,6 +334,8 @@ struct KibanaImportView: View {
     }
 
     private var canImport: Bool {
+        // Çözümleme sürerken (yazma beklemesi dahil) önizleme eski metne aittir.
+        guard !parsing else { return false }
         guard entry != nil, options.includeURL || options.includeBody || options.includeHeaders else { return false }
         if applyToSelected { return appState.selectedRequest != nil }
         if destination == .newCollection {
@@ -418,22 +423,46 @@ struct KibanaImportView: View {
         gatewayAddress = ""
     }
 
+    /// Çözümleme arka planda ve yazarken kısa beklemeyle: her tuşta 20 MB'a
+    /// kadar metin ana iş parçacığında yeniden çözülüyordu (UI-KURALLARI §4;
+    /// yeniden tarama, 2026-11-01). Yeni tuş eski çözümlemeyi geçersiz kılar.
     private func reparse() {
         importError = nil
-        let trimmed = json.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            result = nil
-            parseError = nil
-            return
+        parseGeneration += 1
+        parsing = true
+        let current = parseGeneration
+        let text = json
+        Task {
+            try? await Task.sleep(for: .milliseconds(250))
+            guard current == parseGeneration else { return }
+            let outcome = await BackgroundWork.run { () -> Result<KibanaImporter.ParseResult, KibanaParseFailure>? in
+                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else { return nil }
+                do {
+                    return .success(try KibanaImporter.parse(Data(trimmed.utf8)))
+                } catch {
+                    return .failure(KibanaParseFailure(message: error.localizedDescription))
+                }
+            }
+            guard current == parseGeneration else { return }
+            parsing = false
+            switch outcome {
+            case nil:
+                result = nil
+                parseError = nil
+            case .success(let parsed)?:
+                result = parsed
+                parseError = nil
+                selectEntry(parsed.entries.first?.id)
+            case .failure(let failure)?:
+                result = nil
+                parseError = failure.message
+            }
         }
-        do {
-            result = try KibanaImporter.parse(Data(trimmed.utf8))
-            parseError = nil
-            selectEntry(result?.entries.first?.id)
-        } catch {
-            result = nil
-            parseError = error.localizedDescription
-        }
+    }
+
+    private struct KibanaParseFailure: Error, Sendable {
+        let message: String
     }
 
     private func performImport() {

@@ -203,6 +203,7 @@ extension L10nTable {
         "redirect.crossOriginBody": L10nEntry("başka bir kaynağa redirect gövdeyi de taşırdı; durduruldu", "a redirect to another origin would have carried the body too; stopped"),
         "correlation.b3": L10nEntry("B3 (Zipkin) trace ID: request'in geçtiği tüm servislerde aynı kalır. Kibana'da bu değerle arayınca request'in bütün servislerdeki logları gelir.", "B3 (Zipkin) trace ID: it stays the same across every service the request passes through. Searching Kibana for it brings up the request’s logs from all services."),
         "correlation.generic": L10nEntry("Trace ID: log sisteminde bu request'i bulmak için kullanılır.", "Trace ID: used to find this request in the logging system."),
+        "xml.entityDeclaration": L10nEntry("XML bir varlık (<!ENTITY>) bildirimi içeriyor; güvenlik nedeniyle doğrulanmadı (büyük varlığın tekrar tekrar açılması uygulamayı kilitleyebilir).", "The XML contains an entity (<!ENTITY>) declaration; it wasn’t validated for safety (expanding a large entity repeatedly can lock up the app)."),
         "beautify.invalid": L10nEntry("Geçersiz %1$@: %2$@", "Invalid %1$@: %2$@"),
         "beautify.empty": L10nEntry("içerik boş", "the content is empty"),
         "beautify.unclosedComment": L10nEntry("/* yorumu */ ile kapatılmamış.", "a /* comment isn’t closed with */."),

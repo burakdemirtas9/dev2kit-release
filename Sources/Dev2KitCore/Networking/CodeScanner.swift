@@ -213,13 +213,22 @@ struct IndentedWriter {
         while let last = text.last, last == " " || last == "\n" { text.removeLast() }
     }
 
+    /// Yazılan girintinin üst sınırı (seviye sayılmaya devam eder). Her satır
+    /// derinlik kadar girinti aldığı için `{` × 16000 çıktıyı karesel büyütüp
+    /// (≈128 milyon karakter) 7 sn sürüyordu; güvenilmeyen yanıt gövdesi her
+    /// gönderimde biçimlendiriliyor (yeniden tarama, 2026-11-01). Okunabilir
+    /// kodda bu derinliğe hiç ulaşılmaz.
+    static let maxVisibleLevel = 64
+
+    private var currentIndent: String { String(repeating: indent, count: min(level, Self.maxVisibleLevel)) }
+
     /// Yeni satır ve o anki seviyenin girintisi. Sondaki boşluklar atılır;
     /// boş çıktıda (en baş) satır açılmaz.
     mutating func newline() {
         trimTrailing()
         lineClosed = false
         guard !text.isEmpty else { return }
-        text += "\n" + String(repeating: indent, count: level)
+        text += "\n" + currentIndent
     }
 
     /// Bir boş satır bırakıp yeni satıra geçer (CSS kuralları arası gibi).
@@ -227,7 +236,7 @@ struct IndentedWriter {
         trimTrailing()
         lineClosed = false
         guard !text.isEmpty else { return }
-        text += "\n\n" + String(repeating: indent, count: level)
+        text += "\n\n" + currentIndent
     }
 
     /// Kaynakta aynı satırda duran yorum kodun yanında kalır; kendi satırındaki

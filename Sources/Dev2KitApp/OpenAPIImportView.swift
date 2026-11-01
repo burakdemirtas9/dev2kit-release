@@ -41,6 +41,15 @@ struct OpenAPIImportView: View {
     @State private var variableName = ""
     @State private var addServerToEnvironment = true
     @State private var pendingReview: AppState.PendingImport?
+    /// Son başlayan çözümleme/hazırlık kazanır: geç biten eski sonuç yenisini ezmez.
+    @State private var workGeneration = 0
+
+    /// Çözümlenmiş doküman arka plandan ana iş parçacığına bir kez geçer.
+    /// `[String: Any]` taşıdığı için `Sendable` değil; çözümlemeden sonra
+    /// hiç değiştirilmiyor (yalnızca okunuyor), paylaşım güvenli.
+    private struct DocumentBox: @unchecked Sendable {
+        let document: OpenAPIImporter.Document
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -235,6 +244,7 @@ struct OpenAPIImportView: View {
     private func fetch() { load(address) }
 
     private func load(_ target: String) {
+        workGeneration += 1
         loading = true
         errorMessage = nil
         document = nil
@@ -262,6 +272,8 @@ struct OpenAPIImportView: View {
     }
 
     private func reset() {
+        // Kaynak değişti: uçuştaki çözümleme geç bitip yeni ekranı ezmesin.
+        workGeneration += 1
         document = nil
         groups = []
         errorMessage = nil
@@ -269,18 +281,36 @@ struct OpenAPIImportView: View {
 
     /// Yapıştırılan ya da dosyadan gelen doküman. Adres olmadığı için göreli
     /// sunucu adresleri çözülemez; kullanıcı önizlemede girer.
+    /// Çözümleme arka planda: 20 MB'a kadar doküman ana iş parçacığında
+    /// uygulamayı donduruyordu (UI-KURALLARI §4; yeniden tarama, 2026-11-01).
     private func parseJSON() {
-        let data = Data(json.utf8)
-        guard data.count <= ImportReviewer.maxImportBytes else {
-            errorMessage = L10n.t("openapi.documentTooLarge", L10n.number(ImportReviewer.maxImportBytes / 1_048_576))
-            return
-        }
-        do {
-            show(try OpenAPIImporter.parse(data, sourceURL: nil))
-            errorMessage = nil
-        } catch {
-            document = nil
-            errorMessage = error.localizedDescription
+        let text = json
+        // Eski doküman, yenisi çözülürken içe aktarılamasın (adresten
+        // getirmedeki `load` gibi).
+        document = nil
+        workGeneration += 1
+        let current = workGeneration
+        Task {
+            let outcome = await BackgroundWork.run { () -> Result<DocumentBox, AppState.ImportFailure> in
+                let data = Data(text.utf8)
+                guard data.count <= ImportReviewer.maxImportBytes else {
+                    return .failure(AppState.ImportFailure(message: L10n.t("openapi.documentTooLarge", L10n.number(ImportReviewer.maxImportBytes / 1_048_576))))
+                }
+                do {
+                    return .success(DocumentBox(document: try OpenAPIImporter.parse(data, sourceURL: nil)))
+                } catch {
+                    return .failure(AppState.ImportFailure(message: error.localizedDescription))
+                }
+            }
+            guard current == workGeneration else { return }
+            switch outcome {
+            case .success(let box):
+                show(box.document)
+                errorMessage = nil
+            case .failure(let failure):
+                document = nil
+                errorMessage = failure.message
+            }
         }
     }
 
@@ -300,15 +330,28 @@ struct OpenAPIImportView: View {
         parseJSON()
     }
 
+    /// Koleksiyon üretimi ve inceleme arka planda (bkz. `parseJSON`).
     private func prepare() {
         guard let document else { return }
-        switch appState.prepareOpenAPIImport(document, variableName: variableName.trimmingCharacters(in: .whitespaces)) {
-        case .success(let prepared):
-            // Sunucu adresinin nereye gittiği her zaman görülsün diye inceleme
-            // ekranı temiz içe aktarmada da gösterilir.
-            pendingReview = AppState.PendingImport(items: [prepared])
-        case .failure(let failure):
-            errorMessage = failure.message
+        let box = DocumentBox(document: document)
+        let variable = variableName.trimmingCharacters(in: .whitespaces)
+        let existingNames = appState.workspace.collections.map(\.name)
+        let context = appState.importContext
+        workGeneration += 1
+        let current = workGeneration
+        Task {
+            let outcome = await BackgroundWork.run {
+                AppState.prepareOpenAPI(box.document, variableName: variable, existingNames: existingNames, context: context)
+            }
+            guard current == workGeneration else { return }
+            switch outcome {
+            case .success(let prepared):
+                // Sunucu adresinin nereye gittiği her zaman görülsün diye inceleme
+                // ekranı temiz içe aktarmada da gösterilir.
+                pendingReview = AppState.PendingImport(items: [prepared])
+            case .failure(let failure):
+                errorMessage = failure.message
+            }
         }
     }
 

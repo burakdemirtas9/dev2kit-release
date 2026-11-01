@@ -400,4 +400,15 @@ final class OutboundScannerTests: XCTestCase {
         XCTAssertEqual(Set(scanned.calls.map(\.client)), ["gercek"])
         XCTAssertTrue(scanned.notes.contains { $0.contains("1 Kotlin") })
     }
+
+    /// Kapanışı olmayan bildirimler: sınırsız niceleyiciler her başlangıçta
+    /// dosya sonuna kadar tarıyordu (yeniden tarama: 200 KB 77 sn).
+    func testUnclosedDeclarationsStayFast() throws {
+        for unit in ["class a ", "@Bean x ", "enum a ", "static final String a = x "] {
+            let text = String(repeating: unit, count: 200_000 / unit.count)
+            let start = Date()
+            _ = try OutboundScanner.scan(files: [("src/main/java/X.java", text)], projectName: "p")
+            XCTAssertLessThan(Date().timeIntervalSince(start), 5, unit)
+        }
+    }
 }

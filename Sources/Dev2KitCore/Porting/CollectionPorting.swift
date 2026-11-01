@@ -163,6 +163,16 @@ public enum CollectionPorting {
         return copy
     }
 
+    /// Klasör önekinin üst sınırı (karakter). Önek her istek adına kopyalanır:
+    /// 1000 karakterlik 100 iç içe klasör × 5000 istek, 277 KB dosyadan
+    /// 501 MB ad üretiyordu (yeniden tarama, 2026-11-01).
+    static let maxFolderPrefixLength = 300
+
+    static func limitedPrefix(_ prefix: String) -> String {
+        guard prefix.count > maxFolderPrefixLength else { return prefix }
+        return String(prefix.prefix(maxFolderPrefixLength)) + "…"
+    }
+
     private static func flatten(
         items: [PostmanCollection.Item],
         prefix: String,
@@ -173,7 +183,7 @@ public enum CollectionPorting {
             if let children = item.item {
                 // Klasörler düzleştirilir; isim "Klasör / İstek" olur.
                 let folder = item.name ?? L10n.t("porting.folder")
-                flatten(items: children, prefix: prefix.isEmpty ? folder : "\(prefix) / \(folder)",
+                flatten(items: children, prefix: limitedPrefix(prefix.isEmpty ? folder : "\(prefix) / \(folder)"),
                         into: &requests, warnings: &warnings)
                 continue
             }

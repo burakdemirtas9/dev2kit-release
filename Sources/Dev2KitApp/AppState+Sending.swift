@@ -37,8 +37,13 @@ extension AppState {
         // Gönderilen istek kullanılan istektir: önizleme sekmesi kalıcı olur.
         keepTab(request.id)
         let id = request.id
-        // Aynı isteğin önceki gönderimi hâlâ uçuyorsa iptal et.
+        // Aynı isteğin önceki gönderimi hâlâ uçuyorsa iptal et. İptal edilen
+        // görev bitince durumu yalnızca hâlâ güncel nesilse yazar: eskiden
+        // koşulsuz `.idle` ve `inFlight[id] = nil` yazıp yeni gönderimin
+        // "yükleniyor"unu ve ⌘. tutamacını siliyordu (yeniden tarama).
         inFlight[id]?.cancel()
+        let generation = (sendGenerations[id] ?? 0) + 1
+        sendGenerations[id] = generation
         setResponse(.loading, for: id)
         // Önceki denemeden kalan öneri yeni istekle karışmasın.
         tlsSuggestion = nil
@@ -54,6 +59,7 @@ extension AppState {
 
         inFlight[id] = Task { [weak self] in
             guard let self else { return }
+            let isCurrent = { self.sendGenerations[id] == generation }
             do {
                 await self.ensureValidToken(request)
                 // Token kullanan istekte önce geçerli token hazırlanır; süresinin
@@ -100,6 +106,7 @@ extension AppState {
                 // Büyük yığın: sunucudan gelen derin gövde yığını taşırmasın (BackgroundWork).
                 let display = await BackgroundWork.run { AppState.makeDisplay(response) }
                 try Task.checkCancellation()
+                guard isCurrent() else { return }
                 self.setResponse(.success(display), for: id)
                 // Referans noktası: "en son bunu test ettim".
                 self.recordBaseline(request)
@@ -112,27 +119,34 @@ extension AppState {
                         byteCount: data.body.count,
                         redirectCount: data.redirects.count
                     ),
-                    responseText: display.prettyText
+                    // Token Factory yanıtı token'ın kendisidir; geçmişe (diske)
+                    // yazılmaz (TokenFactory'nin sözü; yeniden tarama).
+                    responseText: isTokenRequest ? nil : display.prettyText
                 )
             } catch is CancellationError {
+                guard isCurrent() else { return }
                 self.setResponse(.idle, for: id)
             } catch let error as URLError where error.code == .cancelled {
+                guard isCurrent() else { return }
                 self.setResponse(.idle, for: id)
             } catch RequestEngineError.securityBlocked(let findings) {
+                guard isCurrent() else { return }
                 self.setResponse(.blocked(findings), for: id)
                 // Denetim izi: engellenen gönderim geçmişte görünsün.
                 let reasons = findings.map(\.title).joined(separator: ", ")
                 self.recordHistory(request, outcome: .failed(message: L10n.t("send.blocked.history", reasons)), responseText: nil)
             } catch RequestEngineError.needsApproval(let findings) {
+                guard isCurrent() else { return }
                 self.setResponse(.needsApproval(findings), for: id)
             } catch {
+                guard isCurrent() else { return }
                 self.setResponse(.failure(error.localizedDescription), for: id)
                 // TLS güven hatasıysa: host'a uyan profil yok ama benzeri
                 // varsa kullanıcıya eklemeyi teklif et.
                 self.offerTLSSuggestion(for: error)
                 self.recordHistory(request, outcome: .failed(message: error.localizedDescription), responseText: nil)
             }
-            self.inFlight[id] = nil
+            if isCurrent() { self.inFlight[id] = nil }
         }
     }
 
@@ -254,6 +268,11 @@ extension AppState {
         /// Önizlenebiliyorsa türü. Gövdenin ilk byte'larına bakmak her
         /// render'da yapılacak iş değil; tür tespitiyle birlikte bir kez.
         let previewKind: ResponsePreview.Kind?
+        /// Gövde UTF-8 metin mi ve önizlemenin HAM metni. `bodyText` her
+        /// erişimde gövdenin tamamını çözüyor; görünüm her çizimde çağırıyordu
+        /// (50 MB'ta çizim başına 14 ms, ölçüldü). Bir kez, burada.
+        var isText = false
+        var previewText: String?
         /// Editörde gösterilebilir mi (`WorkbenchLimits`, Workbench çıktısıyla
         /// aynı kural: 20 MB'a kadar, 1 MB'tan uzun satır yok). Biçimlenemeyen
         /// tek satırlık büyük yanıt (düz metin, bozuk JSON) editörü
@@ -268,15 +287,19 @@ extension AppState {
     nonisolated static func makeDisplay(_ response: ResponseData) -> ResponseDisplay {
         let contentType = response.headers
             .first { $0.name.lowercased() == "content-type" }?.value ?? ""
-        let text = response.bodyText ?? L10n.plural("response.binary", count: response.body.count)
+        let decoded = response.bodyText
+        let text = decoded ?? L10n.plural("response.binary", count: response.body.count)
         // Tür tahmini ve biçimlendirme tek yerde: Beautifier (Core, testli).
         let kind = Beautifier.kind(contentType: contentType, body: text)
         let pretty = Beautifier.beautifiedOrOriginal(text, as: kind)
+        let previewKind = ResponsePreview.kind(contentType: contentType, body: response.body)
         return ResponseDisplay(
             data: response,
             prettyText: pretty,
             language: CodeLanguage(kind),
-            previewKind: ResponsePreview.kind(contentType: contentType, body: response.body),
+            previewKind: previewKind,
+            isText: !response.body.isEmpty && decoded != nil,
+            previewText: previewKind == nil ? nil : decoded,
             fitsEditor: !WorkbenchLimits.isTooLargeForEditor(pretty, maxBytes: WorkbenchLimits.maxOutputBytes),
             stats: TextStats(pretty)
         )

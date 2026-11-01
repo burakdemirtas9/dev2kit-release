@@ -116,6 +116,13 @@ enum OfficeText {
             return output
         }
 
+        /// Office XML DTD taşımaz: varlık bildirimi görülürse durulur. Tek büyük
+        /// varlığın binlerce kez anılması libxml'de kesilmiyor (ölçüldü:
+        /// 1 MB × 20 bin anılma 9,8 sn).
+        func parser(_ parser: XMLParser, foundInternalEntityDeclarationWithName name: String, value: String?) {
+            parser.abortParsing()
+        }
+
         func parser(_ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?,
                     qualifiedName qName: String?, attributes attributeDict: [String: String] = [:]) {
             if elementName == textElement { inText = true }

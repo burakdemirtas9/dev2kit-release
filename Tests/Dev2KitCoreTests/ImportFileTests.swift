@@ -110,6 +110,18 @@ final class ImportFileTests: XCTestCase {
         XCTAssertEqual(CRC32.checksum(Data()), 0)
     }
 
+    /// Office XML DTD taşımaz: varlık bildirimi görülünce durulur (yeniden
+    /// tarama: 1 MB varlık × 20 bin anılma 9,8 sn).
+    func testOfficeXMLWithEntityDeclarationIsNotExpanded() throws {
+        let big = String(repeating: "x", count: 1_000_000)
+        let xml = "<!DOCTYPE d [<!ENTITY e \"\(big)\">]><w:document xmlns:w=\"w\"><w:p><w:t>\(String(repeating: "&e;", count: 20_000))</w:t></w:p></w:document>"
+        let data = zip([("word/document.xml", Data(xml.utf8))])
+        let start = Date()
+        let text = (try? ImportFile.text(of: data, kind: .word)) ?? ""
+        XCTAssertLessThan(Date().timeIntervalSince(start), 2)
+        XCTAssertFalse(text.contains("xxxx"), "varlık açılmaz")
+    }
+
     func testOtherArchivesAreRejected() {
         guard case .failure(let rejection) = ImportFile.kind(of: zip([("a.txt", Data("x".utf8))])) else { return XCTFail() }
         XCTAssertTrue(rejection.message.contains("ZIP arşivi"))

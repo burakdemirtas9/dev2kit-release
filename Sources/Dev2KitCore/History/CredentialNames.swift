@@ -23,9 +23,19 @@ public enum CredentialNames {
         "credential", "credentials", "otp", "pin",
     ]
 
+    /// Tam ad listesi + sınıflandırıcının ad kuralı (`HeaderClassifier`):
+    /// yalnızca tam ad bakılınca `X-Vault-Token`, `X-Password`,
+    /// `Ocp-Apim-Subscription-Key` geçmişe ve örneklere düz yazılıyordu
+    /// (yeniden tarama, 2026-11-01). Ad yeter; maskeleme ihtiyatlıdır.
     public static func isCredentialHeader(_ name: String) -> Bool {
-        headers.contains(name.trimmingCharacters(in: .whitespaces).lowercased())
+        let lower = name.trimmingCharacters(in: .whitespaces).lowercased()
+        return headers.contains(lower) || HeaderClassifier.hasCredentialKeyword(lower)
     }
+
+    /// Alan adının herhangi bir yerinde geçmesi yeten sözcükler (`newPassword`,
+    /// `accessKey`, `secretKey`, `sessionToken`, `jwt`).
+    static let fieldKeywords = ["password", "passwd", "secret", "token", "apikey", "accesskey", "privatekey",
+                                "credential", "jwt"]
 
     public static func isCredentialField(_ name: String) -> Bool {
         let normalized = name.trimmingCharacters(in: .whitespaces).lowercased()
@@ -33,6 +43,7 @@ public enum CredentialNames {
         // camelCase / kebab-case varyantları: accessToken, api-key…
         let flattened = normalized.replacingOccurrences(of: "-", with: "")
             .replacingOccurrences(of: "_", with: "")
+        if fieldKeywords.contains(where: flattened.contains) { return true }
         return fields.contains { $0.replacingOccurrences(of: "_", with: "") == flattened }
     }
 }

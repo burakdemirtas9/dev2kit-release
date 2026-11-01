@@ -94,6 +94,69 @@ final class HistoryRedactorTests: XCTestCase {
         XCTAssertTrue(redacted.contains("\"sehir\":\"Ankara\""))
     }
 
+    /// Yeniden tarama: maskeleme yalnızca tam adlara bakıyordu; ölçülen
+    /// sızıntılar burada. Değerler sentetik.
+    func testBroaderCredentialNamesAndTokenValuesAreMasked() {
+        let json = #"{"newPassword":"p1","accessKey":"k1","secretKey":"s1","sessionToken":"t1","pin":1234,"#
+            + #""data":"eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.SYNTHETICsig","password":"p{{x}}gercek","sayi":42,"ad":"ali"}"#
+        let redacted = HistoryRedactor.redactStructuredText(json)
+        for leak in ["p1", "k1", "s1", "t1", "1234", "eyJhbGci", "gercek"] {
+            XCTAssertFalse(redacted.contains(leak), "\(leak) sızdı: \(redacted)")
+        }
+        XCTAssertTrue(redacted.contains("\"sayi\":42"), "kimlik olmayan sayı kalır")
+        XCTAssertTrue(redacted.contains("\"ad\":\"ali\""))
+    }
+
+    func testBroaderCredentialHeadersAreMasked() {
+        var model = RequestModel(url: "https://a.example.com")
+        model.headers = ["X-Vault-Token", "Ocp-Apim-Subscription-Key", "X-Password", "Private-Token", "X-Goog-Api-Key"]
+            .map { KeyValueEntry(key: $0, value: "SYNTHETIC-VALUE") } + [KeyValueEntry(key: "X-Cache-Key", value: "/a/b")]
+        let redacted = HistoryRedactor.redact(model)
+        XCTAssertEqual(redacted.headers.dropLast().map(\.value), Array(repeating: mask, count: 5))
+        XCTAssertEqual(redacted.headers.last?.value, "/a/b", "gizli olmayan başlık okunur kalır")
+    }
+
+    /// Geçmiş MainActor'da yazılır: maskeleme metnin tamamında çalışınca 5 MB
+    /// yanıt 2,2 sn donduruyordu (yeniden inceleme, ölçüldü). Sınır + pay
+    /// kadarı maskelenir; sınırı kesen değer yine maskelenir.
+    func testLargeResponseIsRedactedWithinTheWindowOnly() {
+        let filler = String(repeating: #"{"a":"b"},"#, count: 1_995)   // 19.950 karakter
+        let secret = "SYNTHETIC-" + String(repeating: "S", count: 200)
+        let tail = String(repeating: #"{"x":"y"},"#, count: 500_000)   // ~5 MB
+        let text = "[" + filler + #"{"token":""# + secret + #""},"# + tail + "{}]"
+        let start = Date()
+        let preview = HistoryRedactor.redactResponse(text, limit: 20_000)
+        XCTAssertLessThan(Date().timeIntervalSince(start), 1, "yalnızca pencere maskelenir")
+        XCTAssertFalse(preview.contains("SYNTHETIC"), "sınırı kesen kimlik değeri maskelenir")
+        // Tam maskelemedeki uzunluk: tek fark token alanının maskelenmesi.
+        let lengthChange = "\"token\": \"\(mask)\"".count - (#""token":""# + secret + #"""#).count
+        XCTAssertTrue(preview.hasSuffix(L10n.plural("history.charsTrimmed", count: text.count + lengthChange - 20_000)),
+                      "kırpılan sayı eskisiyle aynı")
+    }
+
+    func testSnapshotTrimsBeforeRedactingButStillMasks() {
+        var model = RequestModel(method: .post, url: "https://a.example.com")
+        let body = #"{"password":"SYNTHETIC-PW","data":""# + String(repeating: "x", count: 5_000_000) + #""}"#
+        model.body = .raw(content: body, contentType: "application/json")
+        let start = Date()
+        let snapshot = HistoryRedactor.snapshot(model, maxBodyBytes: 32_768)
+        XCTAssertLessThan(Date().timeIntervalSince(start), 1)
+        guard case .raw(let content, _) = snapshot.body else { return XCTFail("gövde bekleniyordu") }
+        XCTAssertFalse(content.contains("SYNTHETIC-PW"))
+        XCTAssertLessThan(content.utf8.count, 32_768 + 200, "sınıra kırpılır")
+        XCTAssertEqual(HistoryRedactor.snapshot(RequestModel(url: "https://a.example.com?token=abc"), maxBodyBytes: 1_024).url,
+                       "https://a.example.com?token=\(mask)", "adres maskelemesi aynı")
+    }
+
+    /// Yalnızca şablon olan değer okunur kalır; şemalı şablon da.
+    func testPureTemplatesStayReadable() {
+        var model = RequestModel(url: "https://a.example.com")
+        model.headers = [KeyValueEntry(key: "Authorization", value: "Bearer {{secret:token}}")]
+        XCTAssertEqual(HistoryRedactor.redact(model).headers.first?.value, "Bearer {{secret:token}}")
+        let json = #"{"password":"{{secret:db}}"}"#
+        XCTAssertEqual(HistoryRedactor.redactStructuredText(json), #"{"password": "{{secret:db}}"}"#)
+    }
+
     func testCamelCaseCredentialFieldMasked() {
         let json = #"{"accessToken":"abc","refresh_token":"def","ad":"ali"}"#
         let redacted = HistoryRedactor.redactStructuredText(json)

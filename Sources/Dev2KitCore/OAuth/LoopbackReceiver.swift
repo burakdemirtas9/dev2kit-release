@@ -39,6 +39,12 @@ public final class LoopbackReceiver: @unchecked Sendable {
 
         var reuse: Int32 = 1
         setsockopt(handle, SOL_SOCKET, SO_REUSEADDR, &reuse, socklen_t(MemoryLayout<Int32>.size))
+        // Kopan bağlantıya `write` SIGPIPE ile süreci öldürmesin (EPIPE dönsün).
+        // Dinleyen sokete konur, kabul edilen soketler devralır: `accept`
+        // sonrası ayarlamak yetmiyor, karşı taraf RST ile kapattıysa macOS
+        // `setsockopt`'u reddediyor (EINVAL) ve sinyal geliyordu (ölçüldü).
+        var noSignal: Int32 = 1
+        setsockopt(handle, SOL_SOCKET, SO_NOSIGPIPE, &noSignal, socklen_t(MemoryLayout<Int32>.size))
 
         var address = sockaddr_in()
         address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
@@ -139,9 +145,14 @@ public final class LoopbackReceiver: @unchecked Sendable {
                 continue
             }
             defer { close(client) }
+            // SIGPIPE koruması dinleyen soketten devralınır (bkz. init): bu
+            // Mac'teki herhangi bir süreç porta bağlanıp RST ile kapatarak
+            // uygulamayı kapatabiliyordu (ölçüldü, exit 141).
             // Bağlanıp hiçbir şey göndermeyen istemci beklemeyi kilitlemesin:
-            // okuma kalan süreyle sınırlı.
-            var limit = timeval(tv_sec: Int(max(remaining, 0.1)), tv_usec: Int32((max(remaining, 0.1).truncatingRemainder(dividingBy: 1)) * 1_000_000))
+            // okuma bağlantı başına en çok 5 sn (kalan süreyle değil; yoksa tek
+            // sessiz bağlantı gerçek callback'i süre dolana kadar bekletiyordu).
+            let window = min(max(remaining, 0.1), 5)
+            var limit = timeval(tv_sec: Int(window), tv_usec: Int32(window.truncatingRemainder(dividingBy: 1) * 1_000_000))
             setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, &limit, socklen_t(MemoryLayout<timeval>.size))
 
             var buffer = [UInt8](repeating: 0, count: 16 * 1024)

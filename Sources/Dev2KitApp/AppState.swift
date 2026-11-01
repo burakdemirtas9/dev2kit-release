@@ -479,6 +479,9 @@ final class AppState {
     }
 
     @ObservationIgnored var inFlight: [UUID: Task<Void, Never>] = [:]
+    /// İstek başına gönderim nesli: iptal edilen eski görev yeni gönderimin
+    /// durumunu ve iptal tutamacını ezmesin (bkz. `send`).
+    @ObservationIgnored var sendGenerations: [UUID: Int] = [:]
 
     // MARK: - Token Factory (davranış: AppState+TokenFactory)
 
