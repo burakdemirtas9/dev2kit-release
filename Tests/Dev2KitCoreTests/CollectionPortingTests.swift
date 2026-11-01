@@ -154,6 +154,22 @@ final class CollectionPortingTests: XCTestCase {
     func testInvalidPostmanFileThrows() {
         XCTAssertThrowsError(try CollectionPorting.importPostman(Data("[1,2]".utf8), existingNames: []))
     }
+
+    /// Güvenilmeyen dosya: Int sınırını aşan sayı çökertmemeli (güvenlik taraması P1).
+    func testNumericAuthValuesBeyondIntRangeDoNotCrash() throws {
+        func token(_ number: String) throws -> AuthConfig? {
+            let json = """
+            {"info": {"name": "Sayı"}, "item": [{"name": "R", "request": {"method": "GET", "url": "https://a.example.com",
+             "auth": {"type": "bearer", "bearer": [{"key": "token", "value": \(number)}]}}}]}
+            """
+            return try CollectionPorting.importPostman(Data(json.utf8), existingNames: []).collection.requests.first?.auth
+        }
+        XCTAssertEqual(try token("1e30"), .bearer(token: "1e+30"))
+        XCTAssertEqual(try token("-1e300"), .bearer(token: "-1e+300"))
+        XCTAssertEqual(try token("42"), .bearer(token: "42"), "tam sayı eskisi gibi")
+        XCTAssertEqual(try token("42.0"), .bearer(token: "42"))
+        XCTAssertEqual(try token("4.5"), .bearer(token: "4.5"))
+    }
 }
 
 final class UngroupedCollectionTests: XCTestCase {

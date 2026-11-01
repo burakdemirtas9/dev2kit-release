@@ -480,9 +480,9 @@ private struct PostmanCollection: Decodable {
             } else if let flag = try? container.decode(Bool.self, forKey: .value) {
                 self.value = String(flag)
             } else if let number = try? container.decode(Double.self, forKey: .value) {
-                self.value = number.truncatingRemainder(dividingBy: 1) == 0
-                    ? String(Int(number))
-                    : String(number)
+                // `Int(number)` Int sınırını aşan değerde (ör. 1e30) çöker;
+                // tam sayıya kayıpsız dönmeyen değer olduğu gibi yazılır.
+                self.value = Int(exactly: number).map(String.init) ?? String(number)
             } else {
                 self.value = nil
             }

@@ -208,4 +208,35 @@ final class DamagedKibanaTests: XCTestCase {
     func testRecoveryNeedsTheEssentialFields() {
         XCTAssertTrue(AutoImport.scan(#"{"_index": "test-x", bozuk"#).kibanaDocuments.isEmpty, "request_path yoksa kayıt kurulmaz")
     }
+
+    /// Kapanmamış JSON ardından çok sayıda boş satır: her satır sonu kalan
+    /// boşlukları baştan taramamalı (güvenlik taraması P3).
+    func testManyBlankLinesAfterUnclosedJSONStayFast() {
+        let blank = String(repeating: "\n", count: 300_000)
+        for opening in [#"{"a":"b"#, #"{"a":1"#] {
+            let start = Date()
+            XCTAssertTrue(JSONBlockExtractor.blocks(in: opening + blank + "x").isEmpty)
+            XCTAssertLessThan(Date().timeIntervalSince(start), 5, "\(opening): tarama doğrusal olmalı")
+        }
+    }
+
+    /// Kapanmamış header değerinde uzun boşluk: satır regex'i geri izlemeyle
+    /// kübik süre almamalı (güvenlik taraması P4).
+    func testLongWhitespaceInHeaderLineStaysFast() {
+        let text = """
+        "_index": "x",
+        "request_path": "/",
+        "headers": {
+        "k": "\(String(repeating: " ", count: 20_000))"x
+        "accept": "application/json"
+        }
+        """
+        let start = Date()
+        let records = LooseKibanaRecovery.records(in: text)
+        XCTAssertLessThan(Date().timeIntervalSince(start), 5, "satır regex'i geri izlememeli")
+        XCTAssertEqual(records.count, 1)
+        let json = try? JSONSerialization.jsonObject(with: Data((records.first?.json ?? "").utf8)) as? [String: Any]
+        let headers = (json?["_source"] as? [String: Any])?["headers"] as? [String: Any]
+        XCTAssertEqual(headers?["accept"] as? String, "application/json", "bozuk satırdan sonraki header okunur")
+    }
 }

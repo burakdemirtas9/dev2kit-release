@@ -381,8 +381,22 @@ public enum OpenAPIImporter {
 
         // MARK: Örnek üretimi
 
-        /// Şemadan örnek değer. Döngüsel `$ref` ve derinlik sınırlıdır.
+        /// Bir örnek için gezilecek en fazla şema düğümü. Birbirine `$ref` veren
+        /// kardeş özellikler ağacı üstel büyütür; döngü ve derinlik sınırı bunu
+        /// tek başına durdurmaz (güvenlik taraması P2: 10 özellikte 16 sn).
+        static let sampleNodeBudget = 2_000
+
+        /// Şemadan örnek değer. Döngüsel `$ref`, derinlik ve düğüm sayısı
+        /// sınırlıdır; bütçe biterse kalan alanlar boş nesne olur.
         func sample(_ raw: Any, depth: Int, seen: Set<String>) -> Any {
+            var budget = Self.sampleNodeBudget
+            return sample(raw, depth: depth, seen: seen, budget: &budget)
+        }
+
+        private func sample(_ raw: Any, depth: Int, seen: Set<String>, budget: inout Int) -> Any {
+            // Derinliğe takılan çağrı da çıktıya boş nesne yazar; bütçeden önce düşülür.
+            guard budget > 0 else { return [String: Any]() }
+            budget -= 1
             guard depth < 8, var schema = raw as? [String: Any] else { return [String: Any]() }
             var seen = seen
             if let ref = schema["$ref"] as? String {
@@ -394,25 +408,26 @@ public enum OpenAPIImporter {
             if let parts = schema["allOf"] as? [Any] {
                 var merged: [String: Any] = [:]
                 for part in parts {
-                    if let object = sample(part, depth: depth + 1, seen: seen) as? [String: Any] {
+                    if let object = sample(part, depth: depth + 1, seen: seen, budget: &budget) as? [String: Any] {
                         merged.merge(object) { current, _ in current }
                     }
                 }
                 return merged
             }
             if let first = ((schema["oneOf"] ?? schema["anyOf"]) as? [Any])?.first {
-                return sample(first, depth: depth + 1, seen: seen)
+                return sample(first, depth: depth + 1, seen: seen, budget: &budget)
             }
             let type = schema["type"] as? String ?? (schema["properties"] != nil ? "object" : "")
             switch type {
             case "object":
                 var object: [String: Any] = [:]
                 for (key, property) in (schema["properties"] as? [String: Any] ?? [:]).prefix(50) {
-                    object[key] = sample(property, depth: depth + 1, seen: seen)
+                    object[key] = sample(property, depth: depth + 1, seen: seen, budget: &budget)
                 }
                 return object
             case "array":
-                return schema["items"].map { [sample($0, depth: depth + 1, seen: seen)] } ?? []
+                guard let items = schema["items"] else { return [Any]() }
+                return [sample(items, depth: depth + 1, seen: seen, budget: &budget)]
             case "integer", "number":
                 return 0
             case "boolean":

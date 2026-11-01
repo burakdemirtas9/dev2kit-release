@@ -392,12 +392,22 @@ enum JSONBlockExtractor {
         var lastSignificant: UInt8 = 0
         var index = start
         let limit = min(bytes.count, start + budget)
+        // Bir boşluk dizisindeki her satır sonu aynı sonraki satıra bakar.
+        // Dizi bir kez taranır; yoksa çok sayıda boş satırda tarama karesel
+        // büyür (güvenlik taraması P3: 80 bin satır sonu 1,15 sn).
+        var lookahead = (from: -1, next: -1, isKey: false)
+        func nextLine(after position: Int) -> (next: Int, isKey: Bool) {
+            if position >= lookahead.from, position < lookahead.next { return (lookahead.next, lookahead.isKey) }
+            let next = nextLineStart(bytes, after: position)
+            lookahead = (position, next, startsWithKey(bytes, at: next))
+            return (next, lookahead.isKey)
+        }
         while index < limit {
             let byte = bytes[index]
             if inString {
                 if byte == 0x0A || byte == 0x0D {
-                    let next = nextLineStart(bytes, after: index)
-                    let closesHere = !escaped && (startsWithKey(bytes, at: next)
+                    let (next, nextIsKey) = nextLine(after: index)
+                    let closesHere = !escaped && (nextIsKey
                         || (next < bytes.count && (bytes[next] == UInt8(ascii: "}") || bytes[next] == UInt8(ascii: "]"))))
                     if closesHere {
                         output.append(quote)
@@ -405,7 +415,7 @@ enum JSONBlockExtractor {
                         lastString = String(decoding: current, as: UTF8.self)
                         truncated.append(currentKey ?? "?")
                         lastSignificant = quote
-                        if startsWithKey(bytes, at: next) {
+                        if nextIsKey {
                             output.append(UInt8(ascii: ","))
                             lastSignificant = UInt8(ascii: ",")
                         }
@@ -452,7 +462,7 @@ enum JSONBlockExtractor {
                     return Repaired(bytes: output, end: index, truncatedKeys: truncated, scanned: index - start + 1)
                 }
             case 0x0A, 0x0D:
-                if isValueEnd(lastSignificant), startsWithKey(bytes, at: nextLineStart(bytes, after: index)) {
+                if isValueEnd(lastSignificant), nextLine(after: index).isKey {
                     output.append(UInt8(ascii: ","))
                     lastSignificant = UInt8(ascii: ",")
                 }
@@ -598,7 +608,11 @@ enum LooseKibanaRecovery {
         var headers: [String: String] = [:]
         var lastKey: String?
         var lastClosed = true
-        let linePattern = try! NSRegularExpression(pattern: #"^\s*"([^"]+)"\s*:\s*"((?:[^"\\]|\\.)*)("?)\s*,?\s*$"#)
+        // `*+` (possessive) geri izlemez: değer ile sondaki boşluk/virgül
+        // arasında bölüşme denenmez. Düz `*` ile uzun boşluklu satır kübik
+        // süre alıyordu (güvenlik taraması P4: 800 boşluk 2,6 sn). Eşleşen
+        // satırlar aynı; en uzun eşleşme başarısızsa kısası da başarısız.
+        let linePattern = try! NSRegularExpression(pattern: #"^\s*"([^"]+)"\s*:\s*"((?:[^"\\]|\\.)*+)("?)\s*+,?\s*+$"#)
         for line in text[open.upperBound...].components(separatedBy: "\n") {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             if trimmed.hasPrefix("}") { break }

@@ -170,6 +170,34 @@ final class OpenAPIImporterTests: XCTestCase {
         XCTAssertNotNil(json["parent"])
     }
 
+    /// Kötü niyetli şema: S0…S7, her biri bir sonrakine `$ref` veren 20 özellik
+    /// taşıyor. Döngü yok ama ağaç 20^8 düğüm; düğüm bütçesi örneği sınırlar
+    /// (güvenlik taraması P2).
+    func testFanOutReferencesStayBounded() throws {
+        var schemas: [String: Any] = [:]
+        for level in 0..<8 {
+            let next: [String: Any] = level < 7 ? ["$ref": "#/components/schemas/S\(level + 1)"] : ["type": "string"]
+            schemas["S\(level)"] = ["type": "object", "properties": Dictionary(uniqueKeysWithValues: (0..<20).map { ("p\($0)", next) })]
+        }
+        let spec: [String: Any] = [
+            "openapi": "3.0.1",
+            "info": ["title": "Patlama", "version": "1"],
+            "servers": [["url": "https://api.example.com"]],
+            "paths": ["/x": ["post": ["operationId": "x", "requestBody": [
+                "content": ["application/json": ["schema": ["$ref": "#/components/schemas/S0"]]],
+            ]]]],
+            "components": ["schemas": schemas],
+        ]
+        let start = Date()
+        let outcome = try collection(spec)
+        XCTAssertLessThan(Date().timeIntervalSince(start), 5, "örnek üretimi bütçeyle sınırlı olmalı")
+        let body = try XCTUnwrap(outcome.collection.requests.first?.body)
+        guard case .raw(let content, _) = body else { return XCTFail("gövde bekleniyordu") }
+        XCTAssertLessThan(content.utf8.count, 200_000, "derinliğe takılan boş dallar da bütçeden düşer")
+        let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: Data(content.utf8)) as? [String: Any])
+        XCTAssertEqual(json.count, 20, "üst düzey alanlar korunur")
+    }
+
     func testPublicOperationHasNoAuthAndFileFieldsAreSkipped() throws {
         let outcome = try collection(openAPI3)
         XCTAssertEqual(try request(outcome, "Sağlık (deprecated)").auth, .none)
