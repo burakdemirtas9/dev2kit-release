@@ -86,7 +86,11 @@ public enum HeaderClassifier {
         "authorization", "proxy-authorization", "cookie", "set-cookie", "x-api-key", "api-key", "x-auth-token",
     ]
 
-    static let credentialKeywords = ["token", "secret", "password", "passwd", "session", "apikey", "api-key", "auth"]
+    /// `key` ve `credential`: `Ocp-Apim-Subscription-Key`, `x-functions-key`,
+    /// `X-Access-Key`, `X-Api_Key` normal sayılıyordu (güvenlik taraması S3).
+    /// Değeri yine opak olmalı; tekrar anahtarları `alwaysNormalNames`'te.
+    static let credentialKeywords = ["token", "secret", "password", "passwd", "session", "apikey", "api-key", "api_key",
+                                     "auth", "key", "credential"]
 
     /// Değeri kısa ya da boşluklu olsa da gizli kalan adlar: parola uzun
     /// olmak zorunda değil (`X-Password: Pa$$w0rd`).
@@ -123,6 +127,8 @@ public enum HeaderClassifier {
         "x-banking-customer-number", "x-customer-external-user-id", "x-customer-first-login",
         "x-customer-has-external-device", "x-customer-kvkk-flag", "x-getir-user-client-id", "x-device-vendor-id",
         "x-correlation-id", "x-b3-sessionid",
+        // Adında "key" geçse de gizli değil: isteği tekrarlamak için gerekir.
+        "idempotency-key", "x-idempotency-key", "sec-websocket-key",
     ]
 
     /// İstemci IP'si kişisel veridir; proxy başlığı olsalar da hassas sayılır.

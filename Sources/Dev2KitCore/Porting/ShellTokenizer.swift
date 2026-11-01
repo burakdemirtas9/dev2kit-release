@@ -121,7 +121,18 @@ public enum ShellTokenizer {
         case "\\": return ("\\", 1)
         case "'": return ("'", 1)
         case "\"": return ("\"", 1)
-        case "0": return ("\0", 1)
+        case "0"..."7":
+            // Bash: `\nnn` bir-üç haneli sekizlik bayt (`$'\033'` = ESC).
+            // Eskiden yalnızca `\0` tanınıyor, "33" düz metin kalıyordu (P10).
+            var octal = ""
+            var offset = index
+            while offset < chars.count, octal.count < 3, let digit = chars[offset].wholeNumberValue, digit < 8,
+                  chars[offset].isASCII {
+                octal.append(chars[offset])
+                offset += 1
+            }
+            let value = (UInt32(octal, radix: 8) ?? 0) & 0xFF
+            return (String(Character(Unicode.Scalar(UInt8(value)))), octal.count)
         case "x":
             var hex = ""
             var offset = index + 1

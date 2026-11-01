@@ -29,8 +29,20 @@ public enum SecretMigration {
         for name in try legacy.listSecretNames() {
             values[name] = try legacy.secret(forName: name)
         }
-        for (name, value) in values where try target.secret(forName: name) != value {
-            try target.setSecret(value, forName: name)
+        // Hedefte FARKLI değer varsa ezilmez: eski dosya silinemeyip yerinde
+        // kaldıysa Keychain'e sonradan girilen yeni değer bir sonraki açılışta
+        // bayat değerle eziliyordu (güvenlik taraması S8). Hangisinin geçerli
+        // olduğu bilinemez; ikisine de dokunulmaz (`HistoryKeyMigration` gibi).
+        var missing: [String] = []
+        for (name, value) in values.sorted(by: { $0.key < $1.key }) {
+            switch try target.secret(forName: name) {
+            case nil: missing.append(name)
+            case let existing? where existing == value: break
+            case _?: throw SecretMigrationError.conflict(name)
+            }
+        }
+        for name in missing {
+            try target.setSecret(values[name] ?? "", forName: name)
         }
         for (name, value) in values {
             guard try target.secret(forName: name) == value else {
@@ -50,10 +62,12 @@ public enum SecretMigration {
 
 public enum SecretMigrationError: Error, LocalizedError, Equatable {
     case verificationFailed(String)
+    case conflict(String)
 
     public var errorDescription: String? {
         switch self {
         case .verificationFailed(let name): return L10n.t("secrets.migration.verify", name)
+        case .conflict(let name): return L10n.t("secrets.migration.conflict", name)
         }
     }
 }

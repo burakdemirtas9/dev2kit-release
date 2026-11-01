@@ -93,6 +93,11 @@ public enum CollectionPorting {
 
         var warnings: [String] = []
         var requests: [RequestModel] = []
+        // Klasör uyarısı bir kez: eskiden her üst klasörde uyarı listesinin
+        // tamamı taranıyordu (güvenlik taraması P7).
+        if (postman.item ?? []).contains(where: { $0.item != nil }) {
+            warnings.append(L10n.t("porting.folders"))
+        }
         flatten(items: postman.item ?? [], prefix: "", into: &requests, warnings: &warnings)
 
         if requests.isEmpty {
@@ -168,9 +173,6 @@ public enum CollectionPorting {
             if let children = item.item {
                 // Klasörler düzleştirilir; isim "Klasör / İstek" olur.
                 let folder = item.name ?? L10n.t("porting.folder")
-                if prefix.isEmpty, !warnings.contains(L10n.t("porting.folders")) {
-                    warnings.append(L10n.t("porting.folders"))
-                }
                 flatten(items: children, prefix: prefix.isEmpty ? folder : "\(prefix) / \(folder)",
                         into: &requests, warnings: &warnings)
                 continue

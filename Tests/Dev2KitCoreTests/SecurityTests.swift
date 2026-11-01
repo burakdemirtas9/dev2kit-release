@@ -90,6 +90,18 @@ final class HostPolicyTests: XCTestCase {
         XCTAssertEqual(HostPolicyLoader.load(from: url), .notConfigured)
     }
 
+    /// Dizine geçiş izni yoksa dosya "yok" sayılmaz; kısıt sessizce
+    /// kalkmamalı (güvenlik taraması S9).
+    func testUnreachablePolicyFailsClosed() throws {
+        let file = try temporaryPolicyFile(#"{"allowedHosts": ["a.com"]}"#)
+        let dir = file.deletingLastPathComponent()
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: dir.path)
+        addTeardownBlock { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: dir.path) }
+        guard case .invalid = HostPolicyLoader.load(from: file, requireRootOwnership: false) else {
+            return XCTFail("erişilemeyen politika geçersiz sayılmalı")
+        }
+    }
+
     func testFileNotOwnedByRootIsRejected() throws {
         let file = try temporaryPolicyFile(#"{"allowedHosts": ["a.com"]}"#)
         guard case .invalid(let reason) = HostPolicyLoader.load(from: file) else {
@@ -231,6 +243,35 @@ final class RequestInspectorTests: XCTestCase {
     func testMetadataAddressWarns() throws {
         let result = try findings(RequestModel(url: "http://169.254.169.254/latest/meta-data/"))
         XCTAssertEqual(titles(result, .warn), ["Bulut metadata adresi"])
+    }
+
+    /// URLSession bu yazımlara da bağlanıyor (ölçüldü; güvenlik taraması S7).
+    func testMetadataAddressInOtherNotationsWarns() throws {
+        for host in ["2852039166", "0xa9fea9fe", "169.254.43518", "[::ffff:169.254.169.254]", "[fd00:ec2:0::254]", "100.100.100.200"] {
+            let result = try findings(RequestModel(url: "http://\(host)/latest/meta-data/"))
+            XCTAssertTrue(titles(result, .warn).contains("Bulut metadata adresi"), host)
+        }
+        for host in ["169.255.0.1", "metadata.example.com", "10.0.0.1"] {
+            XCTAssertFalse(RequestInspector.isMetadataHost(host), host)
+        }
+    }
+
+    func testIPAddressBytesUseTheSystemParsers() {
+        XCTAssertEqual(RequestInspector.ipAddressBytes("127.1"), [127, 0, 0, 1])
+        XCTAssertEqual(RequestInspector.ipAddressBytes("[::ffff:10.0.0.1]"), [10, 0, 0, 1])
+        XCTAssertEqual(RequestInspector.ipAddressBytes("::1")?.count, 16)
+        XCTAssertNil(RequestInspector.ipAddressBytes("api.example.com"))
+        XCTAssertNil(RequestInspector.ipAddressBytes(""))
+    }
+
+    /// Düz değerli kimlik başlığı ve sorgudaki token da uyarır (güvenlik taraması S6).
+    func testPlainCredentialHeaderOrQueryTokenOverCleartextWarns() throws {
+        let header = RequestModel(url: "http://api.example.com/x", headers: [KeyValueEntry(key: "X-Api-Key", value: "SYNTHETIC-PLAIN-KEY")])
+        XCTAssertTrue(titles(try findings(header), .warn).contains("Kimlik bilgisi şifresiz gidiyor"))
+        let query = RequestModel(url: "http://api.example.com/x?access_token=SYNTHETICabcdef0123456789")
+        XCTAssertTrue(titles(try findings(query), .warn).contains("Kimlik bilgisi şifresiz gidiyor"))
+        let plain = RequestModel(url: "http://api.example.com/x?page=2", headers: [KeyValueEntry(key: "Accept", value: "application/json")])
+        XCTAssertFalse(titles(try findings(plain), .warn).contains("Kimlik bilgisi şifresiz gidiyor"))
     }
 
     func testPunycodeHostWarns() throws {

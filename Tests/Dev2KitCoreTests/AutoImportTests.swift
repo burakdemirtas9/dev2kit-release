@@ -219,6 +219,14 @@ final class DamagedKibanaTests: XCTestCase {
         XCTAssertTrue(AutoImport.scan(#"{"_index": "test-x", bozuk"#).kibanaDocuments.isEmpty, "request_path yoksa kayıt kurulmaz")
     }
 
+    /// Sınıra gelince kurtarma durur (güvenlik taraması P6).
+    func testLooseRecoveryStopsAtTheLimit() {
+        let record = "\"_index\": \"x\",\n\"request_path\": \"/a\",\n"
+        let text = String(repeating: record, count: 500)
+        XCTAssertEqual(LooseKibanaRecovery.records(in: text, limit: 7).count, 7)
+        XCTAssertEqual(LooseKibanaRecovery.records(in: text).count, 500)
+    }
+
     /// Kapanmamış JSON ardından çok sayıda boş satır: her satır sonu kalan
     /// boşlukları baştan taramamalı (güvenlik taraması P3).
     func testManyBlankLinesAfterUnclosedJSONStayFast() {

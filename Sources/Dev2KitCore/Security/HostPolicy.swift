@@ -73,7 +73,14 @@ public enum HostPolicyLoader {
         requireRootOwnership: Bool = true,
         fileManager: FileManager = .default
     ) -> HostPolicyState {
-        guard fileManager.fileExists(atPath: url.path) else { return .notConfigured }
+        // Yalnızca "yok" yapılandırılmamış demek. `fileExists` her stat
+        // hatasında false dönüyordu: dizine geçiş izni yoksa (EACCES) kısıt
+        // sessizce kalkıyordu (güvenlik taraması S9). Diğer hatalar fail-closed.
+        var info = stat()
+        if stat(url.path, &info) != 0 {
+            let code = errno
+            return code == ENOENT || code == ENOTDIR ? .notConfigured : .invalid(reason: L10n.t("policy.unreadable"))
+        }
         if let problem = permissionProblem(at: url, requireRootOwnership: requireRootOwnership, fileManager: fileManager) {
             return .invalid(reason: problem)
         }

@@ -163,13 +163,66 @@ public final class RequestEngine: @unchecked Sendable {
     /// göndermesinin gereği yok.
     // TODO(showcase): geçici kaçış kapısı. İleride host bazlı hale getirilecek
     // ya da tamamen kaldırılacak — bkz. TODO.md "Sertifika doğrulama anahtarı".
-    public var skipCertificateValidation = false
+    public var skipCertificateValidation: Bool {
+        get { trustSettings.skipValidation }
+        set { updateTrust { $0.skipValidation = newValue } }
+    }
+
+    /// Güven ayarları tek kilit altında. Ana iş parçacığı yazarken
+    /// yönlendirme hedefinin profili URLSession temsilci kuyruğunda
+    /// okunuyordu (veri yarışı, güvenlik taraması N4). Gönderim başında bir
+    /// kez kopyası alınır; uçan istek yarıda ayar değiştirmez.
+    struct TrustSettings {
+        var skipValidation = false
+        var profiles: [TLSProfile] = []
+        var certificates: [SecCertificate] = []
+        var allowsLongValidity = false
+
+        /// Değişince havuz boşaltılır; doğrulama anahtarı ayrı oturum seçtiği için sayılmaz.
+        func needsFreshConnections(comparedTo old: TrustSettings) -> Bool {
+            let der = { (list: [SecCertificate]) in list.map { SecCertificateCopyData($0) as Data } }
+            return profiles != old.profiles || allowsLongValidity != old.allowsLongValidity
+                // DER baytlarıyla: aynı dosya yeniden okununca yeni nesne gelir.
+                || der(certificates) != der(old.certificates)
+        }
+    }
+
+    private let trustLock = NSLock()
+    private var storedTrust = TrustSettings()
+
+    var trustSettings: TrustSettings {
+        trustLock.lock(); defer { trustLock.unlock() }
+        return storedTrust
+    }
+
+    private func updateTrust(_ change: (inout TrustSettings) -> Void) {
+        trustLock.lock()
+        let old = storedTrust
+        change(&storedTrust)
+        let refresh = storedTrust.needsFreshConnections(comparedTo: old)
+        trustLock.unlock()
+        if refresh { dropPooledConnections() }
+    }
 
     /// Kapsamın oturumu. `ephemeral` yapılandırma çerezleri YALNIZCA bellekte
     /// tutar; oturum kimlik bilgileri diske hiç yazılmaz, uygulama kapanınca gider.
     func session(for scope: Scope, skipsValidation: Bool = false) -> URLSession {
-        let key = SessionKey(scope: scope, skipsValidation: skipsValidation)
         lock.lock(); defer { lock.unlock() }
+        return lockedSession(for: SessionKey(scope: scope, skipsValidation: skipsValidation))
+    }
+
+    /// Görev, oturum alınırken aynı kilit altında açılır. Arada
+    /// `dropPooledConnections` oturumu kapatırsa kapanmış oturumda görev
+    /// açmak yakalanamayan bir istisnayla uygulamayı çökertirdi (güvenlik
+    /// taraması N5). Kapatma kilit bırakıldıktan sonra yapılır ve açılmış
+    /// görevleri bitirir (`finishTasksAndInvalidate`).
+    private func dataTask(with request: URLRequest, scope: Scope, skipsValidation: Bool) -> URLSessionDataTask {
+        lock.lock(); defer { lock.unlock() }
+        return lockedSession(for: SessionKey(scope: scope, skipsValidation: skipsValidation)).dataTask(with: request)
+    }
+
+    /// `lock` tutulurken çağrılır.
+    private func lockedSession(for key: SessionKey) -> URLSession {
         if let existing = sessions[key] { return existing }
         let session = Self.makeSession(cookieStorage: nil)
         sessions[key] = session
@@ -233,23 +286,22 @@ public final class RequestEngine: @unchecked Sendable {
     /// `dropPooledConnections`). Motorun içinde: çağıran taraf unutamasın.
     /// Değişmeyen atamada boşaltılmaz — TLS ekranı her açılışta depoyu
     /// yeniden yüklüyor, her seferinde bağlantıları koparmanın gereği yok.
-    public var tlsProfiles: [TLSProfile] = [] {
-        didSet { if tlsProfiles != oldValue { dropPooledConnections() } }
+    public var tlsProfiles: [TLSProfile] {
+        get { trustSettings.profiles }
+        set { updateTrust { $0.profiles = newValue } }
     }
     /// Kurum güven deposundaki CA'lar (cacerts dizini). Her istekte dosya
     /// okumamak için burada tutulur; değişince AppState yeniler.
-    public var trustStoreCertificates: [SecCertificate] = [] {
-        didSet {
-            // DER baytlarıyla: aynı dosya yeniden okununca yeni nesne gelir.
-            let der = { (list: [SecCertificate]) in list.map { SecCertificateCopyData($0) as Data } }
-            if der(trustStoreCertificates) != der(oldValue) { dropPooledConnections() }
-        }
+    public var trustStoreCertificates: [SecCertificate] {
+        get { trustSettings.certificates }
+        set { updateTrust { $0.certificates = newValue } }
     }
     /// Zinciri güven deposundaki bir CA'ya çıkan sertifikalarda ömür üst
     /// sınırı aranmasın mı. Kullanıcının Güven Deposu'nda açık seçimi;
     /// public köklere çıkan zincirleri etkilemez.
-    public var trustStoreAllowsLongValidity = false {
-        didSet { if trustStoreAllowsLongValidity != oldValue { dropPooledConnections() } }
+    public var trustStoreAllowsLongValidity: Bool {
+        get { trustSettings.allowsLongValidity }
+        set { updateTrust { $0.allowsLongValidity = newValue } }
     }
 
     /// Host başına son görülen sunucu sertifikası.
@@ -316,22 +368,24 @@ public final class RequestEngine: @unchecked Sendable {
         urlRequest.httpShouldHandleCookies = model.options.sendCookies
 
         let scope = Scope(environmentID: environment?.id)
-        // Gönderim boyunca tek değer: istek uçarken anahtar değişirse oturum
-        // ile yanıttaki iz birbirini tutmaz hale gelmesin.
-        let skipsValidation = skipCertificateValidation
+        // Gönderim boyunca tek değer: istek uçarken ayar değişirse oturum,
+        // yönlendirme hedefinin profili ve yanıttaki iz birbirini tutmaz
+        // hale gelmesin.
+        let trust = trustSettings
+        let skipsValidation = trust.skipValidation
         // İlk host'un profili şimdi yüklenir: dosya hatası gönderimden önce
         // görünsün. Yönlendirme hedefinin profili, hedef TLS istediğinde KENDİ
         // host'u için seçilir (güvenlik incelemesi F4, 2026-10-20: ilk host'un
         // kurum CA'sı ve istemci kimliği zincirdeki her host'a uygulanıyordu).
         let firstHost = urlRequest.url?.host
-        let firstProfile = try resolveTLSProfile(for: urlRequest.url, resolver: resolver, skipValidation: skipsValidation)
+        let firstProfile = try resolveTLSProfile(for: urlRequest.url, resolver: resolver, trust: trust)
         let tracker = RedirectTracker(
             policy: model.options.redirect,
             credentialHeaders: RedirectGuard.merged(RedirectGuard.credentialHeaders(for: model) + built.credentialHeaders),
             hostPolicy: hostPolicy,
             tlsProfile: { [self] host in
                 if host.caseInsensitiveCompare(firstHost ?? "") == .orderedSame { return firstProfile }
-                return try resolveTLSProfile(for: URL(string: "https://\(host)"), resolver: resolver, skipValidation: skipsValidation)
+                return try resolveTLSProfile(for: URL(string: "https://\(host)"), resolver: resolver, trust: trust)
             }
         )
         let start = ContinuousClock.now
@@ -339,8 +393,7 @@ public final class RequestEngine: @unchecked Sendable {
         let response: URLResponse
         do {
             (data, response) = try await fetch(
-                urlRequest,
-                session: session(for: scope, skipsValidation: skipsValidation),
+                dataTask(with: urlRequest, scope: scope, skipsValidation: skipsValidation),
                 tracker: tracker
             )
         } catch let error as URLError where error.code == .cancelled {
@@ -411,8 +464,7 @@ public final class RequestEngine: @unchecked Sendable {
     /// okudu (ölçüldü, 2026-10-19). Klasik veri görevi + görev temsilcisi:
     /// veri parça parça gelir, tavanda görev iptal edilir. Swift görevi iptal
     /// edilirse (⌘.) URLSession görevi de iptal edilir.
-    func fetch(_ request: URLRequest, session: URLSession, tracker: RedirectTracker) async throws -> (Data, URLResponse) {
-        let task = session.dataTask(with: request)
+    func fetch(_ task: URLSessionDataTask, tracker: RedirectTracker) async throws -> (Data, URLResponse) {
         task.delegate = tracker
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
@@ -449,10 +501,15 @@ public final class RequestEngine: @unchecked Sendable {
         // secret'a çıkan environment değişkeni ve boşluklu referans da yakalanır
         // (güvenlik incelemesi F1, 2026-10-20).
         var credentialHeaders: [String] = []
-        let resolvedURLString = try resolver.resolve(model.url.trimmingCharacters(in: .whitespaces))
+        let templateURL = model.url.trimmingCharacters(in: .whitespaces)
+        let resolvedURL = try resolver.resolveTrackingSecrets(templateURL)
+        let resolvedURLString = resolvedURL.value
+        // Hata mesajı ekranda ve kopyalanan metinde görünür: adres secret
+        // içeriyorsa çözülmüş hali değil şablonu gösterilir (güvenlik taraması N7).
+        let shownURL = resolvedURL.usesSecret ? templateURL : resolvedURLString
         guard var components = URLComponents(string: resolvedURLString),
               components.scheme != nil, components.host != nil else {
-            throw RequestEngineError.invalidURL(resolvedURLString)
+            throw RequestEngineError.invalidURL(shownURL)
         }
 
         var queryItems: [URLQueryItem] = []
@@ -476,7 +533,7 @@ public final class RequestEngine: @unchecked Sendable {
         URLCodec.append(queryItems, to: &components)
 
         guard let url = components.url else {
-            throw RequestEngineError.invalidURL(resolvedURLString)
+            throw RequestEngineError.invalidURL(shownURL)
         }
 
         var request = URLRequest(url: url)
@@ -585,9 +642,13 @@ public final class RequestEngine: @unchecked Sendable {
             var data = Data()
             for field in activeFields {
                 // Alan adındaki tırnak/backslash, Content-Disposition'ı bozmasın.
+                // Satır sonu ise yeni bir parça başlığı açardı (değişkenden
+                // gelen CR/LF, güvenlik taraması N8): tarayıcılar gibi %0D/%0A.
                 let name = try resolver.resolve(field.key)
                     .replacingOccurrences(of: "\\", with: "\\\\")
                     .replacingOccurrences(of: "\"", with: "\\\"")
+                    .replacingOccurrences(of: "\r", with: "%0D")
+                    .replacingOccurrences(of: "\n", with: "%0A")
                 data.append(Data("--\(boundary)\r\n".utf8))
                 data.append(Data("Content-Disposition: form-data; name=\"\(name)\"\r\n\r\n".utf8))
                 data.append(Data("\(try resolver.resolve(field.value))\r\n".utf8))
@@ -602,10 +663,10 @@ public final class RequestEngine: @unchecked Sendable {
     private func resolveTLSProfile(
         for url: URL?,
         resolver: VariableResolver,
-        skipValidation: Bool
+        trust: TrustSettings
     ) throws -> ResolvedTLSProfile? {
         guard let host = url?.host else { return nil }
-        let profile = TLSProfile.profile(for: host, in: tlsProfiles)
+        let profile = TLSProfile.profile(for: host, in: trust.profiles)
 
         var certificates: [SecCertificate] = []
         var identity: SecIdentity?
@@ -631,7 +692,7 @@ public final class RequestEngine: @unchecked Sendable {
         // Sabitleme açıkken dahil edilmez: sabitleme, sabitleme demektir —
         // yoksa depoya bırakılan herhangi bir CA sabitlemeyi delerdi.
         if !pin {
-            certificates.append(contentsOf: trustStoreCertificates)
+            certificates.append(contentsOf: trust.certificates)
         }
 
         let resolved = ResolvedTLSProfile(
@@ -639,8 +700,8 @@ public final class RequestEngine: @unchecked Sendable {
             pinToCA: pin,
             allowLongValidity: profile?.allowLongValidity ?? false,
             // Sabitleme açıkken depo zaten devre dışı; muafiyeti de taşımaz.
-            longValidityAnchors: !pin && trustStoreAllowsLongValidity ? trustStoreCertificates : [],
-            skipValidation: skipValidation,
+            longValidityAnchors: !pin && trust.allowsLongValidity ? trust.certificates : [],
+            skipValidation: trust.skipValidation,
             identity: identity
         )
         return resolved.isEmpty ? nil : resolved

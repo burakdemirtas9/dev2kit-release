@@ -5,8 +5,10 @@ final class ImportFileTests: XCTestCase {
     /// Beklenen mesajlar Türkçe.
     override func invokeTest() { withLanguage(.turkish) { super.invokeTest() } }
 
-    /// Sıkıştırmasız (stored) küçük ZIP: test için. CRC okuyucuda denetlenmiyor.
-    private func zip(_ files: [(String, Data)], declaredSize: ((String) -> UInt32?)? = nil) -> Data {
+    /// Sıkıştırmasız (stored) küçük ZIP: test için. CRC okuyucuda denetleniyor;
+    /// `checksum` verilmezse içeriğin gerçek CRC'si yazılır.
+    private func zip(_ files: [(String, Data)], declaredSize: ((String) -> UInt32?)? = nil,
+                     checksum: ((String) -> UInt32?)? = nil) -> Data {
         var out = Data()
         var central = Data()
         func u16(_ v: Int, into data: inout Data) { withUnsafeBytes(of: UInt16(v).littleEndian) { data.append(contentsOf: $0) } }
@@ -14,10 +16,11 @@ final class ImportFileTests: XCTestCase {
         for (name, content) in files {
             let offset = UInt32(out.count)
             let size = declaredSize?(name) ?? UInt32(content.count)
+            let crc = checksum?(name) ?? CRC32.checksum(content)
             let nameData = Data(name.utf8)
             u32(0x0403_4B50, into: &out)
             for value in [20, 0, 0, 0, 0] { u16(value, into: &out) }
-            u32(0, into: &out)
+            u32(crc, into: &out)
             u32(UInt32(content.count), into: &out)
             u32(UInt32(content.count), into: &out)
             u16(nameData.count, into: &out)
@@ -27,7 +30,7 @@ final class ImportFileTests: XCTestCase {
 
             u32(0x0201_4B50, into: &central)
             for value in [20, 20, 0, 0, 0, 0] { u16(value, into: &central) }
-            u32(0, into: &central)
+            u32(crc, into: &central)
             u32(UInt32(content.count), into: &central)
             u32(size, into: &central)
             u16(nameData.count, into: &central)
@@ -91,6 +94,20 @@ final class ImportFileTests: XCTestCase {
         guard case .failure(let rejection) = ImportFile.kind(of: bomb) else { return XCTFail() }
         XCTAssertTrue(rejection.message.contains("zip bombası"))
         XCTAssertThrowsError(try ZipReader(bomb))
+    }
+
+    /// Güvenlik taraması P8: içerik merkez dizindeki CRC-32 ile doğrulanır.
+    func testEntryWithWrongChecksumIsRejected() throws {
+        let name = "word/document.xml"
+        let good = try ZipReader(zip([(name, Data("<w/>".utf8))]))
+        XCTAssertEqual(try good.contents(of: name), Data("<w/>".utf8))
+        let tampered = try ZipReader(zip([(name, Data("<w/>".utf8))], checksum: { _ in 0xDEAD_BEEF }))
+        XCTAssertThrowsError(try tampered.contents(of: name))
+    }
+
+    func testCRC32MatchesTheStandardCheckValue() {
+        XCTAssertEqual(CRC32.checksum(Data("123456789".utf8)), 0xCBF4_3926)
+        XCTAssertEqual(CRC32.checksum(Data()), 0)
     }
 
     func testOtherArchivesAreRejected() {

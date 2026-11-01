@@ -61,11 +61,16 @@ public struct PostmanAPIClient: Sendable {
 
     /// Koleksiyonun v2.1 JSON'unu döner; `CollectionPorting.importPostman` bunu işler.
     public func fetchCollectionData(uid: String, apiKey: String) async throws -> Data {
-        try await get(path: "collections/\(uid)", apiKey: apiKey)
+        // Postman uid'i harf, rakam ve tire: `../` ya da `?` taşıyan bir
+        // yanıt değeri istek adresini değiştirmesin (güvenlik taraması P9).
+        guard !uid.isEmpty, uid.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-") }) else {
+            throw APIError.invalidResponse
+        }
+        return try await get(path: "collections/\(uid)", apiKey: apiKey)
     }
 
     private func get(path: String, apiKey: String) async throws -> Data {
-        var request = URLRequest(url: baseURL.appendingPathComponent(path))
+        var request = URLRequest(url: baseURL.appending(path: path))
         Dev2KitIdentity.stamp(&request)
         let policy = hostPolicy()
         if let violation = policy.violation(for: request.url) {

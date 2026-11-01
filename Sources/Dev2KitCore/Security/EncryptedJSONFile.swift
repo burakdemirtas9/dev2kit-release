@@ -38,14 +38,17 @@ struct EncryptedJSONFile<Value: Codable>: Sendable {
         /// Şifreli dosya var, anahtarı yok: yeni anahtar onu açamaz.
         case keyMissing(path: String)
 
+        /// Mesaj ekranda ve ekran görüntülerinde görünür: ev dizini `~` ile
+        /// kısaltılır, kullanıcı adı görünmez; dosya yine bulunabilir
+        /// (güvenlik taraması S10). Hata değerindeki yol tam kalır.
         var errorDescription: String? {
             switch self {
             case .encodingFailed:
                 return L10n.t("crypto.writeFailed")
             case .keyUnreadable(let path):
-                return L10n.t("crypto.keyUnreadable", path)
+                return L10n.t("crypto.keyUnreadable", (path as NSString).abbreviatingWithTildeInPath)
             case .keyMissing(let path):
-                return L10n.t("crypto.keyMissing", path)
+                return L10n.t("crypto.keyMissing", (path as NSString).abbreviatingWithTildeInPath)
             }
         }
     }
@@ -134,22 +137,11 @@ struct EncryptedJSONFile<Value: Codable>: Sendable {
     /// Anahtarı baştan 0600 izinle ve atomik yazar.
     ///
     /// Önceden önce varsayılan izinle (0644) yazılıp sonra 0600'e çekiliyordu;
-    /// arada başka kullanıcıların okuyabildiği bir an vardı. Geçici dosya
-    /// 0600 ile oluşturulur ve `rename(2)` ile yerine konur: yarım anahtar
-    /// dosyası da kalmaz.
+    /// arada başka kullanıcıların okuyabildiği bir an vardı. Veriyle aynı yol
+    /// (`AtomicFile`): 0600 geçici dosya → `fsync` → `rename(2)`. `fsync`
+    /// olmadan elektrik kesintisi 0 baytlık anahtar bırakabiliyordu; boyu
+    /// yanlış anahtar kalıcı `keyUnreadable` demek (güvenlik taraması S4).
     private func writeKey(_ data: Data, to keyURL: URL) throws {
-        let manager = FileManager.default
-        try manager.createDirectory(at: keyURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-        let temporary = keyURL.deletingLastPathComponent()
-            .appendingPathComponent(".\(keyURL.lastPathComponent).\(UUID().uuidString).tmp")
-        guard manager.createFile(atPath: temporary.path, contents: data, attributes: [.posixPermissions: 0o600]) else {
-            throw CocoaError(.fileWriteUnknown, userInfo: [NSFilePathErrorKey: temporary.path])
-        }
-        BackupExclusion.exclude(temporary)
-        guard rename(temporary.path, keyURL.path) == 0 else {
-            let code = errno
-            try? manager.removeItem(at: temporary)
-            throw POSIXError(POSIXErrorCode(rawValue: code) ?? .EIO)
-        }
+        try AtomicFile.write(data, to: keyURL, excludedFromBackup: true)
     }
 }

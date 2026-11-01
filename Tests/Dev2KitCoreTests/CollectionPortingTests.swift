@@ -155,6 +155,29 @@ final class CollectionPortingTests: XCTestCase {
         XCTAssertThrowsError(try CollectionPorting.importPostman(Data("[1,2]".utf8), existingNames: []))
     }
 
+    /// Klasör uyarısı bir kez (güvenlik taraması P7).
+    func testFolderWarningAppearsOnce() throws {
+        let folders = (0..<5).map { #"{"name": "K\#($0)", "item": [{"name": "R", "request": {"method": "GET", "url": "https://a.example.com"}}]}"# }
+        let json = #"{"info": {"name": "Klasörler"}, "item": [\#(folders.joined(separator: ","))]}"#
+        let outcome = try CollectionPorting.importPostman(Data(json.utf8), existingNames: [])
+        XCTAssertEqual(outcome.warnings.filter { $0 == L10n.t("porting.folders") }.count, 1)
+        XCTAssertEqual(outcome.collection.requests.count, 5)
+    }
+
+    /// Postman uid'i doğrulanmadan adrese eklenmez (güvenlik taraması P9).
+    func testPostmanUIDIsValidatedBeforeAnyRequest() async {
+        let client = PostmanAPIClient(hostPolicy: { .notConfigured })
+        for uid in ["../me", "abc?x=1", "abc/def", ""] {
+            do {
+                _ = try await client.fetchCollectionData(uid: uid, apiKey: "SYNTHETIC")
+                XCTFail("\(uid) reddedilmeliydi")
+            } catch PostmanAPIClient.APIError.invalidResponse {
+            } catch {
+                XCTFail("\(uid): \(error)")
+            }
+        }
+    }
+
     /// Güvenilmeyen dosya: Int sınırını aşan sayı çökertmemeli (güvenlik taraması P1).
     func testNumericAuthValuesBeyondIntRangeDoNotCrash() throws {
         func token(_ number: String) throws -> AuthConfig? {

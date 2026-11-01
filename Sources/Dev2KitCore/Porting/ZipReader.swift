@@ -8,10 +8,13 @@ import Foundation
 /// Güvenlik (zip bombası): açmadan ÖNCE merkez dizindeki açık boyutlar
 /// toplanır, sınırı aşan arşiv reddedilir. Açılan her girdi ilan edilen
 /// boyuttan büyük yazılamaz (çıktı arabelleği o boyutta), farklı çıkarsa hata.
+/// Açılan içerik merkez dizindeki CRC-32 ile doğrulanır: ilan edilenden uzun
+/// içerik arabelleğe sığdığı kadar kırpılıp kabul ediliyordu (güvenlik taraması P8).
 /// ZIP64, şifreli ve DEFLATE dışı sıkıştırılmış girdiler desteklenmez.
 public struct ZipReader: Sendable {
     public struct Entry: Sendable {
         public let name: String
+        let crc32: UInt32
         let method: UInt16
         let compressedSize: Int
         public let uncompressedSize: Int
@@ -50,6 +53,7 @@ public struct ZipReader: Sendable {
             }
             let flags = data.u16(at: offset + 8)
             let method = data.u16(at: offset + 10)
+            let checksum = data.u32(at: offset + 16)
             let compressed = data.u32(at: offset + 20)
             let uncompressed = data.u32(at: offset + 24)
             let nameLength = Int(data.u16(at: offset + 28))
@@ -66,7 +70,8 @@ public struct ZipReader: Sendable {
                 throw ZipError(message: L10n.t("zip.tooLarge", L10n.number(Self.maxTotalUncompressed / 1_048_576)))
             }
             entries.append(Entry(
-                name: name, method: method, compressedSize: Int(compressed), uncompressedSize: Int(uncompressed),
+                name: name, crc32: checksum, method: method,
+                compressedSize: Int(compressed), uncompressedSize: Int(uncompressed),
                 localHeaderOffset: Int(localOffset), encrypted: flags & 1 != 0
             ))
             offset += 46 + nameLength + extraLength + commentLength
@@ -89,6 +94,14 @@ public struct ZipReader: Sendable {
         let start = local + 30 + Int(data.u16(at: local + 26)) + Int(data.u16(at: local + 28))
         guard start + entry.compressedSize <= data.count else { throw ZipError(message: L10n.t("zip.corrupt", L10n.t("zip.part.shortData"))) }
         let compressed = data[(data.startIndex + start)..<(data.startIndex + start + entry.compressedSize)]
+        let output = try inflate(compressed, entry: entry, name: name)
+        guard CRC32.checksum(output) == entry.crc32 else {
+            throw ZipError(message: L10n.t("zip.corrupt", L10n.t("zip.part.inflate", name)))
+        }
+        return output
+    }
+
+    private func inflate(_ compressed: Data, entry: Entry, name: String) throws -> Data {
         switch entry.method {
         case 0:
             return Data(compressed)
@@ -133,5 +146,23 @@ private extension Data {
     func u32(at offset: Int) -> UInt32 {
         guard offset + 4 <= count else { return 0 }
         return (0..<4).reduce(UInt32(0)) { $0 | UInt32(self[startIndex + offset + $1]) << (8 * UInt32($1)) }
+    }
+}
+
+/// ZIP'in CRC-32'si (IEEE 802.3, ters polinom 0xEDB88320). Bağımlılık
+/// eklememek için burada; tablo bir kez kurulur.
+enum CRC32 {
+    private static let table: [UInt32] = (0..<256).map { index in
+        (0..<8).reduce(UInt32(index)) { value, _ in value & 1 == 1 ? 0xEDB8_8320 ^ (value >> 1) : value >> 1 }
+    }
+
+    static func checksum(_ data: Data) -> UInt32 {
+        var crc: UInt32 = 0xFFFF_FFFF
+        data.withUnsafeBytes { bytes in
+            for byte in bytes {
+                crc = table[Int((crc ^ UInt32(byte)) & 0xFF)] ^ (crc >> 8)
+            }
+        }
+        return crc ^ 0xFFFF_FFFF
     }
 }

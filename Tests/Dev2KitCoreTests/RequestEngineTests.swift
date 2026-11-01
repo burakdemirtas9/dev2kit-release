@@ -130,6 +130,25 @@ final class RequestEngineTests: XCTestCase {
         XCTAssertEqual(body, "client_secret=a%2Bb%26c%3Dd%25")
     }
 
+    /// Hata mesajında çözülmüş secret görünmez, şablon görünür (güvenlik taraması N7).
+    func testInvalidURLErrorDoesNotRevealSecrets() {
+        let model = RequestModel(url: "ht tp://api.example.com/{{secret:k}}")
+        XCTAssertThrowsError(try engine.buildURLRequest(model, resolver: resolver(secrets: ["k": "SYNTHETIC-SECRET"]))) { error in
+            let message = error.localizedDescription
+            XCTAssertFalse(message.contains("SYNTHETIC-SECRET"), message)
+            XCTAssertTrue(message.contains("{{secret:k}}"), message)
+        }
+    }
+
+    /// Alan adındaki satır sonu yeni parça başlığı açmamalı (güvenlik taraması N8).
+    func testMultipartFieldNameCannotInjectPartHeaders() throws {
+        var model = RequestModel(method: .post, url: "https://api.example.com")
+        model.body = .multipartForm(fields: [KeyValueEntry(key: "a\r\nX-Evil: 1\nY", value: "v")])
+        let body = String(data: try XCTUnwrap(try engine.buildURLRequest(model, resolver: resolver()).httpBody), encoding: .utf8) ?? ""
+        XCTAssertTrue(body.contains(#"name="a%0D%0AX-Evil: 1%0AY""#), body)
+        XCTAssertFalse(body.contains("\r\nX-Evil"), body)
+    }
+
     /// Ek parametre yoksa adres hiç yeniden kurulmaz.
     func testURLWithoutExtraParametersIsUntouched() throws {
         let model = RequestModel(url: "https://api.example.com/s?a=1&&b=%2B")

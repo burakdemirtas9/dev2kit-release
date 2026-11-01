@@ -64,7 +64,9 @@ public struct KeychainSecretStore: SecretStore {
         if updateStatus == errSecItemNotFound {
             var addQuery = query
             addQuery[kSecValueData as String] = data
-            // Sadece cihaz kilidi açıkken erişilebilir; iCloud Keychain'e senkronlanmaz.
+            // iCloud Keychain'e senkronlanmaz. Erişilebilirlik bayrağını macOS
+            // yalnızca data protection keychain'de uygular; bu kayıt giriş
+            // anahtar zincirinde durur (bkz. README "Secret saklama").
             addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
             let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
             guard addStatus == errSecSuccess else { throw SecretStoreError.keychainStatus(addStatus) }

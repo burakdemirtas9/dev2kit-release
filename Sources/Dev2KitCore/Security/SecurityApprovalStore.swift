@@ -34,11 +34,9 @@ public struct SecurityApprovalStore: Sendable {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted]
         let data = try encoder.encode(keys.sorted())
-        try FileManager.default.createDirectory(
-            at: fileURL.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-        try data.write(to: fileURL, options: .atomic)
-        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: fileURL.path)
+        // Baştan 0600 geçici dosya → fsync → rename (`AtomicFile`). Önceden
+        // önce 0644 yazılıp sonra 0600'e çekiliyordu; arada secret adı ile
+        // host eşleşmesi başkalarınca okunabiliyordu (güvenlik taraması S5).
+        try AtomicFile.write(data, to: fileURL)
     }
 }

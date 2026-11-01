@@ -79,7 +79,7 @@ public enum AutoImport {
             }
         }
         if findings.kibanaDocuments.isEmpty {
-            for record in LooseKibanaRecovery.records(in: CurlExtractor.normalized(text)).prefix(maxJSONFindings) {
+            for record in LooseKibanaRecovery.records(in: CurlExtractor.normalized(text), limit: maxJSONFindings) {
                 findings.kibanaDocuments.append(record.json)
                 findings.truncatedFields += record.truncatedKeys
                 findings.recoveredFromDamagedText = true
@@ -560,12 +560,15 @@ enum LooseKibanaRecovery {
         let truncatedKeys: [String]
     }
 
-    /// Metindeki her `"_index"` bir kayıt başlangıcı sayılır.
-    static func records(in text: String) -> [Recovered] {
+    /// Metindeki her `"_index"` bir kayıt başlangıcı sayılır. `limit` kayda
+    /// ulaşınca durur: sınır eskiden sonradan uygulanıyordu, binlerce
+    /// `"_index"` içeren metinde her kayıt için 8 regex derleniyordu
+    /// (güvenlik taraması P6).
+    static func records(in text: String, limit: Int = .max) -> [Recovered] {
         let starts = ranges(of: #""_index"\s*:\s*""#, in: text).map(\.lowerBound)
         guard !starts.isEmpty else { return [] }
         var records: [Recovered] = []
-        for (position, start) in starts.enumerated() {
+        for (position, start) in starts.enumerated() where records.count < limit {
             let end = position + 1 < starts.count ? starts[position + 1] : text.endIndex
             if let record = record(in: String(text[start..<end])) { records.append(record) }
         }

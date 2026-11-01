@@ -32,6 +32,27 @@ final class EncryptedJSONFileKeyTests: XCTestCase {
         XCTAssertTrue(leftovers.isEmpty, "geçici anahtar dosyası kalmamalı")
     }
 
+    /// Ekrandaki mesajda kullanıcı adı görünmez, dosya yine bulunur (güvenlik taraması S10).
+    func testErrorMessageAbbreviatesTheHomeDirectory() throws {
+        let path = NSHomeDirectory() + "/Library/Application Support/dev2kit/.secrets.key"
+        let message = try XCTUnwrap(EncryptedJSONFile<[String: String]>.FileError.keyUnreadable(path: path).errorDescription)
+        XCTAssertTrue(message.contains("~/Library/Application Support/dev2kit/.secrets.key"), message)
+        XCTAssertFalse(message.contains(NSHomeDirectory()), message)
+    }
+
+    /// Anahtar veriyle aynı yoldan yazılır (`AtomicFile`: fsync dahil,
+    /// güvenlik taraması S4): yeni dizin 0700, anahtar yedek dışı.
+    func testKeyInANewDirectoryIsPrivateAndExcludedFromBackup() throws {
+        let nested = directory.appendingPathComponent("yeni")
+        let key = nested.appendingPathComponent(".history.key")
+        let file = EncryptedJSONFile<[String: String]>(fileURL: nested.appendingPathComponent("history.enc"), keyURL: key)
+        try file.save(["a": "b"])
+        XCTAssertEqual(try permissions(nested), 0o700)
+        XCTAssertEqual(try permissions(key), 0o600)
+        XCTAssertEqual(try Data(contentsOf: key).count, 32)
+        XCTAssertEqual(try key.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup, true)
+    }
+
     func testUnreadableKeyIsNotReplaced() throws {
         try file.save(["api": "değer"])
         let key = try Data(contentsOf: keyURL)

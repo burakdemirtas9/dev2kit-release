@@ -79,6 +79,20 @@ final class ImportReviewerTests: XCTestCase {
         XCTAssertFalse(ImportReviewer.containsTokenPattern(#"{"kod":"USD","tutar":100}"#))
     }
 
+    /// Güvenlik taraması S13: Stripe, Google, GitHub ince ayarlı, GitLab ve
+    /// `sk-` önekli anahtarlar. Değerler sentetik.
+    func testMoreProviderTokenPatterns() {
+        let synthetic = "SYNTHETICabcdefghijklmnopqrstuvwxyz0123456789"
+        for token in ["sk_live_\(synthetic.prefix(24))", "rk_test_\(synthetic.prefix(24))",
+                      "AIza\(synthetic.prefix(35))", "github_pat_\(synthetic)",
+                      "glpat-\(synthetic.prefix(20))", "sk-proj-\(synthetic.prefix(32))"] {
+            XCTAssertTrue(ImportReviewer.containsTokenPattern("key=\(token)"), token)
+        }
+        for text in ["risk-assessment-documentation-for-2026", "task-0123456789abcdefghij", "sk-kısa"] {
+            XCTAssertFalse(ImportReviewer.containsTokenPattern(text), text)
+        }
+    }
+
     func testCleartextCredentialsWarnExceptLoopback() {
         let remote = RequestModel(url: "http://api.example.com", auth: .bearer(token: "{{secret:prod_token}}"))
         XCTAssertTrue(titles(remote, .warn).contains("Kimlik bilgisi şifresiz gidecek"))

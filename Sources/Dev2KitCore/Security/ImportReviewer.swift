@@ -265,14 +265,20 @@ public enum ImportReviewer {
     }
 
     /// Bilinen token biçimleri: JWT, AWS erişim anahtarı, özel anahtar bloğu,
-    /// GitHub ve Slack token'ları.
+    /// GitHub, Slack, Stripe, Google, GitLab ve `sk-` önekli (OpenAI,
+    /// Anthropic) anahtarlar. Son beşi güvenlik taraması S13'te eklendi.
     static func containsTokenPattern(_ text: String) -> Bool {
         let patterns = [
             #"eyJ[\w-]{8,}\.[\w-]{8,}\.[\w-]*"#,
             #"\b(AKIA|ASIA)[0-9A-Z]{16}\b"#,
             #"-----BEGIN [A-Z ]*PRIVATE KEY-----"#,
             #"\bgh[pousr]_[A-Za-z0-9]{30,}\b"#,
+            #"\bgithub_pat_[A-Za-z0-9_]{40,}\b"#,
             #"\bxox[abprs]-[A-Za-z0-9-]{10,}"#,
+            #"\b[rs]k_(live|test)_[A-Za-z0-9]{16,}\b"#,
+            #"\bAIza[0-9A-Za-z_-]{35}\b"#,
+            #"\bglpat-[A-Za-z0-9_-]{20,}\b"#,
+            #"\bsk-[A-Za-z0-9_-]{20,}\b"#,
         ]
         return patterns.contains { text.range(of: $0, options: .regularExpression) != nil }
     }

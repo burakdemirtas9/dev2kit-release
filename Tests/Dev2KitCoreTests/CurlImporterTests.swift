@@ -36,6 +36,13 @@ final class ShellTokenizerTests: XCTestCase {
         XCTAssertEqual(try ShellTokenizer.tokenize(#"curl -d $'sat\nır'"#), ["curl", "-d", "sat\nır"])
     }
 
+    /// Bash `\nnn` sekizlik kaçışı (güvenlik taraması P10).
+    func testANSIQuotingDecodesOctalEscapes() throws {
+        XCTAssertEqual(try ShellTokenizer.tokenize(#"curl -d $'\033[0m'"#), ["curl", "-d", "\u{1B}[0m"])
+        XCTAssertEqual(try ShellTokenizer.tokenize(#"curl -d $'\101\0B'"#), ["curl", "-d", "A\0B"])
+        XCTAssertEqual(try ShellTokenizer.tokenize(#"curl -d $'\1018'"#), ["curl", "-d", "A8"], "en çok üç hane")
+    }
+
     func testEmptyQuotedArgumentKept() throws {
         XCTAssertEqual(try ShellTokenizer.tokenize("curl -d ''"), ["curl", "-d", ""])
     }

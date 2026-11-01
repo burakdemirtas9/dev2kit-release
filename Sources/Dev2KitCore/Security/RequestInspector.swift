@@ -189,14 +189,48 @@ public enum RequestInspector {
     }
 
     static func isMetadataHost(_ host: String) -> Bool {
-        let known: Set<String> = ["169.254.169.254", "fd00:ec2::254", "metadata.google.internal", "metadata", "100.100.100.200"]
-        return known.contains(host) || host.hasPrefix("169.254.")
+        let knownNames: Set<String> = ["metadata.google.internal", "metadata"]
+        if knownNames.contains(host.lowercased()) { return true }
+        // IP olarak karşılaştırılır: URLSession `2852039166`, `0xa9fea9fe`,
+        // `169.254.43518` ve `[::ffff:169.254.169.254]` yazımlarına da
+        // bağlanıyor (ölçüldü); metin eşleşmesi onları kaçırıyordu (güvenlik taraması S7).
+        guard let address = ipAddressBytes(host) else { return false }
+        if address.count == 4, address[0] == 169, address[1] == 254 { return true }   // 169.254.0.0/16
+        let knownAddresses = ["100.100.100.200", "fd00:ec2::254"].compactMap(ipAddressBytes)
+        return knownAddresses.contains(address)
     }
 
+    /// Sayısal host'un baytları (IPv4: 4, IPv6: 16; IPv4-mapped IPv6 → 4).
+    /// Ayrıştırma sistemin kendi kurallarıyla (`inet_aton`, `inet_pton`):
+    /// bağlantıyı kuran taraf da onları kullanıyor. Ad ise `nil`.
+    static func ipAddressBytes(_ host: String) -> [UInt8]? {
+        let bare = host.hasPrefix("[") && host.hasSuffix("]") ? String(host.dropFirst().dropLast()) : host
+        guard !bare.isEmpty, !bare.contains(where: \.isWhitespace) else { return nil }
+        var v4 = in_addr()
+        if inet_aton(bare, &v4) == 1 {
+            return withUnsafeBytes(of: v4.s_addr) { Array($0) }   // ağ bayt sırası
+        }
+        var v6 = in6_addr()
+        guard inet_pton(AF_INET6, bare, &v6) == 1 else { return nil }
+        let bytes = withUnsafeBytes(of: v6) { Array($0) }
+        if bytes[0..<10].allSatisfy({ $0 == 0 }), bytes[10] == 0xff, bytes[11] == 0xff {
+            return Array(bytes[12...])
+        }
+        return bytes
+    }
+
+    /// Şifresiz kanalda kimlik bilgisi gidiyor mu. Önceden yalnızca
+    /// Authorization/Cookie başlığına bakılıyordu; düz değerli `X-Api-Key` ya
+    /// da sorgudaki token uyarısız gidiyordu (güvenlik taraması S6).
+    /// Başlık ve sorgu adları aynı sınıflandırıcıdan geçer.
     private static func carriesCredentials(model: RequestModel, request: URLRequest, secrets: Set<String>) -> Bool {
         if model.auth != .none || !secrets.isEmpty { return true }
-        let headers = request.allHTTPHeaderFields ?? [:]
-        return headers.keys.contains { ["authorization", "cookie", "proxy-authorization"].contains($0.lowercased()) }
+        let isCredential = { (name: String, value: String) in
+            HeaderClassifier.classify(name: name, value: value).sensitiveKind == .credential
+        }
+        if (request.allHTTPHeaderFields ?? [:]).contains(where: { isCredential($0.key, $0.value) }) { return true }
+        let query = request.url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.queryItems } ?? []
+        return query.contains { isCredential($0.name, $0.value ?? "") }
     }
 }
 

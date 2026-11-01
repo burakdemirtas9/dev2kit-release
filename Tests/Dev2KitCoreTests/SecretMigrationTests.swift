@@ -54,6 +54,19 @@ final class SecretMigrationTests: XCTestCase {
         XCTAssertEqual(legacyFiles, ["secrets.enc", ".secrets.key"])
     }
 
+    /// Keychain'de farklı değer varsa ezilmez (güvenlik taraması S8):
+    /// yarım kalmış geçişten sonra girilen yeni değer bayat değerle ezilirdi.
+    func testDifferentValueInTargetIsNotOverwritten() throws {
+        try legacy(["api": "SYNTHETIC-OLD", "db": "SYNTHETIC-2"])
+        let target = InMemorySecretStore(initial: ["api": "SYNTHETIC-NEW"])
+        XCTAssertThrowsError(try SecretMigration.migrate(legacyDirectory: directory, to: target)) { error in
+            XCTAssertEqual(error as? SecretMigrationError, .conflict("api"))
+        }
+        XCTAssertEqual(try target.secret(forName: "api"), "SYNTHETIC-NEW")
+        XCTAssertNil(try target.secret(forName: "db"), "çakışmada hiçbir şey yazılmaz")
+        XCTAssertEqual(legacyFiles, ["secrets.enc", ".secrets.key"])
+    }
+
     func testUnreadableKeyKeepsTheFiles() throws {
         try legacy(["api": "SYNTHETIC-1"])
         try Data("kısa".utf8).write(to: directory.appendingPathComponent(".secrets.key"))

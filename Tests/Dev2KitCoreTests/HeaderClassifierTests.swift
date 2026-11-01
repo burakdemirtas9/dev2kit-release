@@ -19,6 +19,21 @@ final class HeaderClassifierTests: XCTestCase {
         XCTAssertEqual(kind("X-Upstream-Token", "token SYNTHETICabcdefghijklmnop"), .credential)
     }
 
+    /// Güvenlik taraması S3: `key`, `credential`, `api_key` adları.
+    func testKeyAndCredentialNamesAreCredentials() {
+        let opaque = "SYNTHETICabcdef0123456789"
+        for name in ["Ocp-Apim-Subscription-Key", "x-functions-key", "X-Access-Key", "X-Api_Key", "X-Partner-Credential"] {
+            XCTAssertEqual(kind(name, opaque), .credential, name)
+        }
+        XCTAssertNil(kind("X-Access-Key", "kısa"), "değer yine opak olmalı")
+    }
+
+    /// Kontrol: tekrar anahtarları gizli değil, isteği yinelemek için gerekir.
+    func testIdempotencyKeysStayNormal() {
+        XCTAssertNil(kind("Idempotency-Key", "8e03978e-40d5-43e8-bc93-6894a57f9324"))
+        XCTAssertNil(kind("X-Idempotency-Key", "8e03978e-40d5-43e8-bc93-6894a57f9324"))
+    }
+
     /// Kontrol: eski istisnalar yerinde.
     func testDescriptiveValuesStayNormal() {
         XCTAssertNil(kind("x-token-type", "Bearer"))
