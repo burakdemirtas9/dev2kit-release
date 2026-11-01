@@ -28,7 +28,12 @@ public enum Dev2KitIdentity {
     /// sabitleme ve fareyle sürükleme, + / ⌘T koleksiyonsuz request, seçiciden
     /// yeni environment, `{{` önerilerinde klavye, Workbench'te en çok 6 JSON
     /// sekmesi, büyük workspace'te yazma ve gezinme hızı.
-    public static let build = "182"
+    /// 183: Workbench'te HTML ve Markdown önizleyicileri; güvenlik taraması
+    /// düzeltmeleri (kötü niyetli içe aktarma dosyasıyla çökme/donma, `+`
+    /// kodlaması, başka kaynağa 307/308 gövdesi, geçmişte maskeleme, OAuth
+    /// alıcısı, XML varlık genişlemesi, Keychain geçişinde çakışma) ve büyük
+    /// yanıtta/içe aktarmada ana iş parçacığının donmaması.
+    public static let build = "183"
     /// `CFBundleIdentifier` (scripts/make-app.sh buradan okur). Keychain
     /// kayıtları ve ayarlar (UserDefaults) buna bağlı; değiştirmek taşıma
     /// gerektirir. 2026-10-25'e kadar `com.dev2kit.app` (alan adı bizim
