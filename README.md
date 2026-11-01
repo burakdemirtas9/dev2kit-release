@@ -67,6 +67,9 @@ dev2kit iki moddan oluşur:
   Kotlin, Swift, TypeScript, Python model kodu.
 - **Kodla / çöz:** JWT, Base64, URL, Hex; zaman damgası; UUID (v4, v7); hash.
 - **Sorgu:** JSONPath.
+- **Önizle:** HTML ve Markdown görüntüleyici; solda düzenle, sağda önizleme
+  (yalıtılmış: JavaScript kapalı, dış kaynak yüklenmez). Markdown'dan HTML
+  kodu da üretilir.
 - **Karşılaştır:** satır bazlı Diff Checker.
 
 ### İçe / dışa aktarma

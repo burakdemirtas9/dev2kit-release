@@ -44,7 +44,7 @@ struct WorkbenchToolView: View {
         }
         // ⌘F: odaktaki bölmede (son tıklanan editör) arama.
         .onChange(of: workbench.searchRequest) {
-            if workbench.focusedPane == .output, !workbench.showsTree {
+            if workbench.focusedPane == .output, !workbench.showsTree, !workbench.action.rendersPreview {
                 if !workbench.outputHiddenFromEditor { outputSearch.open() }
             } else if !workbench.inputHiddenFromEditor {
                 inputSearch.open()
@@ -178,7 +178,9 @@ struct WorkbenchToolView: View {
     /// sadeleşir): görünüm, ara, düzenle, girdi yap, kopyala.
     @ViewBuilder
     private var outputControls: some View {
-        let showsTree = workbench.showsTree
+        // Önizlemede arama, düzenleme, girdi yap ve kopyala yok: çıktı bir
+        // görünüm (Markdown'ın HTML kodu "HTML" eyleminde kopyalanır).
+        let showsTree = workbench.showsTree || workbench.action.rendersPreview
         HStack(spacing: 4) {
             if workbench.action.supportsTree {
                 Picker(L10n.t("wb.view"), selection: Binding(
@@ -405,10 +407,12 @@ struct WorkbenchToolView: View {
 
     private var outputPane: some View {
         let showsTree = workbench.showsTree
+        let showsPreview = workbench.action.rendersPreview
         let outputSyntax = workbench.action.outputSyntax ?? workbench.tool.syntax
+        let title = showsTree ? L10n.t("wb.tree") : showsPreview ? L10n.t("wb.previewPane") : L10n.t("wb.outputPane")
         return VStack(spacing: 0) {
-            paneHeader(showsTree ? L10n.t("wb.tree") : L10n.t("wb.outputPane")) {
-                if !showsTree, !workbench.outputHiddenFromEditor {
+            paneHeader(title) {
+                if !showsTree, !showsPreview, !workbench.outputHiddenFromEditor {
                     FoldButtons(folding: outputFolding)
                 }
                 Text(outputStatus)
@@ -429,6 +433,8 @@ struct WorkbenchToolView: View {
                     }
                 } else if let issue = workbench.actionIssue, workbench.displayedOutput.isEmpty {
                     placeholder(issue.localizedDescription, isError: true)
+                } else if showsPreview {
+                    previewOutput
                 } else if workbench.action.usesQuery, workbench.output == "[]" {
                     // Eşleşme yok ≠ hata: nötr renk, sorgu geçerli.
                     placeholder(L10n.t("wb.noMatches"))
@@ -466,6 +472,24 @@ struct WorkbenchToolView: View {
         .background(Theme.editorBackground)
     }
 
+    /// HTML / Markdown Viewer: çıktı yalıtılmış görüntüleyicide çizilir
+    /// (script kapalı, dış kaynak yok, gezinme yok). Sayfa zemini çizilir:
+    /// HTML tarayıcıdaki gibi, Markdown önizlemesi temaya uyan zeminle.
+    @ViewBuilder
+    private var previewOutput: some View {
+        if workbench.output.isEmpty {
+            // Boş belge zeminsiz sayfa demek: koyu temada beyaz bir bölme olurdu.
+            placeholder("")
+        } else if workbench.outputStats.bytes > ResponsePreview.sizeLimit {
+            placeholder(L10n.t("wb.preview.tooLarge",
+                               TextStats.size(workbench.outputStats.bytes),
+                               TextStats.size(ResponsePreview.sizeLimit)))
+        } else {
+            IsolatedWebView(html: workbench.output, preservesScroll: true, drawsBackground: true)
+                .accessibilityLabel(L10n.t("wb.previewPane"))
+        }
+    }
+
     /// Çıktı başlığındaki durum: "Ready", "Running…", "Editing"…
     private var outputStatus: String {
         if workbench.isRunning { return L10n.t("wb.running") }
@@ -485,10 +509,11 @@ struct WorkbenchToolView: View {
                 .controlSize(.mini)
                 .disabled(!workbench.isStale)
         } else {
-            if let cursor = workbench.outputCursor, !workbench.output.isEmpty, !workbench.showsTree {
+            // Önizlemede imleç ve üretilen belgenin boyutu anlamsız.
+            if let cursor = workbench.outputCursor, !workbench.output.isEmpty, !workbench.showsTree, !workbench.action.rendersPreview {
                 Text(L10n.t("editor.cursor", L10n.number(cursor.line), L10n.number(cursor.column)))
             }
-            if !workbench.outputStats.summary.isEmpty, !workbench.showsTree {
+            if !workbench.outputStats.summary.isEmpty, !workbench.showsTree, !workbench.action.rendersPreview {
                 Text(workbench.outputStats.summary)
             }
             if let duration = workbench.lastRunDuration, !workbench.input.isEmpty || workbench.action.runsOnEmptyInput {

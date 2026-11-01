@@ -2,6 +2,7 @@ import Network
 import WebKit
 import XCTest
 @testable import Dev2KitApp
+import Dev2KitCore
 
 /// Önizleme YALITIMINI ölçer.
 ///
@@ -71,6 +72,44 @@ final class IsolatedWebViewTests: XCTestCase {
             "document.getElementById('g').getAttribute('data-calisti')"
         )
         XCTAssertTrue(value == nil || value is NSNull, "sayfa script'i çalıştı: \(String(describing: value))")
+    }
+
+    // MARK: - Workbench önizlemesi (2026-11-01)
+
+    /// Markdown önizlemesindeki dış görsel de yüklenmez.
+    func testMarkdownPreviewNeverFetchesRemoteImages() async throws {
+        let port: UInt16 = 59322
+        let listener = try RequestSpy(port: port)
+        defer { listener.stop() }
+        let markdown = "![iz](http://127.0.0.1:\(port)/piksel.png)\n\n<img src=\"http://127.0.0.1:\(port)/ham.png\">"
+        let webView = try await loadInIsolation(MarkdownRenderer.document(markdown))
+        XCTAssertNotNil(webView)
+        try await Task.sleep(for: .seconds(2))
+        XCTAssertEqual(listener.connectionCount, 0, "önizleme dışarı çıktı")
+    }
+
+    /// Yazdıkça yeniden çizilen önizleme başa zıplamaz. Okuma ve geri verme
+    /// uygulamanın betik dünyasında; sayfanın betikleri kapalıyken de çalışmalı.
+    func testReloadKeepsTheScrollPosition() async throws {
+        let tall = (1...300).map { "<p>satır \($0)</p>" }.joined()
+        let coordinator = IsolatedWeb.Coordinator()
+        let webView = IsolatedWeb.makeWebView(html: "<html><body>\(tall)</body></html>", coordinator: coordinator, drawsBackground: true)
+        webView.frame = NSRect(x: 0, y: 0, width: 400, height: 300)
+        let window = NSWindow(contentRect: NSRect(x: -6000, y: -6000, width: 400, height: 300), styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = webView
+        window.orderFrontRegardless()
+        defer { window.orderOut(nil) }
+        try await Task.sleep(for: .seconds(1))
+
+        _ = try await webView.evaluateJavaScript("window.scrollTo(0, 600)", in: nil, contentWorld: .defaultClient)
+        try await Task.sleep(for: .milliseconds(200))
+        IsolatedWeb.load("<html><body><p>yeni</p>\(tall)</body></html>", into: webView, coordinator: coordinator, preservingScroll: true)
+        try await Task.sleep(for: .seconds(1.5))
+
+        let y = try await webView.evaluateJavaScript("window.scrollY", in: nil, contentWorld: .defaultClient) as? Double
+        XCTAssertEqual(y ?? 0, 600, accuracy: 1, "yeniden yüklemede kaydırma yeri korunmalı")
+        let text = try await webView.evaluateJavaScript("document.body.firstChild.textContent", in: nil, contentWorld: .defaultClient) as? String
+        XCTAssertEqual(text, "yeni", "yeni içerik yüklendi")
     }
 
     /// `IsolatedWebView`'ı gerçek haliyle kurar ve yüklemeyi bekler.

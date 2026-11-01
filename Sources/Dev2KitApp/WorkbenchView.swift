@@ -177,6 +177,8 @@ extension WorkbenchTool {
         case "json-to-ts-interface", "json-to-ts-type": return "t.square"
         case "json-to-python": return "p.square"
         case "jsonpath": return "text.magnifyingglass"
+        case "html-viewer": return "globe"
+        case "markdown-viewer": return "doc.richtext"
         default:
             switch category {
             case .format: return "text.alignleft"

@@ -1,4 +1,5 @@
 import AppKit
+import WebKit
 import SwiftUI
 
 /// Gizli moddaki metin alanları imleci etkilemesin (kullanıcı bildirimi,
@@ -45,12 +46,16 @@ enum HiddenModeCursorGuard {
         }
     }
 
-    /// I-beam koyan görünümler: metin görünümleri ve düzenlenebilir ya da
-    /// seçilebilir metin alanları (düğme etiketleri gibi düz metin değil).
+    /// I-beam koyan görünümler: metin görünümleri, web önizlemeleri ve
+    /// düzenlenebilir ya da seçilebilir metin alanları (düğme etiketleri gibi
+    /// düz metin değil).
     @MainActor
     static func cursorOwners(in view: NSView) -> [NSView] {
         if view.isHidden { return [] }
         if let text = view as? NSTextView { return [text] }
+        // Önizleme (Workbench HTML/Markdown, yanıt önizlemesi) metin üstünde
+        // I-beam, bağlantıda el koyar.
+        if view is WKWebView { return [view] }
         if let field = view as? NSTextField, field.isEditable || field.isSelectable { return [field] }
         return view.subviews.flatMap(cursorOwners)
     }

@@ -5,7 +5,8 @@ import Foundation
 /// Neden tek tip: biçimlendirici, kodlayıcı, dönüştürücü aynı şekle sahip
 /// (metin + seçenek → metin ya da hata). Yeni araç = buraya bir tanım + test;
 /// arayüz (`WorkbenchToolView`) her aracı aynı ekranla gösterir.
-/// Önizleyiciler (v2 step 4) çıktısı görünüm olduğu için ayrı ele alınacak.
+/// Önizleyiciler (v2 step 4) aynı tip: eylem `rendersPreview` ise çıktı
+/// metin yerine yalıtılmış önizlemede çizilen HTML belgesidir.
 public struct WorkbenchTool: Identifiable, Sendable {
     public enum Category: String, CaseIterable, Sendable {
         case format
@@ -126,6 +127,9 @@ public struct WorkbenchAction: Identifiable, Sendable {
     /// Çıktı ağaç olarak da gösterilebilir mi. Yalnızca biçimlendirmede
     /// anlamlı: sıkıştırılmış ya da kaçışlanmış metnin ağacı girdininkiyle aynı.
     public let supportsTree: Bool
+    /// Çıktı metin değil, yalıtılmış önizlemede çizilen HTML belgesi
+    /// (HTML / Markdown Viewer, v2 step 4). Düzenleme, arama, kopyalama yok.
+    public let rendersPreview: Bool
     /// Çıktı elle düzenlenince girdiyi güncelleyen ters dönüşüm (iki yönlü
     /// düzenleme). Parametreler: düzenlenen çıktı, önceki girdi, seçenekler.
     /// `nil`: çıktı düzenlemesi girdiye yansımaz. Hata verirse (yazarken
@@ -159,6 +163,7 @@ public struct WorkbenchAction: Identifiable, Sendable {
         runsOnEmptyInput: Bool = false,
         outputSyntax: Beautifier.Kind? = nil,
         supportsTree: Bool = false,
+        rendersPreview: Bool = false,
         reverse: (@Sendable (String, String, WorkbenchOptions) throws -> String)? = nil,
         runWithSummary: (@Sendable (String, WorkbenchOptions) throws -> WorkbenchRunResult)? = nil,
         run: @escaping @Sendable (String, WorkbenchOptions) throws -> String
@@ -179,6 +184,7 @@ public struct WorkbenchAction: Identifiable, Sendable {
         self.runsOnEmptyInput = runsOnEmptyInput
         self.outputSyntax = outputSyntax
         self.supportsTree = supportsTree
+        self.rendersPreview = rendersPreview
         self.reverse = reverse
         self.run = run
         self.runWithSummary = runWithSummary
@@ -397,6 +403,8 @@ public enum WorkbenchCatalog {
         WorkbenchTools.hash,
         WorkbenchTools.hex,
         WorkbenchTools.jsonPath,
+        WorkbenchTools.htmlViewer,
+        WorkbenchTools.markdownViewer,
     ]
 
     /// Diff Checker bir `WorkbenchTool` değil (iki girdi, kendi ekranı); kenar

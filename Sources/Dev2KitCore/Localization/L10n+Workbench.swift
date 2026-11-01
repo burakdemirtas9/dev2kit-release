@@ -51,6 +51,8 @@ extension L10nTable {
         "wb.oversized": L10nEntry("%1$@'tan büyük ya da %2$@'tan uzun satırlı metin (sıkıştırılmış JSON tek satırdır) editörde dev2kit'i dondurur.", "Text over %1$@ or with a line longer than %2$@ (minified JSON is one line) would freeze dev2kit in the editor."),
         "wb.tree": L10nEntry("Ağaç", "Tree"),
         "wb.outputPane": L10nEntry("Çıktı", "Output"),
+        "wb.previewPane": L10nEntry("Önizleme", "Preview"),
+        "wb.preview.tooLarge": L10nEntry("Önizleme için çok büyük: %1$@ (sınır %2$@).", "Too large to preview: %1$@ (limit %2$@)."),
         "wb.treeNeedsJSON": L10nEntry("Ağaç için girdi geçerli JSON olmalı.", "The input must be valid JSON to show a tree."),
         "wb.noMatches": L10nEntry("Eşleşme yok. Sorgu geçerli ama bu JSON'da hiçbir şey seçmiyor.", "No matches. The query is valid but selects nothing in this JSON."),
         "wb.outputHidden.title": L10nEntry("Çıktı gösterilmiyor: %1$@", "Output not shown: %1$@"),

@@ -1,4 +1,5 @@
 import AppKit
+import WebKit
 import SwiftUI
 import XCTest
 @testable import Dev2KitApp
@@ -104,6 +105,20 @@ final class HiddenModeCursorTests: XCTestCase {
         settle(0.4)
         XCTAssertEqual(leakingOwners(root), [], "sonradan kurulan gizli editörler de imleci almamalı")
         XCTAssertTrue(visibleOwners(root).contains { $0 is AddressTextView }, "API Client adres alanı etkin kalır")
+    }
+
+    /// Önizleme (Workbench HTML/Markdown, yanıt önizlemesi) metinde I-beam,
+    /// bağlantıda el koyar; gizli moddayken onu da gizlenir (2026-11-01).
+    func testHiddenWebPreviewIsHidden() {
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: 200, height: 100))
+        let webView = WKWebView(frame: container.bounds)
+        container.addSubview(webView)
+        container.alphaValue = 0
+        HiddenModeCursorGuard.sync(container)
+        XCTAssertTrue(webView.isHidden)
+        container.alphaValue = 1
+        HiddenModeCursorGuard.sync(container)
+        XCTAssertFalse(webView.isHidden)
     }
 
     /// Saydam düğmeler (⌘K'nın görünmez düğmesi) gizlenmez: kısayolları çalışır.

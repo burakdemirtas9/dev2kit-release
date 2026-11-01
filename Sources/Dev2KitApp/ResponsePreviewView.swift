@@ -91,16 +91,23 @@ struct ResponsePreviewView: View {
 /// gerçekten çalıştığı testle ölçülüyor (`IsolatedWebViewTests`).
 struct IsolatedWebView: NSViewRepresentable {
     let html: String
+    /// İçerik değişince kaydırma yeri korunur. Workbench önizlemesi yazdıkça
+    /// yeniden çiziliyor; korunmasa her tuşta başa zıplardı.
+    var preservesScroll = false
+    /// Sayfa zemini çizilir mi. `false`: saydam, arkadaki panel görünür
+    /// (yanıt önizlemesi). `true`: tarayıcı gibi; zemini olmayan sayfa beyaz,
+    /// koyu temayı destekleyen sayfa (Markdown önizlemesi) koyu.
+    var drawsBackground = false
 
     func makeCoordinator() -> IsolatedWeb.Coordinator { IsolatedWeb.Coordinator() }
 
     func makeNSView(context: Context) -> WKWebView {
-        IsolatedWeb.makeWebView(html: html, coordinator: context.coordinator)
+        IsolatedWeb.makeWebView(html: html, coordinator: context.coordinator, drawsBackground: drawsBackground)
     }
 
     func updateNSView(_ webView: WKWebView, context: Context) {
         guard context.coordinator.loadedHTML != html else { return }
-        IsolatedWeb.load(html, into: webView, coordinator: context.coordinator)
+        IsolatedWeb.load(html, into: webView, coordinator: context.coordinator, preservingScroll: preservesScroll)
     }
 }
 
@@ -113,7 +120,7 @@ enum IsolatedWeb {
     static let blockerRules = #"[{"trigger":{"url-filter":".*"},"action":{"type":"block"}}]"#
 
     @MainActor
-    static func makeWebView(html: String, coordinator: Coordinator) -> WKWebView {
+    static func makeWebView(html: String, coordinator: Coordinator, drawsBackground: Bool = false) -> WKWebView {
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .nonPersistent()
         configuration.defaultWebpagePreferences.allowsContentJavaScript = false
@@ -122,20 +129,49 @@ enum IsolatedWeb {
         webView.navigationDelegate = coordinator
         webView.allowsMagnification = true
         webView.allowsBackForwardNavigationGestures = false
-        webView.setValue(false, forKey: "drawsBackground")
+        if !drawsBackground {
+            webView.setValue(false, forKey: "drawsBackground")
+        }
 
         load(html, into: webView, coordinator: coordinator)
         return webView
     }
 
+    /// İçeriği yükler. `preservingScroll`: önce kaydırma yeri okunur, yükleme
+    /// bitince geri verilir. Okuma ve geri verme uygulamanın kendi betik
+    /// dünyasında (`.defaultClient`); sayfanın betikleri kapalı kalır.
     @MainActor
-    static func load(_ html: String, into webView: WKWebView, coordinator: Coordinator) {
+    static func load(_ html: String, into webView: WKWebView, coordinator: Coordinator, preservingScroll: Bool = false) {
         coordinator.loadedHTML = html
+        coordinator.generation += 1
+        let generation = coordinator.generation
+        // Önceki yüklemenin yeri henüz geri verilmediyse o yer geçerli: yarım
+        // yüklenmiş sayfadan okumak 0 verir ve önizleme başa zıplar.
+        guard preservingScroll, coordinator.pendingScroll == nil else {
+            install(html, into: webView, coordinator: coordinator, generation: generation)
+            return
+        }
+        webView.evaluateJavaScript("[window.scrollX, window.scrollY]", in: nil, in: .defaultClient) { result in
+            Task { @MainActor in
+                if case .success(let value) = result, let point = value as? [Double], point.count == 2,
+                   point[0] > 0 || point[1] > 0 {
+                    coordinator.pendingScroll = CGPoint(x: point[0], y: point[1])
+                }
+                // Arada daha yeni bir yükleme başladıysa bu eskidir.
+                guard generation == coordinator.generation else { return }
+                install(html, into: webView, coordinator: coordinator, generation: generation)
+            }
+        }
+    }
+
+    @MainActor
+    private static func install(_ html: String, into webView: WKWebView, coordinator: Coordinator, generation: Int) {
         WKContentRuleListStore.default()?.compileContentRuleList(
             forIdentifier: blockerIdentifier,
             encodedContentRuleList: blockerRules
         ) { list, error in
             Task { @MainActor in
+                guard generation == coordinator.generation else { return }
                 guard let list, error == nil else {
                     // Engelleyici kurulamadıysa içerik GÖSTERİLMEZ: dış kaynak
                     // yüklenmesindense önizlemenin olmaması yeğdir.
@@ -162,6 +198,16 @@ enum IsolatedWeb {
         /// Engelleyici kural listesi kuruldu mu. `IsolatedWeb` dışarıdan
         /// yazıyor; modül dışına kapalı.
         var isBlockerInstalled = false
+        /// Son yükleme isteği; geç gelen eski sonuçlar yok sayılır.
+        var generation = 0
+        /// Yükleme bitince geri verilecek kaydırma yeri.
+        var pendingScroll: CGPoint?
+
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            guard let point = pendingScroll else { return }
+            pendingScroll = nil
+            webView.evaluateJavaScript("window.scrollTo(\(point.x), \(point.y))", in: nil, in: .defaultClient)
+        }
 
         func webView(
             _ webView: WKWebView,
