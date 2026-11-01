@@ -140,6 +140,7 @@ extension L10nTable {
         "openapi.note.pathParams": L10nEntry("Path parametreleri {{ad}} olarak bırakıldı; environment'a ekle ya da URL'de elle doldur.", "Path parameters were left as {{name}}; add them to the environment or fill them in the URL by hand."),
         "openapi.note.scheme": L10nEntry("Güvenlik şeması \"%1$@\" — %2$@.", "Security scheme \"%1$@\" — %2$@."),
         "openapi.note.oauth": L10nEntry("OAuth2 token adresi: %1$@. Environment'ta \"accessToken\" adında token değişkeni tanımlayabilirsin.", "OAuth2 token URL: %1$@. You can define a token variable named \"accessToken\" in the environment."),
+        "openapi.note.budget": L10nEntry("Doküman çok fazla örnek üretiyor (%1$@ MB sınırı); kalan isteklerin gövdesi, örnekleri ve parametre değerleri boş bırakıldı.", "The document generates too much example content (%1$@ MB limit); the remaining requests were left without bodies, examples and parameter values."),
         "openapi.note.fileFields.one": L10nEntry("%1$@ dosya alanı atlandı (dosya yükleme henüz desteklenmiyor).", "%1$@ file field was skipped (file uploads aren’t supported yet)."),
         "openapi.note.fileFields.other": L10nEntry("%1$@ dosya alanı atlandı (dosya yükleme henüz desteklenmiyor).", "%1$@ file fields were skipped (file uploads aren’t supported yet)."),
         "openapi.note.cookies.one": L10nEntry("%1$@ cookie parametresi atlandı.", "%1$@ cookie parameter was skipped."),

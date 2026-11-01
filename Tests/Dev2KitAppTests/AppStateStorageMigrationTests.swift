@@ -40,3 +40,18 @@ final class AppStateStorageMigrationTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: directory.appendingPathComponent("workspace.json").path))
     }
 }
+
+/// Açılış mesajları birleşir; ikincisi düşmez (yeniden tarama: secret deposu
+/// ve geçmiş anahtarı uyarıları `mevcut ?? yeni` ile kayboluyordu).
+@MainActor
+final class StartupMessageMergeTests: XCTestCase {
+    func testSecondNoticeBecomesALineAndTheHeavierKindWins() {
+        let first = ResultMessage(kind: .info, title: "Kayıt yapısı güncellendi", lines: [MessageLine(.info, "a")])
+        let second = ResultMessage(kind: .warning, title: "Secret uyarısı", message: "ayrıntı")
+        let merged = AppState.merging(second, into: first)
+        XCTAssertEqual(merged.title, "Kayıt yapısı güncellendi")
+        XCTAssertEqual(merged.kind, .warning)
+        XCTAssertEqual(merged.lines, [MessageLine(.info, "a"), MessageLine(.warning, "Secret uyarısı: ayrıntı")])
+        XCTAssertEqual(AppState.merging(second, into: nil), second)
+    }
+}

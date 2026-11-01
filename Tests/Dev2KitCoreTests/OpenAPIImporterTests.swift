@@ -170,6 +170,37 @@ final class OpenAPIImporterTests: XCTestCase {
         XCTAssertNotNil(json["parent"])
     }
 
+    /// `$ref` aynı büyük örneği her işleme kopyalar: toplam çıktı bütçesi
+    /// belleği sınırlar (yeniden tarama: 604 KB → 512 MB).
+    func testSharedLargeExamplesAreBudgeted() throws {
+        let big = String(repeating: "x", count: 200_000)
+        var paths: [String: Any] = [:]
+        for index in 0..<400 {
+            paths["/p\(index)"] = ["post": [
+                "operationId": "op\(index)",
+                "requestBody": ["$ref": "#/components/requestBodies/B"],
+                "responses": ["200": ["$ref": "#/components/responses/R"]],
+            ]]
+        }
+        let spec: [String: Any] = [
+            "openapi": "3.0.1",
+            "info": ["title": "Çoğaltma", "version": "1"],
+            "servers": [["url": "https://api.example.com"]],
+            "paths": paths,
+            "components": [
+                "requestBodies": ["B": ["content": ["application/json": ["example": ["data": big]]]]],
+                "responses": ["R": ["description": "ok", "content": ["application/json": ["example": ["data": big]]]]],
+            ],
+        ]
+        let outcome = try collection(spec)
+        XCTAssertEqual(outcome.collection.requests.count, 400, "istekler yine gelir")
+        let total = outcome.collection.requests.reduce(0) { sum, request in
+            sum + OpenAPIImporter.Builder.byteCount(of: request.body) + request.examples.reduce(0) { $0 + $1.body.utf8.count }
+        }
+        XCTAssertLessThan(total, OpenAPIImporter.Builder.maxGeneratedBytes + 1_000_000)
+        XCTAssertTrue(outcome.warnings.contains { $0.contains("MB sınırı") }, "kullanıcıya not düşülür")
+    }
+
     /// Kötü niyetli şema: S0…S7, her biri bir sonrakine `$ref` veren 20 özellik
     /// taşıyor. Döngü yok ama ağaç 20^8 düğüm; düğüm bütçesi örneği sınırlar
     /// (güvenlik taraması P2).

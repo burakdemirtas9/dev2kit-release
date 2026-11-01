@@ -64,7 +64,7 @@ public enum HeaderClassifier {
             (category, kind) = (.sensitive, .personal)
         } else if infrastructureNames.contains(lower) || infrastructurePrefixes.contains(where: lower.hasPrefix) {
             (category, kind) = (.infrastructure, nil)
-        } else if credentialKeywords.contains(where: lower.contains), looksLikeCredentialValue(name: lower, value: value) {
+        } else if hasCredentialKeyword(lower), looksLikeCredentialValue(name: lower, value: value) {
             (category, kind) = (.sensitive, .credential)
         } else if personalKeywords.contains(where: lower.contains) {
             (category, kind) = (.sensitive, .personal)
@@ -86,11 +86,39 @@ public enum HeaderClassifier {
         "authorization", "proxy-authorization", "cookie", "set-cookie", "x-api-key", "api-key", "x-auth-token",
     ]
 
-    /// `key` ve `credential`: `Ocp-Apim-Subscription-Key`, `x-functions-key`,
-    /// `X-Access-Key`, `X-Api_Key` normal sayılıyordu (güvenlik taraması S3).
-    /// Değeri yine opak olmalı; tekrar anahtarları `alwaysNormalNames`'te.
+    /// Adın herhangi bir yerinde geçmesi yeten anahtar kelimeler.
     static let credentialKeywords = ["token", "secret", "password", "passwd", "session", "apikey", "api-key", "api_key",
-                                     "auth", "key", "credential"]
+                                     "credential"]
+
+    /// `key` önünde bu parça varsa gizli değildir (`X-Cache-Key`, `X-Public-Key`).
+    static let nonSecretKeyQualifiers: Set<String> = [
+        "cache", "sort", "partition", "routing", "dedup", "deduplication", "correlation", "trace",
+        "public", "primary", "foreign", "idempotency", "object", "lookup", "hash",
+    ]
+
+    /// `key` ardından bu parça geliyorsa anahtarın kendisi değil künyesidir (`X-Key-Id`).
+    static let keyMetadataSuffixes: Set<String> = ["id", "name", "version", "type", "alias"]
+
+    /// Adda kimlik anahtar kelimesi var mı. `key` ve `auth` alt dizgi olarak
+    /// eşleşince `X-Cache-Key: /api/v1/…` ve `X-Author` kimlik bilgisi
+    /// sayılıyordu (yeniden tarama, 2026-11-01); bu ikisi ad parçalarına
+    /// (`-`, `_`, `.`) bakılarak eşleşir. `key` önceki taramada eklendi:
+    /// `Ocp-Apim-Subscription-Key`, `x-functions-key`, `X-Access-Key`, `X-Api_Key`.
+    static func hasCredentialKeyword(_ lower: String) -> Bool {
+        if credentialKeywords.contains(where: lower.contains) { return true }
+        let parts = lower.split(whereSeparator: { $0 == "-" || $0 == "_" || $0 == "." }).map(String.init)
+        for (index, part) in parts.enumerated() {
+            // `authorization` kimliktir, `author` değildir.
+            if part.contains("auth"), !part.hasPrefix("author") || part.hasPrefix("authoriz") { return true }
+            guard part == "key" || (part.hasSuffix("key") && part.count > 3) else { continue }
+            if part == "key" {
+                if index > 0, nonSecretKeyQualifiers.contains(parts[index - 1]) { continue }
+                if index + 1 < parts.count, keyMetadataSuffixes.contains(parts[index + 1]) { continue }
+            }
+            return true
+        }
+        return false
+    }
 
     /// Değeri kısa ya da boşluklu olsa da gizli kalan adlar: parola uzun
     /// olmak zorunda değil (`X-Password: Pa$$w0rd`).

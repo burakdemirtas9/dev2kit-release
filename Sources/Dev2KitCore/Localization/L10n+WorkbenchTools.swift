@@ -89,6 +89,7 @@ extension L10nTable {
         "props.unclosedBracket": L10nEntry("`[` kapanmamış: %1$@", "Unclosed `[`: %1$@"),
         "props.indexTooLarge": L10nEntry("Dizi sırası %1$@ sınırından büyük: %2$@", "List index is larger than %1$@: %2$@"),
         "props.emptyKey": L10nEntry("Boş anahtar.", "Empty key."),
+        "props.tooDeep": L10nEntry("Anahtar çok derin (en çok %1$@ seviye).", "The key is too deep (at most %1$@ levels)."),
         "xml.badChar": L10nEntry("XML 1.0'da yazılamayan karakter: %1$@", "Character that can’t be written in XML 1.0: %1$@"),
         "objects.rootObject": L10nEntry("Kök bir nesne ya da nesne dizisi olmalı: sınıf yalnızca nesneden üretilir.", "The root must be an object or an array of objects: classes are generated from objects only."),
         "objects.tooDeep": L10nEntry("İç içe derinlik %1$@ seviyeyi aşıyor. Daha derin yapılardan sınıf üretilmez.", "Nesting exceeds %1$@ levels. Classes aren’t generated from deeper structures."),

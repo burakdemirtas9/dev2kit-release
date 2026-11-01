@@ -129,8 +129,26 @@ extension AppState {
         let directory = AppPaths.supportDirectory
         guard SecretMigration.isPending(legacyDirectory: directory) else { return (keychain, nil, nil) }
         do {
-            let report = try SecretMigration.migrate(legacyDirectory: directory, to: keychain)
-            return (keychain, nil, report.map { L10n.t("secrets.migrated", String($0.migrated)) })
+            guard let report = try SecretMigration.migrate(legacyDirectory: directory, to: keychain) else {
+                return (keychain, nil, nil)
+            }
+            guard !report.keptInKeychain.isEmpty else {
+                return (keychain, nil, L10n.t("secrets.migrated", String(report.migrated)))
+            }
+            // Çakışmada Keychain kazanır (kullanıcı kararı, 2026-11-01); hangi
+            // adların etkilendiği ve yedeğin yeri söylenir.
+            let message = ResultMessage(
+                kind: .warning,
+                title: L10n.t("secrets.migrationConflict.title"),
+                message: L10n.t(
+                    "secrets.migrationConflict.message",
+                    String(report.migrated),
+                    report.keptInKeychain.joined(separator: ", "),
+                    SecretMigration.conflictBackupName
+                ),
+                revealURL: directory.appendingPathComponent(SecretMigration.conflictBackupName)
+            )
+            return (keychain, message, nil)
         } catch {
             let message = ResultMessage(
                 kind: .warning,
@@ -169,6 +187,20 @@ extension AppState {
     }
 
     /// Mesaja satır ekler; mesaj yoksa bilgi mesajı kurar.
+    /// İki açılış mesajını birleştirir: ikincisi birinciye türüyle satır olarak
+    /// eklenir, tür ağır olan olur. Eskiden `mevcut ?? yeni` ile ikincisi
+    /// sessizce düşüyordu (secret deposu ve geçmiş anahtarı uyarıları).
+    static func merging(_ extra: ResultMessage, into message: ResultMessage?) -> ResultMessage {
+        guard let message else { return extra }
+        let severity: [MessageKind] = [.info, .success, .warning, .error]
+        let rank = { (kind: MessageKind) in severity.firstIndex(of: kind) ?? 0 }
+        let kind = rank(extra.kind) > rank(message.kind) ? extra.kind : message.kind
+        let text = [extra.title, extra.message].compactMap { $0 }.joined(separator: ": ")
+        return ResultMessage(kind: kind, title: message.title, message: message.message,
+                             lines: message.lines + [MessageLine(extra.kind, text)] + extra.lines,
+                             revealURL: message.revealURL ?? extra.revealURL)
+    }
+
     static func adding(_ line: MessageLine, to message: ResultMessage?) -> ResultMessage {
         guard let message else {
             return ResultMessage(kind: .info, title: L10n.t("store.migrated.title"), lines: [line])

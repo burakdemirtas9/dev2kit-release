@@ -121,7 +121,9 @@ public enum ShellTokenizer {
         case "\\": return ("\\", 1)
         case "'": return ("'", 1)
         case "\"": return ("\"", 1)
-        case "0"..."7":
+        // `isASCII`: Character aralığı `1́` gibi birleşik karakteri de kapsıyor;
+        // hane okunmadan NUL üretiliyordu (yeniden tarama gerilemesi).
+        case "0"..."7" where chars[index].isASCII:
             // Bash: `\nnn` bir-üç haneli sekizlik bayt (`$'\033'` = ESC).
             // Eskiden yalnızca `\0` tanınıyor, "33" düz metin kalıyordu (P10).
             var octal = ""

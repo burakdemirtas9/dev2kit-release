@@ -276,6 +276,12 @@ public enum PropertiesConverter {
         }
         flush()
         guard !result.isEmpty else { throw WorkbenchIssue(message: L10n.t("props.emptyKey"), line: line) }
+        // Ağaç bu derinlikte kurulur, dönüştürülür ve serbest bırakılır; üçü de
+        // özyinelemeli. `a.a.…` (100 bin seviye) yığını taşırıp uygulamayı
+        // çökertiyordu (yeniden tarama, 2026-11-01). YAML ile aynı sınır.
+        guard result.count <= YAMLReader.maxDepth else {
+            throw WorkbenchIssue(message: L10n.t("props.tooDeep", L10n.number(YAMLReader.maxDepth)), line: line)
+        }
         return result
     }
 

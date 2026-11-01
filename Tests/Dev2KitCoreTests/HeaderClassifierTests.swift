@@ -28,6 +28,20 @@ final class HeaderClassifierTests: XCTestCase {
         XCTAssertNil(kind("X-Access-Key", "kısa"), "değer yine opak olmalı")
     }
 
+    /// Yeniden tarama: `key`/`auth` alt dizgi olarak eşleşince gizli olmayan
+    /// başlıklar kimlik sayılıyordu. Ad parçalarına bakılır.
+    func testKeyAndAuthMatchNamePartsNotSubstrings() {
+        let opaque = "SYNTHETICabcdef0123456789"
+        XCTAssertNil(kind("X-Cache-Key", "/api/v1/users/list/page"))
+        XCTAssertNil(kind("X-Public-Key", opaque))
+        XCTAssertNil(kind("X-Key-Id", opaque))
+        XCTAssertNil(kind("X-Author", "burak-demirtas-1234567"))
+        XCTAssertEqual(kind("X-Upstream-Authorization", opaque), .credential)
+        XCTAssertEqual(kind("X-OAuth", opaque), .credential)
+        XCTAssertEqual(kind("X-Secretkey", "kısa"), .credential, "secret adında değer kısa da olsa gizli")
+        XCTAssertEqual(kind("X-Partner-ApiKey", opaque), .credential)
+    }
+
     /// Kontrol: tekrar anahtarları gizli değil, isteği yinelemek için gerekir.
     func testIdempotencyKeysStayNormal() {
         XCTAssertNil(kind("Idempotency-Key", "8e03978e-40d5-43e8-bc93-6894a57f9324"))

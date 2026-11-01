@@ -8,10 +8,22 @@ import Security
 /// tutarsa eski dosyalar silinir (secret'ın düz dosyada kopyası kalmasın).
 /// Yarıda kesilirse eski dosyalar yerinde kalır ve bir sonraki açılışta
 /// yeniden denenir: aynı adlara aynı değerler yazılır, çoğalma olmaz.
+///
+/// Keychain'de aynı adla FARKLI değer varsa Keychain'deki kazanır (kullanıcı
+/// kararı, 2026-11-01). Dosya ezmiyordu ama çakışmada geçiş her açılışta
+/// duruyor, oturum bayat dosya değerleriyle açılıyordu. Artık eksikler taşınır,
+/// eski dosya çifti şifreli yedeğe (`secrets.conflict.enc`) alınır; geçiş
+/// tamamlanır ve çakışan adlar kullanıcıya bildirilir.
 public enum SecretMigration {
     public struct Report: Equatable, Sendable {
         public let migrated: Int
+        /// Keychain'de farklı değeri olduğu için Keychain'deki değeri korunan adlar.
+        public let keptInKeychain: [String]
     }
+
+    /// Çakışmada eski dosyaların yedek adları (bir önceki yedeğin yerine geçer).
+    public static let conflictBackupName = "secrets.conflict.enc"
+    static let conflictBackupKeyName = ".secrets.conflict.key"
 
     /// Eski depo yoksa `nil`. Okunamazsa ya da doğrulanamazsa hata; eski
     /// dosyalar yerinde kalır.
@@ -29,29 +41,50 @@ public enum SecretMigration {
         for name in try legacy.listSecretNames() {
             values[name] = try legacy.secret(forName: name)
         }
-        // Hedefte FARKLI değer varsa ezilmez: eski dosya silinemeyip yerinde
-        // kaldıysa Keychain'e sonradan girilen yeni değer bir sonraki açılışta
-        // bayat değerle eziliyordu (güvenlik taraması S8). Hangisinin geçerli
-        // olduğu bilinemez; ikisine de dokunulmaz (`HistoryKeyMigration` gibi).
         var missing: [String] = []
+        var kept: [String] = []
         for (name, value) in values.sorted(by: { $0.key < $1.key }) {
             switch try target.secret(forName: name) {
             case nil: missing.append(name)
             case let existing? where existing == value: break
-            case _?: throw SecretMigrationError.conflict(name)
+            case _?: kept.append(name)
             }
         }
         for name in missing {
             try target.setSecret(values[name] ?? "", forName: name)
         }
-        for (name, value) in values {
+        for (name, value) in values where !kept.contains(name) {
             guard try target.secret(forName: name) == value else {
                 throw SecretMigrationError.verificationFailed(name)
             }
         }
-        try manager.removeItem(at: file)
-        try? manager.removeItem(at: key)
-        return Report(migrated: values.count)
+        if kept.isEmpty {
+            try manager.removeItem(at: file)
+            try? manager.removeItem(at: key)
+        } else {
+            try backUp(file: file, key: key, in: legacyDirectory)
+        }
+        return Report(migrated: values.count - kept.count, keptInKeychain: kept)
+    }
+
+    /// Dosyadaki farklı değerler kaybolmasın: dosya ve anahtarı birlikte yedek
+    /// adına taşınır (şifreli kalır). Anahtar taşınamazsa dosya geri konur;
+    /// yarım yedek bırakılmaz.
+    private static func backUp(file: URL, key: URL, in directory: URL) throws {
+        let manager = FileManager.default
+        let backupFile = directory.appendingPathComponent(conflictBackupName)
+        let backupKey = directory.appendingPathComponent(conflictBackupKeyName)
+        for url in [backupFile, backupKey] where manager.fileExists(atPath: url.path) {
+            try manager.removeItem(at: url)
+        }
+        try manager.moveItem(at: file, to: backupFile)
+        guard manager.fileExists(atPath: key.path) else { return }
+        do {
+            try manager.moveItem(at: key, to: backupKey)
+        } catch {
+            try? manager.moveItem(at: backupFile, to: file)
+            throw error
+        }
     }
 
     /// Eski depo henüz taşınmadı mı.
@@ -62,12 +95,10 @@ public enum SecretMigration {
 
 public enum SecretMigrationError: Error, LocalizedError, Equatable {
     case verificationFailed(String)
-    case conflict(String)
 
     public var errorDescription: String? {
         switch self {
         case .verificationFailed(let name): return L10n.t("secrets.migration.verify", name)
-        case .conflict(let name): return L10n.t("secrets.migration.conflict", name)
         }
     }
 }

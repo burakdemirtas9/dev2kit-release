@@ -413,13 +413,16 @@ final class AppState {
                 revealURL: store.layout.root
             )
         }
-        if let failure = secrets.1 {
-            startupMessage = startupMessage ?? failure
-            DiagnosticLog.shared.record(DiagnosticEvent(kind: .secretStoreUnavailable))
+        if let notice = secrets.1 {
+            startupMessage = Self.merging(notice, into: startupMessage)
+            // Çakışma uyarısında depo Keychain'dir; "kullanılamıyor" yalnızca düşüşte.
+            if !(secretStore is KeychainSecretStore) {
+                DiagnosticLog.shared.record(DiagnosticEvent(kind: .secretStoreUnavailable))
+            }
         }
         if let migrated = secrets.2 { startupMessage = Self.adding(MessageLine(.info, migrated), to: startupMessage) }
         if let failure = historyStore.1 {
-            startupMessage = startupMessage ?? failure
+            startupMessage = Self.merging(failure, into: startupMessage)
             DiagnosticLog.shared.record(DiagnosticEvent(kind: .historyKeyUnavailable))
         }
         if workspace.collections.isEmpty {

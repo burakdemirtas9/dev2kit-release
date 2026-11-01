@@ -54,17 +54,28 @@ final class SecretMigrationTests: XCTestCase {
         XCTAssertEqual(legacyFiles, ["secrets.enc", ".secrets.key"])
     }
 
-    /// Keychain'de farklı değer varsa ezilmez (güvenlik taraması S8):
-    /// yarım kalmış geçişten sonra girilen yeni değer bayat değerle ezilirdi.
-    func testDifferentValueInTargetIsNotOverwritten() throws {
+    /// Keychain'de farklı değer varsa Keychain kazanır (kullanıcı kararı,
+    /// 2026-11-01): ezilmez, eksikler taşınır, eski dosya çifti şifreli yedeğe
+    /// alınır ve geçiş tamamlanır. Önceden her açılışta durup bayat dosyayla
+    /// açılıyordu.
+    func testKeychainWinsOnConflictAndTheFileIsBackedUp() throws {
         try legacy(["api": "SYNTHETIC-OLD", "db": "SYNTHETIC-2"])
         let target = InMemorySecretStore(initial: ["api": "SYNTHETIC-NEW"])
-        XCTAssertThrowsError(try SecretMigration.migrate(legacyDirectory: directory, to: target)) { error in
-            XCTAssertEqual(error as? SecretMigrationError, .conflict("api"))
-        }
-        XCTAssertEqual(try target.secret(forName: "api"), "SYNTHETIC-NEW")
-        XCTAssertNil(try target.secret(forName: "db"), "çakışmada hiçbir şey yazılmaz")
-        XCTAssertEqual(legacyFiles, ["secrets.enc", ".secrets.key"])
+        let report = try XCTUnwrap(try SecretMigration.migrate(legacyDirectory: directory, to: target))
+        XCTAssertEqual(report, SecretMigration.Report(migrated: 1, keptInKeychain: ["api"]))
+        XCTAssertEqual(try target.secret(forName: "api"), "SYNTHETIC-NEW", "Keychain'deki ezilmez")
+        XCTAssertEqual(try target.secret(forName: "db"), "SYNTHETIC-2", "eksik olan taşınır")
+        XCTAssertEqual(legacyFiles, [], "geçiş tamamlanır, döngü biter")
+        XCTAssertFalse(SecretMigration.isPending(legacyDirectory: directory))
+
+        // Yedek okunabilir: dosyadaki değer kaybolmadı.
+        let backup = directory.appendingPathComponent("restore")
+        try FileManager.default.createDirectory(at: backup, withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: directory.appendingPathComponent(SecretMigration.conflictBackupName),
+                                         to: backup.appendingPathComponent("secrets.enc"))
+        try FileManager.default.copyItem(at: directory.appendingPathComponent(".secrets.conflict.key"),
+                                         to: backup.appendingPathComponent(".secrets.key"))
+        XCTAssertEqual(try FileSecretStore(directory: backup).secret(forName: "api"), "SYNTHETIC-OLD")
     }
 
     func testUnreadableKeyKeepsTheFiles() throws {

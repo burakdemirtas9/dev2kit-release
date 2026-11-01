@@ -123,6 +123,16 @@ final class PropertiesConverterTests: XCTestCase {
         if case .invalid(let issue) = PropertiesConverter.validate("x=1\ny[=2") { XCTAssertEqual(issue.line, 2) } else { XCTFail() }
     }
 
+    /// 100 bin seviyelik anahtar özyinelemeli kurulum/serbest bırakmada
+    /// yığını taşırıp uygulamayı çökertiyordu (yeniden tarama). YAML ile aynı sınır.
+    func testDeepKeysAreRejectedInsteadOfCrashing() throws {
+        let tooDeep = String(repeating: "a.", count: 100_000) + "b=1"
+        if case .invalid(let issue) = PropertiesConverter.validate("x=1\n" + tooDeep) { XCTAssertEqual(issue.line, 2) } else { XCTFail() }
+        XCTAssertThrowsError(try PropertiesConverter.toYAML(String(repeating: "[a](", count: 2_000) + "=1"))
+        let atLimit = String(repeating: "a.", count: YAMLReader.maxDepth - 1) + "b=1"
+        XCTAssertNoThrow(try PropertiesConverter.toYAML(atLimit), "sınırdaki derinlik kabul edilir")
+    }
+
     func testYAMLReaderRejectsUnsafeAndInvalid() {
         for (yaml, line) in [
             ("a: &x 1\nb: *x", 1),

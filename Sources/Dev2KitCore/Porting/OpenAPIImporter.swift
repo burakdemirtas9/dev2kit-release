@@ -228,7 +228,7 @@ public enum OpenAPIImporter {
                 let parameter = parameters[key]!
                 let pName = parameter["name"] as? String ?? ""
                 let required = parameter["required"] as? Bool ?? false
-                let value = parameterValue(parameter)
+                let value = budgetExceeded ? "" : budgeted(parameterValue(parameter))
                 switch parameter["in"] as? String {
                 case "query":
                     request.queryParams.append(KeyValueEntry(key: pName, value: value, enabled: required))
@@ -238,23 +238,56 @@ public enum OpenAPIImporter {
                 case "cookie":
                     skippedCookieParams += 1
                 case "body":
-                    if let schema = parameter["schema"] { request.body = jsonBody(sample(schema, depth: 0, seen: [])) }
+                    if !budgetExceeded, let schema = parameter["schema"] { request.body = jsonBody(sample(schema, depth: 0, seen: [])) }
                 case "formData":
                     formParameters.append(parameter)
                 default:
                     break
                 }
             }
-            if !formParameters.isEmpty { request.body = formBody(formParameters, consumes: operation["consumes"] ?? root["consumes"]) }
-            if let requestBody = operation["requestBody"].flatMap(resolve) {
+            if !formParameters.isEmpty, !budgetExceeded {
+                request.body = formBody(formParameters, consumes: operation["consumes"] ?? root["consumes"])
+            }
+            if !budgetExceeded, let requestBody = operation["requestBody"].flatMap(resolve) {
                 request.body = openAPI3Body(requestBody)
             }
+            if !consume(Self.byteCount(of: request.body)) { request.body = .none }
             if case .raw(_, let contentType) = request.body {
                 request.headers.append(KeyValueEntry(key: "Content-Type", value: contentType))
             }
             request.auth = auth(for: operation)
-            request.examples = responseExamples(operation, requestName: name)
+            request.examples = budgetExceeded ? [] : responseExamples(operation, requestName: name)
             return request
+        }
+
+        // MARK: Çıktı bütçesi
+
+        /// Üretilen gövde, örnek ve parametre metninin toplam üst sınırı.
+        /// `$ref` aynı büyük örneği her işleme kopyalar: 1000 işlem × 500 KB
+        /// örnek, 604 KB'lık dokümandan 512 MB metin ve 1,2 GB bellek
+        /// üretiyordu (yeniden tarama, 2026-11-01). Aşılınca kalan işlemler
+        /// gövdesiz/örneksiz gelir, not düşülür.
+        static let maxGeneratedBytes = 50_000_000
+        private var generatedBytes = 0
+        private var budgetExceeded: Bool { generatedBytes > Self.maxGeneratedBytes }
+
+        /// Bütçeden düşer; sığmadıysa `false` (çağıran üretileni atar).
+        private mutating func consume(_ bytes: Int) -> Bool {
+            generatedBytes += bytes
+            return !budgetExceeded
+        }
+
+        private mutating func budgeted(_ value: String) -> String {
+            consume(value.utf8.count) ? value : ""
+        }
+
+        static func byteCount(of body: RequestBody) -> Int {
+            switch body {
+            case .none: return 0
+            case .raw(let content, _): return content.utf8.count
+            case .formURLEncoded(let fields), .multipartForm(let fields):
+                return fields.reduce(0) { $0 + $1.key.utf8.count + $1.value.utf8.count }
+            }
         }
 
         // MARK: Response örnekleri
@@ -290,12 +323,14 @@ public enum OpenAPIImporter {
                     }
                 }
                 for item in found {
+                    guard !budgetExceeded else { break }
                     let body: String
                     if item.mediaType.contains("json"), case .raw(let content, _) = jsonBody(item.value, contentType: item.mediaType) {
                         body = content
                     } else {
                         body = text(item.value)
                     }
+                    guard consume(body.utf8.count) else { break }
                     let candidate = ResponseExample(
                         name: item.name,
                         statusCode: status,
@@ -516,6 +551,9 @@ public enum OpenAPIImporter {
                 notes.append(L10n.plural("openapi.note.cookies", count: skippedCookieParams))
             }
             notes.append(contentsOf: exampleNotes)
+            if budgetExceeded {
+                notes.append(L10n.t("openapi.note.budget", L10n.number(Self.maxGeneratedBytes / 1_000_000)))
+            }
             return notes
         }
 

@@ -41,6 +41,8 @@ final class ShellTokenizerTests: XCTestCase {
         XCTAssertEqual(try ShellTokenizer.tokenize(#"curl -d $'\033[0m'"#), ["curl", "-d", "\u{1B}[0m"])
         XCTAssertEqual(try ShellTokenizer.tokenize(#"curl -d $'\101\0B'"#), ["curl", "-d", "A\0B"])
         XCTAssertEqual(try ShellTokenizer.tokenize(#"curl -d $'\1018'"#), ["curl", "-d", "A8"], "en çok üç hane")
+        // Birleşik karakter (`1` + U+0301) sekizlik hane değildir; eskisi gibi kalır.
+        XCTAssertEqual(try ShellTokenizer.tokenize("curl -d $'\\1\u{301}x'"), ["curl", "-d", "1\u{301}x"])
     }
 
     func testEmptyQuotedArgumentKept() throws {
