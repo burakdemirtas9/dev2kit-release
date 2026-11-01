@@ -112,6 +112,31 @@ final class RequestEngineTests: XCTestCase {
         XCTAssertFalse(body.contains(" "), "boşluklar percent-encode edilmeli")
     }
 
+    /// `+` sunucuda boşluk okunur: adresteki `%2B` korunmalı, eklenen değerde
+    /// `+`, `&`, `=` kodlanmalı (güvenlik taraması N1).
+    func testPlusSignsSurviveQueryAndFormEncoding() throws {
+        var query = RequestModel(
+            url: "https://api.example.com/s?token=a%2Bb",
+            queryParams: [KeyValueEntry(key: "k", value: "v+w&x=y z")]
+        )
+        query.auth = .apiKey(key: "api_key", value: "{{secret:k}}", location: .queryParam)
+        let url = try XCTUnwrap(try engine.buildURLRequest(query, resolver: resolver(secrets: ["k": "c2Vj+cmV0/=="])).url)
+        XCTAssertEqual(URLComponents(url: url, resolvingAgainstBaseURL: false)?.percentEncodedQuery,
+                       "token=a%2Bb&k=v%2Bw%26x%3Dy%20z&api_key=c2Vj%2BcmV0%2F%3D%3D")
+
+        var form = RequestModel(method: .post, url: "https://api.example.com")
+        form.body = .formURLEncoded(fields: [KeyValueEntry(key: "client_secret", value: "a+b&c=d%")])
+        let body = String(data: try XCTUnwrap(try engine.buildURLRequest(form, resolver: resolver()).httpBody), encoding: .utf8)
+        XCTAssertEqual(body, "client_secret=a%2Bb%26c%3Dd%25")
+    }
+
+    /// Ek parametre yoksa adres hiç yeniden kurulmaz.
+    func testURLWithoutExtraParametersIsUntouched() throws {
+        let model = RequestModel(url: "https://api.example.com/s?a=1&&b=%2B")
+        XCTAssertEqual(try engine.buildURLRequest(model, resolver: resolver()).url?.absoluteString,
+                       "https://api.example.com/s?a=1&&b=%2B")
+    }
+
     func testMultipartFormBody() throws {
         var model = RequestModel(method: .post, url: "https://api.example.com")
         model.body = .multipartForm(fields: [

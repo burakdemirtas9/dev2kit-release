@@ -88,6 +88,7 @@ public enum RedirectGuard {
             case tooManyRedirects
             case insecureDowngrade
             case hostNotAllowed
+            case crossOriginBody
 
             public var explanation: String {
                 switch self {
@@ -95,6 +96,7 @@ public enum RedirectGuard {
                 case .tooManyRedirects: return L10n.t("redirect.tooMany")
                 case .insecureDowngrade: return L10n.t("redirect.downgrade")
                 case .hostNotAllowed: return L10n.t("redirect.hostNotAllowed")
+                case .crossOriginBody: return L10n.t("redirect.crossOriginBody")
                 }
             }
         }
@@ -118,7 +120,8 @@ public enum RedirectGuard {
         policy: RedirectPolicy,
         redirectCount: Int,
         credentialHeaders: [String] = sensitiveHeaders,
-        hostPolicy: HostPolicyState = .notConfigured
+        hostPolicy: HostPolicyState = .notConfigured,
+        carriesBody: Bool = false
     ) -> Decision {
         guard policy.follow else { return .stop(reason: .policyDisabled) }
         guard hostPolicy.violation(for: destination) == nil else { return .stop(reason: .hostNotAllowed) }
@@ -130,6 +133,23 @@ public enum RedirectGuard {
             return .stop(reason: .insecureDowngrade)
         }
 
-        return .follow(strippedHeaders: isCrossOrigin(source, destination) ? credentialHeaders : [])
+        let crossOrigin = isCrossOrigin(source, destination)
+        // 307/308 metodu ve gövdeyi korur: başlıklar düşse de gövde (parola,
+        // token içerebilir) yabancı kaynağa giderdi. Gövde ayıklanamaz (307
+        // gövdesiz gönderilemez), yönlendirme durur ve kullanıcıya gösterilir
+        // (güvenlik taraması N2).
+        if crossOrigin, carriesBody { return .stop(reason: .crossOriginBody) }
+        return .follow(strippedHeaders: crossOrigin ? credentialHeaders : [])
+    }
+
+    /// Yönlendirilen istek gövde taşıyor mu? 301/302/303'te Foundation POST'u
+    /// gövdesiz GET'e çevirir; 307/308'de metot ve özgün gövde korunur.
+    static func carriesBody(redirected request: URLRequest, original: URLRequest?) -> Bool {
+        let method = (request.httpMethod ?? "GET").uppercased()
+        guard method != "GET", method != "HEAD" else { return false }
+        let hasBody = { (candidate: URLRequest?) in
+            candidate.map { $0.httpBody?.isEmpty == false || $0.httpBodyStream != nil } ?? false
+        }
+        return hasBody(request) || hasBody(original)
     }
 }

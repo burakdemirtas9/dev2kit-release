@@ -455,7 +455,7 @@ public final class RequestEngine: @unchecked Sendable {
             throw RequestEngineError.invalidURL(resolvedURLString)
         }
 
-        var queryItems = components.queryItems ?? []
+        var queryItems: [URLQueryItem] = []
         // Params tablosu adresle eşitleniyor (QueryParamSync): adreste zaten
         // olan parametre İKİ KEZ eklenmez. Parametresi yalnızca tabloda olan
         // eski kayıtlarda hepsi eklenir (geriye uyum).
@@ -472,7 +472,8 @@ public final class RequestEngine: @unchecked Sendable {
                 value: try resolver.resolve(value)
             ))
         }
-        if !queryItems.isEmpty { components.queryItems = queryItems }
+        // Adresteki sorgu dokunulmadan kalır; yalnızca eklenenler kodlanır.
+        URLCodec.append(queryItems, to: &components)
 
         guard let url = components.url else {
             throw RequestEngineError.invalidURL(resolvedURLString)
@@ -571,11 +572,10 @@ public final class RequestEngine: @unchecked Sendable {
             setBody(data, contentType: contentType.isEmpty ? nil : contentType, on: &request)
 
         case .formURLEncoded(let fields):
-            var components = URLComponents()
-            components.queryItems = try fields
+            let query = URLCodec.formQuery(try fields
                 .filter { $0.enabled && !$0.key.isEmpty }
-                .map { URLQueryItem(name: try resolver.resolve($0.key), value: try resolver.resolve($0.value)) }
-            guard let query = components.percentEncodedQuery, !query.isEmpty else { return false }
+                .map { URLQueryItem(name: try resolver.resolve($0.key), value: try resolver.resolve($0.value)) })
+            guard !query.isEmpty else { return false }
             setBody(Data(query.utf8), contentType: "application/x-www-form-urlencoded", on: &request)
 
         case .multipartForm(let fields):

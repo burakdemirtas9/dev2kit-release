@@ -64,7 +64,7 @@ public enum HeaderClassifier {
             (category, kind) = (.sensitive, .personal)
         } else if infrastructureNames.contains(lower) || infrastructurePrefixes.contains(where: lower.hasPrefix) {
             (category, kind) = (.infrastructure, nil)
-        } else if credentialKeywords.contains(where: lower.contains), looksOpaque(value) {
+        } else if credentialKeywords.contains(where: lower.contains), looksLikeCredentialValue(name: lower, value: value) {
             (category, kind) = (.sensitive, .credential)
         } else if personalKeywords.contains(where: lower.contains) {
             (category, kind) = (.sensitive, .personal)
@@ -87,6 +87,27 @@ public enum HeaderClassifier {
     ]
 
     static let credentialKeywords = ["token", "secret", "password", "passwd", "session", "apikey", "api-key", "auth"]
+
+    /// Değeri kısa ya da boşluklu olsa da gizli kalan adlar: parola uzun
+    /// olmak zorunda değil (`X-Password: Pa$$w0rd`).
+    static let secretKeywords = ["secret", "password", "passwd"]
+
+    /// Değerin önünde olabilecek kimlik şemaları; opaklık şemadan sonrasına bakılır.
+    static let authSchemes = ["bearer ", "basic ", "token "]
+
+    /// Adında kimlik anahtar kelimesi geçen başlığın değeri kimlik bilgisi mi?
+    /// Parola/secret adlarında boş olmayan her değer, diğerlerinde opak değer
+    /// (`Bearer abc…` gibi şemalı değer dahil). Önceden yalnızca 16+ karakter
+    /// boşluksuz değer sayılıyordu; kısa parola düz metin kalıyordu
+    /// (güvenlik taraması S2).
+    static func looksLikeCredentialValue(name lower: String, value: String) -> Bool {
+        let trimmed = value.trimmingCharacters(in: .whitespaces)
+        if secretKeywords.contains(where: lower.contains) { return !trimmed.isEmpty }
+        if let scheme = authSchemes.first(where: { trimmed.lowercased().hasPrefix($0) }) {
+            return looksOpaque(String(trimmed.dropFirst(scheme.count)))
+        }
+        return looksOpaque(trimmed)
+    }
 
     /// Müşteri/kişi tanımlayan başlıklar.
     static let personalKeywords = [

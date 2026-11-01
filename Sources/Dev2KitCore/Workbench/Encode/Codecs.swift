@@ -71,6 +71,25 @@ public enum URLCodec {
         return form ? encoded.replacingOccurrences(of: "%20", with: "+") : encoded
     }
 
+    /// `ad=değer&…` (sorgu ya da form gövdesi). Ad ve değer sıkı kodlanır;
+    /// `URLComponents.queryItems` `+`'yı kodlamıyor, sunucu onu boşluk okuyor:
+    /// base64 token ya da `client_secret` bozuk gidiyordu (güvenlik taraması N1).
+    /// Değeri `nil` olan öğe yalnızca ad olarak yazılır.
+    static func formQuery(_ items: [URLQueryItem]) -> String {
+        items.map { item in
+            encode(item.name, form: false) + (item.value.map { "=" + encode($0, form: false) } ?? "")
+        }.joined(separator: "&")
+    }
+
+    /// Mevcut sorgu olduğu gibi kalır (içindeki `%2B` çözülüp `+` olmaz),
+    /// yeni öğeler sıkı kodlanıp sona eklenir.
+    static func append(_ items: [URLQueryItem], to components: inout URLComponents) {
+        guard !items.isEmpty else { return }
+        let added = formQuery(items)
+        let existing = components.percentEncodedQuery ?? ""
+        components.percentEncodedQuery = existing.isEmpty ? added : existing + "&" + added
+    }
+
     public static func decode(_ text: String, form: Bool) throws -> String {
         let source = form ? text.replacingOccurrences(of: "+", with: " ") : text
         guard let decoded = source.removingPercentEncoding else {

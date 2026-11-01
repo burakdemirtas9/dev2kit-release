@@ -121,6 +121,16 @@ final class AutoImportTests: XCTestCase {
         XCTAssertEqual(AutoImport.scan(String(repeating: "curl https://a.example.com/x\n", count: 500)).curl.count, AutoImport.maxCurlCommands)
     }
 
+    /// Sınıra gelince tarama durur; sonuç sınırsız taramanın başı ile aynı
+    /// (güvenlik taraması P5).
+    func testCommandLimitStopsTheScanWithTheSameResult() {
+        let text = (0..<1_000).map { $0.isMultiple(of: 3) ? "curl 'https://a.example.com/\($0)\n -H 'X: 1'" : "curl https://b.example.com/\($0)" }
+            .joined(separator: "\n")
+        let limited = CurlExtractor.commands(in: text, limit: 50)
+        XCTAssertEqual(limited.count, 50)
+        XCTAssertEqual(limited, Array(CurlExtractor.commands(in: text).prefix(50)))
+    }
+
     func testUnclosedBracesInProseStayFast() {
         // En kötü durum: binlerce kapanmamış "{" (her biri sona kadar taranabilir).
         let text = String(repeating: "{ açık ", count: 200_000)

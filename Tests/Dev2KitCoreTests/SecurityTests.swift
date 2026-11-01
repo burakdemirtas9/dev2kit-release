@@ -208,6 +208,22 @@ final class RequestInspectorTests: XCTestCase {
         XCTAssertFalse(titles(try findings(local), .warn).contains("Kimlik bilgisi şifresiz gidiyor"))
     }
 
+    /// `127.` ile başlayan DNS adı loopback değildir (güvenlik taraması S1).
+    func testLookalikeLoopbackNameStillWarns() throws {
+        let lookalike = RequestModel(url: "http://127.evil.com/", auth: .bearer(token: "{{secret:token}}"))
+        XCTAssertTrue(titles(try findings(lookalike), .warn).contains("Kimlik bilgisi şifresiz gidiyor"))
+    }
+
+    func testLoopbackNeedsARealIPv4Address() {
+        for host in ["localhost", "LOCALHOST", "app.localhost", "::1", "127.0.0.1", "127.1.2.3", "127.255.255.255"] {
+            XCTAssertTrue(RequestInspector.isLoopback(host), host)
+        }
+        for host in ["127.evil.com", "127.0.0.1.evil.com", "127.0.0.256", "127.0.0", "127..0.1", "128.0.0.1",
+                     "127.0.0.1a", "127.0.0.+1", "127.0.0.0001", "evil127.0.0.1", "localhost.evil.com"] {
+            XCTAssertFalse(RequestInspector.isLoopback(host), host)
+        }
+    }
+
     func testCleartextWithoutCredentialsIsFine() throws {
         XCTAssertEqual(try findings(RequestModel(url: "http://example.com/public")), [])
     }

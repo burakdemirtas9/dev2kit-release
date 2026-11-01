@@ -265,4 +265,39 @@ final class CredentialHeaderTests: XCTestCase {
         )
         XCTAssertEqual(crossOrigin, .follow(strippedHeaders: headers))
     }
+
+    // MARK: - Gövde (güvenlik taraması N2)
+
+    private func url(_ string: String) -> URL { URL(string: string)! }
+
+    func testCrossOriginRedirectCarryingABodyStops() {
+        let decision = RedirectGuard.evaluate(
+            from: url("https://api.example.com/a"), to: url("https://evil.example.com/a"),
+            policy: .default, redirectCount: 0, carriesBody: true
+        )
+        XCTAssertEqual(decision, .stop(reason: .crossOriginBody))
+    }
+
+    func testSameOriginRedirectCarryingABodyIsFollowed() {
+        let decision = RedirectGuard.evaluate(
+            from: url("https://api.example.com/a"), to: url("https://api.example.com/b"),
+            policy: .default, redirectCount: 0, carriesBody: true
+        )
+        XCTAssertEqual(decision, .follow(strippedHeaders: []))
+    }
+
+    func testBodyDetectionFollowsTheRedirectedMethod() {
+        var post = URLRequest(url: url("https://api.example.com/a"))
+        post.httpMethod = "POST"
+        post.httpBody = Data("gizli".utf8)
+        var get = URLRequest(url: url("https://api.example.com/b"))
+        get.httpMethod = "GET"
+        var bodylessPost = URLRequest(url: url("https://api.example.com/b"))
+        bodylessPost.httpMethod = "POST"
+
+        XCTAssertTrue(RedirectGuard.carriesBody(redirected: post, original: nil))
+        XCTAssertTrue(RedirectGuard.carriesBody(redirected: bodylessPost, original: post), "özgün gövde korunur (307/308)")
+        XCTAssertFalse(RedirectGuard.carriesBody(redirected: get, original: post), "303/302: GET'e döndü, gövde yok")
+        XCTAssertFalse(RedirectGuard.carriesBody(redirected: bodylessPost, original: bodylessPost))
+    }
 }

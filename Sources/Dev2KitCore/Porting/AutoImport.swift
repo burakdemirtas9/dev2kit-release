@@ -144,7 +144,7 @@ public enum AutoImport {
 
     static func curlFindings(in text: String) -> [CurlFinding] {
         var findings: [CurlFinding] = []
-        for command in CurlExtractor.commands(in: text).prefix(maxCurlCommands) {
+        for command in CurlExtractor.commands(in: text, limit: maxCurlCommands) {
             guard let result = try? CurlImporter.parse(command) else { continue }
             var request = result.request
             request.name = name(for: request)
@@ -169,11 +169,14 @@ public enum AutoImport {
 /// - PDF/Word metnindeki kıvrık tırnaklar düz tırnağa çevrilir: yoksa
 ///   kabuk ayrıştırması tırnakları tanımıyor.
 public enum CurlExtractor {
-    public static func commands(in text: String) -> [String] {
+    /// `limit` komut bulununca tarama durur. Sınır eskiden sonradan
+    /// uygulanıyordu: dev belgede sınırın ötesindeki komutlar da çıkarılıp
+    /// atılıyordu (güvenlik taraması P5; ölçümde kare büyüme çıkmadı).
+    public static func commands(in text: String, limit: Int = .max) -> [String] {
         let lines = normalized(text).components(separatedBy: "\n")
         var commands: [String] = []
         var index = 0
-        while index < lines.count {
+        while index < lines.count, commands.count < limit {
             guard let start = curlStart(in: lines[index]) else { index += 1; continue }
             var parts = [String(lines[index][start...])]
             var quote: Character? = openQuote(after: nil, in: parts[0])

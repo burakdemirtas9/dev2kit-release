@@ -173,6 +173,29 @@ final class OAuth2ClientTests: XCTestCase {
         XCTAssertTrue(body.contains("client_secret=gizli"))
     }
 
+    /// `+` içeren secret ya da kod sunucuda boşluk olurdu (güvenlik taraması N1).
+    func testTokenRequestEncodesPlusSigns() throws {
+        let request = try OAuth2Client.exchangeRequest(
+            config: makeConfig(), code: "k+d", verifier: "v",
+            redirectURI: "http://127.0.0.1:1/callback", resolvedClientSecret: "s+cr/t="
+        )
+        let body = String(data: request.httpBody ?? Data(), encoding: .utf8) ?? ""
+        XCTAssertTrue(body.contains("client_secret=s%2Bcr%2Ft%3D"), body)
+        XCTAssertTrue(body.contains("code=k%2Bd"), body)
+        XCTAssertFalse(body.contains("+"), body)
+    }
+
+    func testAuthorizationURLKeepsItsOwnEncodedQuery() throws {
+        var config = makeConfig()
+        config.authorizationURL = "https://idp.example.com/authorize?tenant=a%2Bb"
+        let url = try OAuth2Client.authorizationURL(config: config, pkce: PKCE.generate(), state: "s",
+                                                    redirectURI: "http://127.0.0.1:1/callback")
+        let query = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false)?.percentEncodedQuery)
+        XCTAssertTrue(query.hasPrefix("tenant=a%2Bb&"), query)
+        XCTAssertEqual(queryItems(url)["redirect_uri"], "http://127.0.0.1:1/callback")
+        XCTAssertEqual(queryItems(url)["scope"], "openid profile")
+    }
+
     func testRefreshRequestBody() throws {
         let request = try OAuth2Client.refreshRequest(
             config: makeConfig(), refreshToken: "yenileme-123", resolvedClientSecret: nil

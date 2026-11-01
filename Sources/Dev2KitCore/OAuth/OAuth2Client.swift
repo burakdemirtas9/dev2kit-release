@@ -34,7 +34,7 @@ public enum OAuth2Client {
             throw FlowError(message: L10n.t("oauth.flow.noClientID"))
         }
 
-        var items = components.queryItems ?? []
+        var items: [URLQueryItem] = []
         items.append(contentsOf: [
             URLQueryItem(name: "response_type", value: "code"),
             URLQueryItem(name: "client_id", value: config.clientID),
@@ -50,7 +50,8 @@ public enum OAuth2Client {
         for parameter in config.extraParameters where parameter.enabled && !parameter.key.isEmpty {
             items.append(URLQueryItem(name: parameter.key, value: parameter.value))
         }
-        components.queryItems = items
+        // Yetkilendirme adresindeki sorgu olduğu gibi kalır, eklenenler kodlanır.
+        URLCodec.append(items, to: &components)
 
         guard let url = components.url else {
             throw FlowError(message: L10n.t("oauth.flow.buildAuthURL"))
@@ -145,16 +146,16 @@ public enum OAuth2Client {
             throw FlowError(message: L10n.t("oauth.flow.tokenNotHTTPS"))
         }
 
-        var components = URLComponents()
-        components.queryItems = fields.sorted { $0.key < $1.key }
-            .map { URLQueryItem(name: $0.key, value: $0.value) }
+        // `+` içeren client_secret/kod `URLComponents` ile kodlanmadan gidiyordu.
+        let body = URLCodec.formQuery(fields.sorted { $0.key < $1.key }
+            .map { URLQueryItem(name: $0.key, value: $0.value) })
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         Dev2KitIdentity.stamp(&request)
-        request.httpBody = Data((components.percentEncodedQuery ?? "").utf8)
+        request.httpBody = Data(body.utf8)
         return request
     }
 

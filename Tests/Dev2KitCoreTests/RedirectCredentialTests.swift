@@ -65,6 +65,54 @@ final class RedirectCredentialTests: XCTestCase {
         XCTAssertTrue(raw.lowercased().contains("x-trace-note: plain"), raw)
     }
 
+    /// 307/308 POST gövdesini korur: başka kaynağa gövde (secret) gitmemeli,
+    /// yönlendirme durup 3xx kullanıcıya gösterilmeli (güvenlik taraması N2).
+    func testCrossOriginBodyPreservingRedirectStops() async throws {
+        for status in [307, 308] {
+            let target = try LoopbackHTTPServer()
+            let targetPort = try await target.start()
+            let source = try LoopbackHTTPServer { _ in LoopbackHTTPServer.redirect(status, to: "http://127.0.0.1:\(targetPort)/b") }
+            let sourcePort = try await source.start()
+            var model = RequestModel(method: .post, url: "http://127.0.0.1:\(sourcePort)/a")
+            model.body = .raw(content: #"{"password":"{{secret:audit}}"}"#, contentType: "application/json")
+            let response = try await RequestEngine().sendApprovingWarnings(model, secretStore: store)
+            XCTAssertEqual(response.statusCode, status)
+            XCTAssertEqual(response.redirectStop, .crossOriginBody)
+            XCTAssertTrue(target.received.isEmpty, "\(status): hedefe hiçbir şey gitmemeli: \(target.received)")
+        }
+    }
+
+    /// Kontrol: 302'de Foundation POST'u gövdesiz GET'e çevirir; izlenmeye devam eder.
+    func testCrossOriginRedirectThatDropsTheBodyIsFollowed() async throws {
+        let target = try LoopbackHTTPServer()
+        let targetPort = try await target.start()
+        let source = try LoopbackHTTPServer { _ in LoopbackHTTPServer.redirect(302, to: "http://127.0.0.1:\(targetPort)/b") }
+        let sourcePort = try await source.start()
+        var model = RequestModel(method: .post, url: "http://127.0.0.1:\(sourcePort)/a")
+        model.body = .raw(content: #"{"password":"{{secret:audit}}"}"#, contentType: "application/json")
+        let response = try await RequestEngine().sendApprovingWarnings(model, secretStore: store)
+        XCTAssertEqual(response.statusCode, 200)
+        XCTAssertNil(response.redirectStop)
+        let raw = target.received.first ?? ""
+        XCTAssertTrue(raw.hasPrefix("GET /b "), raw)
+        XCTAssertFalse(raw.contains(secret), raw)
+    }
+
+    /// Kontrol: aynı kaynağa 307'de gövde korunur.
+    func testSameOriginBodyPreservingRedirectKeepsTheBody() async throws {
+        let server = try LoopbackHTTPServer { raw in
+            raw.hasPrefix("POST /a ") ? LoopbackHTTPServer.redirect(307, to: "/b") : LoopbackHTTPServer.ok("ok")
+        }
+        let port = try await server.start()
+        var model = RequestModel(method: .post, url: "http://127.0.0.1:\(port)/a")
+        model.body = .raw(content: #"{"password":"{{secret:audit}}"}"#, contentType: "application/json")
+        let response = try await RequestEngine().sendApprovingWarnings(model, secretStore: store)
+        XCTAssertEqual(response.statusCode, 200)
+        let second = server.received.last ?? ""
+        XCTAssertTrue(second.hasPrefix("POST /b "), second)
+        XCTAssertTrue(second.contains(secret), "aynı kaynakta gövde kalır")
+    }
+
     /// Kontrol: aynı kaynağa yönlendirmede hassas başlık korunur.
     func testSameOriginRedirectKeepsTheSecretHeader() async throws {
         let server = try LoopbackHTTPServer { raw in

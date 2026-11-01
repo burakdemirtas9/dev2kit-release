@@ -174,8 +174,18 @@ public enum RequestInspector {
         )
     }
 
+    /// `127.` öneki yalnızca gerçek IPv4 adresinde loopback demektir:
+    /// `127.evil.com` bir DNS adıdır ve şifresiz http uyarısını atlatıyordu
+    /// (güvenlik taraması S1).
     static func isLoopback(_ host: String) -> Bool {
-        host == "localhost" || host.hasSuffix(".localhost") || host == "::1" || host.hasPrefix("127.")
+        let lower = host.lowercased()
+        if lower == "localhost" || lower.hasSuffix(".localhost") || lower == "::1" { return true }
+        let octets = lower.split(separator: ".", omittingEmptySubsequences: false)
+        guard octets.count == 4, octets[0] == "127" else { return false }
+        return octets.allSatisfy { octet in
+            (1...3).contains(octet.count) && octet.allSatisfy(\.isASCII) && octet.allSatisfy(\.isNumber)
+                && (Int(octet).map { $0 <= 255 } ?? false)
+        }
     }
 
     static func isMetadataHost(_ host: String) -> Bool {

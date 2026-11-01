@@ -218,7 +218,8 @@ final class RedirectTracker: NSObject, URLSessionTaskDelegate, URLSessionDataDel
             policy: policy,
             redirectCount: recorded.count,
             credentialHeaders: credentialHeaders,
-            hostPolicy: hostPolicy
+            hostPolicy: hostPolicy,
+            carriesBody: RedirectGuard.carriesBody(redirected: request, original: task.originalRequest)
         ) {
         case .stop(let reason):
             stop = reason
