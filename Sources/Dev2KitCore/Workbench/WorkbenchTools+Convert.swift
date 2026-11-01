@@ -12,7 +12,7 @@ extension WorkbenchTools {
         id: "json-to-csv", title: "JSON → CSV", input: "JSON", syntax: .json, output: .plain,
         keywords: ["excel", "spreadsheet", "tablo", "table"],
         usesDelimiter: true,
-        validate: JSONTool.validate,
+        validate: { JSONTool.validate($0) },
         sample: #"[{ "id": 1, "name": "Ada", "city": "London" }, { "id": 2, "name": "Linus", "city": "Helsinki" }]"#
     ) { input, options in
         try CSVConverter.fromJSON(input, delimiter: options.csvDelimiter)
@@ -22,7 +22,7 @@ extension WorkbenchTools {
         id: "json-to-xml", title: "JSON → XML", input: "JSON", syntax: .json, output: .xml,
         keywords: ["soap"],
         usesIndentation: true, usesRootName: true,
-        validate: JSONTool.validate,
+        validate: { JSONTool.validate($0) },
         sample: #"{ "order": { "@id": "42", "item": ["api", "tools"] } }"#
     ) { input, options in
         try XMLConverter.fromJSON(input, rootName: options.xmlRootName, indent: options.indentation.unit)
@@ -31,7 +31,7 @@ extension WorkbenchTools {
     public static let jsonToYAML = converter(
         id: "json-to-yaml", title: "JSON → YAML", input: "JSON", syntax: .json, output: .plain,
         keywords: ["yml", "kubernetes", "k8s", "spring", "application.yml"],
-        validate: JSONTool.validate,
+        validate: { JSONTool.validate($0) },
         sample: #"{ "server": { "port": 8080 }, "country": "no", "profiles": ["dev", "prod"] }"#
     ) { input, _ in
         try YAMLWriter.fromJSON(input)
@@ -42,7 +42,7 @@ extension WorkbenchTools {
     public static let yamlToProperties = converter(
         id: "yaml-to-properties", title: "YAML → Properties", input: "YAML", syntax: .plain, output: .plain,
         keywords: ["yml", "spring", "application.yml", "application.properties", "properties"],
-        validate: YAMLReader.validate,
+        validate: { YAMLReader.validate($0) },
         sample: "server:\n  port: 8080\nspring:\n  application:\n    name: demo\n  profiles:\n    active:\n      - dev\n      - local"
     ) { input, _ in
         try PropertiesConverter.fromYAML(input)
@@ -51,7 +51,7 @@ extension WorkbenchTools {
     public static let propertiesToYAML = converter(
         id: "properties-to-yaml", title: "Properties → YAML", input: "Properties", syntax: .plain, output: .plain,
         keywords: ["yml", "spring", "application.yml", "application.properties", "properties"],
-        validate: PropertiesConverter.validate,
+        validate: { PropertiesConverter.validate($0) },
         sample: "server.port=8080\nspring.application.name=demo\nspring.profiles.active[0]=dev\nspring.profiles.active[1]=local"
     ) { input, _ in
         try PropertiesConverter.toYAML(input)
@@ -67,7 +67,7 @@ extension WorkbenchTools {
             id: id, title: title, input: "JSON", syntax: .json, output: output,
             keywords: ["dto", "class", "model", "sınıf", "pojo", "type"] + keywords,
             category: .objects,
-            validate: JSONTool.validate,
+            validate: { JSONTool.validate($0) },
             sample: objectSample
         ) { input, _ in
             try ObjectCodeGenerator.generate(input, language: language)

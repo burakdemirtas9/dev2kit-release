@@ -13,7 +13,7 @@ extension WorkbenchTools {
                 try JWTDecoder.decode(input, indent: options.indentation.unit)
             },
         ],
-        validate: JWTDecoder.validate,
+        validate: { JWTDecoder.validate($0) },
         sampleInput: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkFkYSIsImV4cCI6MTk5OTk5OTk5OX0.c2lnbmF0dXJl"
     )
 

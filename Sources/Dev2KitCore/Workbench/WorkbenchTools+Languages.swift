@@ -18,7 +18,7 @@ extension WorkbenchTools {
         keywords: ["soap", "wsdl", "pom", "biçimlendir", "sıkıştır", "doğrula"],
         format: { try MarkupFormatter.beautify($0, flavor: .xml, indent: $1.indentation.unit) },
         minify: { try MarkupTools.minify($0, html: false) },
-        validate: MarkupTools.validateXML,
+        validate: { MarkupTools.validateXML($0) },
         sample: #"<order id="42"><item>api</item><item>tools</item></order>"#
     )
 
@@ -27,7 +27,7 @@ extension WorkbenchTools {
         keywords: ["web", "biçimlendir", "sıkıştır", "etiket"],
         format: { try MarkupFormatter.beautify($0, flavor: .html, indent: $1.indentation.unit) },
         minify: { try MarkupTools.minify($0, html: true) },
-        validate: MarkupTools.checkHTML,
+        validate: { MarkupTools.checkHTML($0) },
         sample: #"<div class="card"><h2>dev2kit</h2><p>Hello</p></div>"#
     )
 
@@ -60,7 +60,7 @@ extension WorkbenchTools {
         format: { input, _ in try MarkdownFormatter.beautify(input) },
         formatUsesIndentation: false,
         minify: nil,
-        validate: MarkdownFormatter.check,
+        validate: { MarkdownFormatter.check($0) },
         sample: "# Title\n\n| key | value |\n|-|-|\n| id | 42 |"
     )
 
