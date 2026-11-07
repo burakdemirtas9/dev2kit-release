@@ -78,6 +78,7 @@ struct HiddenModeCursorGuardView: NSViewRepresentable {
     let mode: AppMode
     let keepsAPIClient: Bool
     let keepsWorkbench: Bool
+    let keepsMocker: Bool
 
     func makeNSView(context: Context) -> NSView { PassThroughView() }
 

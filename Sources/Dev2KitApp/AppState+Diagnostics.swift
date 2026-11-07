@@ -8,7 +8,11 @@ extension AppState {
     /// ekran ve verinin kaba büyüklüğü. İçerik yok (`DiagnosticContext`).
     /// Ucuz: uzunluklar UTF-8 sayımı, `{{` taraması sınırlı.
     var diagnosticContext: DiagnosticContext {
-        guard isAPIClient else { return DiagnosticContext(screen: .workbench) }
+        switch mode {
+        case .workbench: return DiagnosticContext(screen: .workbench)
+        case .mocker: return DiagnosticContext(screen: .mocker)
+        case .apiClient: break
+        }
         guard let id = selectedRequestID, let request = request(withID: id) else {
             return DiagnosticContext(screen: .apiClientNoRequest)
         }

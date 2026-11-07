@@ -42,7 +42,8 @@ struct BodyEditor: View {
         }
     }
 
-    private static func label(_ kind: Beautifier.Kind) -> String {
+    /// Türün kısa adı (Beautify ipucunda). Mocker gövde alanı da kullanır.
+    static func label(_ kind: Beautifier.Kind) -> String {
         switch kind {
         case .plain: return L10n.t("body.kind.text")
         case .json: return "JSON"
@@ -266,7 +267,8 @@ struct BodyEditor: View {
     }
 
     /// Kıvrık tırnak en sık rastlanan sebep: metin bir yerden kopyalanmış.
-    private static func message(for error: Error, source: String) -> String {
+    /// Mocker gövde alanı da kullanır.
+    static func message(for error: Error, source: String) -> String {
         let curlyQuotes: Set<Character> = ["\u{201C}", "\u{201D}", "\u{2018}", "\u{2019}"]
         guard source.contains(where: { curlyQuotes.contains($0) }) else {
             return error.localizedDescription

@@ -2,7 +2,7 @@
 
 extension L10nTable {
     static let apiClient: [String: L10nEntry] = [
-        "toolbar.mode.help": L10nEntry("API Client ile Workbench arasında geç", "Switch between API Client and Workbench"),
+        "toolbar.mode.help": L10nEntry("API Client, Workbench ve Mocker arasında geç", "Switch between API Client, Workbench and Mocker"),
         "toolbar.environments": L10nEntry("Environment'lar", "Environments"),
         "toolbar.environments.help": L10nEntry("Environment oluştur ve düzenle", "Create and edit environments"),
         "toolbar.appearance": L10nEntry("Görünüm", "Appearance"),

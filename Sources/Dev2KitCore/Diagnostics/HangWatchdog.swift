@@ -159,6 +159,7 @@ public struct DiagnosticContext: Codable, Equatable, Sendable {
         case apiClientToken
         case apiClientExample
         case workbench
+        case mocker
     }
 
     public enum ContentKind: String, Codable, Sendable {

@@ -11,6 +11,8 @@ struct ContentView: View {
     /// Mod bir kez kurulduysa gizlense de canlı tutulur (bkz. body).
     @State private var keepsAPIClient = false
     @State private var keepsWorkbench = false
+    /// Mocker ilk açılışta kurulur (önceden kurulmaz: çoğu oturumda kullanılmıyor).
+    @State private var keepsMocker = false
     /// Araç çubuğundaki API Client öğeleri görünür mü. Moddan bir tur sonra
     /// izler (bkz. body): araç çubuğunu yeniden çizmek (~50 ms, ölçüldü) mod
     /// seçicinin tıklamasıyla aynı işleme düşmesin, başparmak animasyonu önce
@@ -194,10 +196,7 @@ struct ContentView: View {
     /// (cam başparmak, sürüklenebilir) + seçili modda yeşil nokta
     /// (`ModeSegmentedControl`, TASARIM §1 istisnası).
     private var modePicker: some View {
-        @Bindable var state = appState
-        return ModeSegmentedControl(selection: $state.mode)
-            .fixedSize()
-            .help(L10n.t("toolbar.mode.help"))
+        ModePicker()
     }
 
     var body: some View {
@@ -214,20 +213,29 @@ struct ContentView: View {
                 APIClientLayout()
                     .modeLayer(visible: appState.isAPIClient)
             }
-            if !appState.isAPIClient || keepsWorkbench {
+            if appState.mode == .workbench || keepsWorkbench {
                 WorkbenchView(sidebarWidth: appState.sidebarMinimumWidth)
-                    .modeLayer(visible: !appState.isAPIClient)
+                    .modeLayer(visible: appState.mode == .workbench)
+            }
+            if appState.mode == .mocker || keepsMocker {
+                MockerView(sidebarWidth: appState.sidebarMinimumWidth)
+                    .modeLayer(visible: appState.mode == .mocker)
             }
         }
         // Gizli moddaki metin alanları AppKit'te de gizlenir: saydam olsalar da
         // imleç alanları çalışıyor, öteki modun üstüne I-beam yayıyordu.
         .background {
-            HiddenModeCursorGuardView(mode: appState.mode, keepsAPIClient: keepsAPIClient, keepsWorkbench: keepsWorkbench)
+            HiddenModeCursorGuardView(mode: appState.mode, keepsAPIClient: keepsAPIClient, keepsWorkbench: keepsWorkbench,
+                                      keepsMocker: keepsMocker)
                 .frame(width: 0, height: 0)
                 .accessibilityHidden(true)
         }
         .onChange(of: appState.mode, initial: true) { _, mode in
-            if mode == .apiClient { keepsAPIClient = true } else { keepsWorkbench = true }
+            switch mode {
+            case .apiClient: keepsAPIClient = true
+            case .workbench: keepsWorkbench = true
+            case .mocker: keepsMocker = true
+            }
             if toolbarShowsAPIClient == nil {
                 // Açılışta hemen doğru durumda (titreme olmasın).
                 toolbarShowsAPIClient = mode == .apiClient
@@ -360,6 +368,21 @@ private extension View {
             }
             .accessibilityHidden(!visible)
             .zIndex(visible ? 1 : 0)
+    }
+}
+
+/// Mod seçici ve Mocker'ın yayın simgesi. Ayrı görünüm: sunucu durumu
+/// değişince yalnızca bu yeniden çizilir, pencere içeriği değil. Mocker
+/// ortamda yoksa (tek başına çizilen testler) simge yok.
+private struct ModePicker: View {
+    @Environment(AppState.self) private var appState
+    @Environment(MockerState.self) private var mocker: MockerState?
+
+    var body: some View {
+        @Bindable var state = appState
+        ModeSegmentedControl(selection: $state.mode, mockerIndicator: mocker?.modeIndicator ?? .hidden)
+            .fixedSize()
+            .help(L10n.t("toolbar.mode.help"))
     }
 }
 

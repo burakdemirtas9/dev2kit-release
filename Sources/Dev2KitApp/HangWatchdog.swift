@@ -52,7 +52,7 @@ final class HangWatchdog: @unchecked Sendable {
     private var sessionInactive = false
 
     private var mainThread: pthread_t?
-    private var observers: [(NotificationCenter, NSObjectProtocol)] = []
+    private var presence: SystemPresenceObserver?
     @MainActor private var contextProvider: (() -> DiagnosticContext)?
 
     init(configuration: Configuration) {
@@ -82,8 +82,8 @@ final class HangWatchdog: @unchecked Sendable {
     /// Testler için: döngü bir sonraki turda biter.
     func stop() {
         withLock { running = false }
-        for (center, observer) in observers { center.removeObserver(observer) }
-        observers = []
+        presence?.cancel()
+        presence = nil
     }
 
     // MARK: - Bekçi iş parçacığı
@@ -160,27 +160,26 @@ final class HangWatchdog: @unchecked Sendable {
 
     // MARK: - Uyku, kilit, oturum
 
+    /// Ortak dinleyici (`SystemPresence`); durum kilitle korunur.
     @MainActor
     private func observeSystemState() {
-        let workspace = NSWorkspace.shared.notificationCenter
-        observe(workspace, NSWorkspace.willSleepNotification) { $0.asleep = true }
-        observe(workspace, NSWorkspace.didWakeNotification) { $0.asleep = false }
-        observe(workspace, NSWorkspace.screensDidSleepNotification) { $0.screensAsleep = true }
-        observe(workspace, NSWorkspace.screensDidWakeNotification) { $0.screensAsleep = false }
-        observe(workspace, NSWorkspace.sessionDidResignActiveNotification) { $0.sessionInactive = true }
-        observe(workspace, NSWorkspace.sessionDidBecomeActiveNotification) { $0.sessionInactive = false }
-        // Ekran kilidi için AppKit sabiti yok; sistemin dağıtık bildirimi.
-        let distributed = DistributedNotificationCenter.default()
-        observe(distributed, Notification.Name("com.apple.screenIsLocked")) { $0.screenLocked = true }
-        observe(distributed, Notification.Name("com.apple.screenIsUnlocked")) { $0.screenLocked = false }
+        presence = SystemPresenceObserver { [weak self] event in
+            guard let self else { return }
+            self.withLock { self.apply(event) }
+        }
     }
 
-    private func observe(_ center: NotificationCenter, _ name: Notification.Name, _ change: @escaping (HangWatchdog) -> Void) {
-        let token = center.addObserver(forName: name, object: nil, queue: nil) { [weak self] _ in
-            guard let self else { return }
-            self.withLock { change(self) }
+    private func apply(_ event: SystemPresenceEvent) {
+        switch event {
+        case .willSleep: asleep = true
+        case .didWake: asleep = false
+        case .screensDidSleep: screensAsleep = true
+        case .screensDidWake: screensAsleep = false
+        case .sessionResigned: sessionInactive = true
+        case .sessionActivated: sessionInactive = false
+        case .screenLocked: screenLocked = true
+        case .screenUnlocked: screenLocked = false
         }
-        observers.append((center, token))
     }
 
     // MARK: - Yardımcılar

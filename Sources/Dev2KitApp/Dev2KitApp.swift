@@ -8,6 +8,7 @@ import Dev2KitCore
 final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Kapanışta bekleyen (debounce'lanmış) workspace yazımını tamamlamak için.
     @MainActor var appState: AppState?
+    @MainActor var mocker: MockerState?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
@@ -57,6 +58,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         MainActor.assumeIsolated {
             // Kapanışta bekleyen yazım arka planda; bitmesini beklemek şart.
             appState?.waitForPendingWrites()
+            // Mock tanımlarının bekleyen kaydı (400 ms gecikmeli) da diske insin.
+            mocker?.flushPendingSave()
             // Bu oturum temiz kapandı: sonraki açılış "temiz olmayan kapanış"
             // saymasın. Kayıttan SONRA: yazım yarıda kalırsa iz kalsın.
             CrashReportCenter.shared.endSession()
@@ -74,6 +77,8 @@ struct Dev2KitApp: App {
     // Değerleri init'te atanır: eski ayarlar taşınmadan okunmasınlar.
     @State private var appState: AppState
     @State private var workbench: WorkbenchState
+    /// Uygulama düzeyinde: mod değişince Mocker sunucusu çalışmaya devam eder.
+    @State private var mocker: MockerState
 
     /// Pencerenin en küçük hali; sabit. Workbench kendi asgari genişliğini
     /// pencereye bildirmiyor, 900 puntoda en geniş üst çubuk (JSON Biçimlendir,
@@ -99,6 +104,7 @@ struct Dev2KitApp: App {
         }
         _appState = State(initialValue: AppState())
         _workbench = State(initialValue: WorkbenchState())
+        _mocker = State(initialValue: MockerState())
         // macOS'un akıllı tırnak/tire/metin düzeltmesi JSON ve header değerlerini
         // bozuyor (" → "). API istemcisinde her alan kod benzeri metin aldığı
         // için uygulama genelinde kapatılır. NSTextView bu ayarları oluşturulurken
@@ -269,10 +275,12 @@ struct Dev2KitApp: App {
             ContentView()
                 .environment(appState)
                 .environment(workbench)
+                .environment(mocker)
                 .tint(Theme.accent)
                 .frame(minWidth: Self.minimumWindowSize.width, minHeight: Self.minimumWindowSize.height)
                 .onAppear {
                     appDelegate.appState = appState
+                    appDelegate.mocker = mocker
                     // Bekçi son oturumu kapattıysa nedeni söylenir (bir kez).
                     CrashReportCenter.shared.takeWatchdogTermination { [appState] record in
                         appState.noteWatchdogTermination(record)

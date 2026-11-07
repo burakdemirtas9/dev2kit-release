@@ -8,7 +8,7 @@ macOS için yerel çalışan, güvenlik öncelikli API istemcisi ve geliştirici
 
 ## Ne yapar
 
-dev2kit iki moddan oluşur:
+dev2kit üç moddan oluşur:
 
 - **API Client** — REST isteklerini hazırlar, gönderir ve yanıtları inceler;
   koleksiyonlar, environment'lar, kayıtlı response örnekleri, geçmiş ve
@@ -16,6 +16,8 @@ dev2kit iki moddan oluşur:
 - **Workbench** — biçimlendirme, dönüştürme, kodlama ve karşılaştırma
   araçları. Tamamen çevrimdışı çalışır: girdi makineden çıkmaz, diske
   yazılmaz.
+- **Mocker** — tanımlanan endpoint'lere yerel mock response dönen hafif HTTP
+  sunucusu; yalnızca bu Mac'ten erişilir.
 
 ## Neden
 
@@ -72,6 +74,27 @@ dev2kit iki moddan oluşur:
   kodu da üretilir.
 - **Karşılaştır:** satır bazlı Diff Checker.
 
+### Mocker
+
+- Endpoint: metot (Any, GET, POST…) ve yol (`/bnpl-service/execute-payment/pay`;
+  `/orders/{id}` ya da `*` ile değişken parça) + varsayılan response.
+- **Senaryolar** (isteğe bağlı): request body (aynı endpoint ve header'a
+  farklı gövdeyle farklı yanıt; "alanları içeriyorsa" ya da "birebir aynıysa")
+  ve header, query, JSON alanı (JSONPath, ör. `$.amount`), gövde metni ya da
+  yol değişkeni koşulları; gövdesi ve tüm koşulları tutan ilk senaryonun
+  response'u, yoksa varsayılan döner.
+- Response: durum, header'lar, gövde, gecikme (ms).
+- Örnek request body: endpoint'e ne gönderileceğini gösterir (eşleşmeyi
+  etkilemez); "cURL olarak kopyala" ile denenir.
+- Çakışan tanımlar uyarı olarak gösterilir; hangisinin yanıt vereceği yazar.
+- **Başlat:** sırayla 8098, 8099, 8100 portları; adres ekranda. Çalışırken
+  yapılan değişiklikler "Değişiklikleri Uygula" ile aynı portta devreye girer.
+- Gelen istek kaydı: zaman, metot, yol, eşleşen senaryo, durum, header ve gövde
+  (yalnızca bellekte).
+- API Client'a ya da Workbench'e geçince sunucu çalışmaya devam eder. Kaynak
+  korumak için Mac uykuya geçince, ekran kilitlenince ya da 10 dakika istek
+  gelmeyince kendiliğinden durur (nedeni ekranda yazar).
+
 ### İçe / dışa aktarma
 
 - İçe aktarma: Postman v2.x (dosya ya da hesap), cURL, dev2kit koleksiyonu,
@@ -108,6 +131,7 @@ dev2kit iki moddan oluşur:
 | Yedek | Vault ve geçmiş dosyaları (veri ve anahtar birlikte) Time Machine dışı; yedekten kurulan Mac'te boş gelir. Workspace yedeğe gider |
 | Yanıtlar | Bellekte; kullanıcı kaydetmedikçe diske yazılmaz |
 | Workbench | Çevrimdışı; girdi diske yazılmaz, pano kendiliğinden okunmaz |
+| Mocker | Yalnızca bu Mac'ten erişilir (geri döngü arayüzü; ağdan bağlantı reddedilir). Başka programın portuna dokunmaz. Tanımlar yerelde (`mocker/mocks.json`), istek kaydı yalnızca bellekte. Uygulama açılınca kendiliğinden başlamaz |
 | Telemetri | Yok |
 
 ---
@@ -159,6 +183,7 @@ yalnızca Developer ID ile imzalı ve notarize edilmiş paket dağıtılmalı.
 ├── backups/          son sağlam workspace kopyaları
 ├── cacerts/          kullanıcı güven deposu
 ├── diagnostics/      yerel tanılama (hiçbir yere gönderilmez)
+├── mocker/           Mocker tanımları
 ├── .history.key      geçmiş anahtarı (yalnızca imzasız derleme; Time Machine dışı)
 ├── secrets.enc       vault (yalnızca imzasız derleme; Time Machine dışı)
 └── .secrets.key      vault anahtarı (yalnızca imzasız derleme; Time Machine dışı)
