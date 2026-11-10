@@ -136,6 +136,7 @@ extension L10nTable {
         "mocker.log.truncated": L10nEntry("İlk %1$@ gösteriliyor (toplam %2$@).", "Showing the first %1$@ (of %2$@)."),
         "mocker.outcome.default": L10nEntry("Varsayılan", "Default"),
         "mocker.outcome.none": L10nEntry("Eşleşen endpoint yok", "No matching endpoint"),
+        "mocker.outcome.forbiddenHost": L10nEntry("Yabancı Host reddedildi", "Foreign Host rejected"),
         "mocker.outcome.invalid": L10nEntry("Okunamayan istek", "Unreadable request"),
     ]
 }

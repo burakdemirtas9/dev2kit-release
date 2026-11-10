@@ -884,6 +884,7 @@ private struct MockRequestLogView: View {
             return L10n.t("mocker.scenario.untitled", L10n.number(index + 1))
         case .defaultResponse?: return L10n.t("mocker.outcome.default")
         case .noEndpoint?: return L10n.t("mocker.outcome.none")
+        case .forbiddenHost?: return L10n.t("mocker.outcome.forbiddenHost")
         case nil: return L10n.t("mocker.outcome.invalid")
         }
     }

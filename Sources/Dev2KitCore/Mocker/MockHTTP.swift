@@ -48,6 +48,14 @@ public struct MockHTTPReader: Sendable {
         buffer.append(contentsOf: data)
     }
 
+    /// Bellekte biriken bayt (henüz işlenmemiş + çözülmüş chunked gövde).
+    public var bufferedBytes: Int { buffer.count + chunkedBody.count }
+
+    /// Bir bağlantının biriktirebileceği en çok bayt: bir isteğin tamamı ve
+    /// bir sonrakinin başlığı. Aşan bağlantı kapatılır (güvenlik incelemesi M2:
+    /// gecikmeli yanıt beklerken gönderilen veri sınırsız birikiyordu).
+    public var maxBufferedBytes: Int { 2 * maxHeadBytes + maxBodyBytes }
+
     /// Bir sonraki olay; `.needMore` dönene kadar çağrılır.
     public mutating func next() -> Event {
         if head == nil {

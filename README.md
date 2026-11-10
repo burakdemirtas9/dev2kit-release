@@ -131,7 +131,7 @@ dev2kit üç moddan oluşur:
 | Yedek | Vault ve geçmiş dosyaları (veri ve anahtar birlikte) Time Machine dışı; yedekten kurulan Mac'te boş gelir. Workspace yedeğe gider |
 | Yanıtlar | Bellekte; kullanıcı kaydetmedikçe diske yazılmaz |
 | Workbench | Çevrimdışı; girdi diske yazılmaz, pano kendiliğinden okunmaz |
-| Mocker | Yalnızca bu Mac'ten erişilir (geri döngü arayüzü; ağdan bağlantı reddedilir). Başka programın portuna dokunmaz. Tanımlar yerelde (`mocker/mocks.json`), istek kaydı yalnızca bellekte. Uygulama açılınca kendiliğinden başlamaz |
+| Mocker | Yalnızca bu Mac'ten erişilir (geri döngü arayüzü; ağdan bağlantı reddedilir). Yalnızca yerel Host'la gelen istek yanıtlanır (DNS rebinding'e karşı). Başka programın portuna dokunmaz. Tanımlar yerelde (`mocker/mocks.json`), istek kaydı yalnızca bellekte. Uygulama açılınca kendiliğinden başlamaz |
 | Telemetri | Yok |
 
 ---

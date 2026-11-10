@@ -146,6 +146,8 @@ public struct MockRoute: Equatable, Sendable {
         case scenario(id: UUID, name: String)
         case defaultResponse
         case noEndpoint
+        /// Yerel olmayan Host (DNS rebinding girişimi): 403 (`MockHostCheck`).
+        case forbiddenHost
     }
 
     public let endpointID: UUID?
@@ -163,6 +165,7 @@ public struct MockRoute: Equatable, Sendable {
 /// da gövdesi de olmayan senaryo seçilmez. Hiçbiri tutmazsa varsayılan.
 public enum MockRouter {
     public static func route(_ request: MockIncomingRequest, endpoints: [MockEndpoint]) -> MockRoute {
+        guard MockHostCheck.isAllowed(request) else { return forbiddenHost }
         let path = request.path
         var best: (endpoint: MockEndpoint, parameters: [String: String], rank: Rank)?
         for endpoint in endpoints where accepts(endpoint.method, request.method) {
@@ -205,6 +208,10 @@ public enum MockRouter {
             return !lhs.specificMethod && rhs.specificMethod
         }
     }
+
+    static let forbiddenHost = MockRoute(
+        endpointID: nil, outcome: .forbiddenHost,
+        response: MockResponse(status: 403, body: "{\n  \"error\": \"Host not allowed. Mocker answers only localhost, 127.0.0.1 and ::1.\",\n  \"source\": \"dev2kit Mocker\"\n}"))
 
     static func notFound(_ request: MockIncomingRequest) -> MockRoute {
         let message = "No mock endpoint for \(request.method) \(request.path)"

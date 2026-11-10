@@ -48,7 +48,11 @@ public final class MockServer: @unchecked Sendable {
     private var endpoints: [MockEndpoint] = []
     private var connections: [ObjectIdentifier: MockConnection] = [:]
 
-    public init(onEvent: @escaping @Sendable (MockLogEvent) -> Void = { _ in }) {
+    private let requestReadSeconds: Double
+
+    public init(requestReadSeconds: Double = MockerLimits.requestReadSeconds,
+                onEvent: @escaping @Sendable (MockLogEvent) -> Void = { _ in }) {
+        self.requestReadSeconds = requestReadSeconds
         self.onEvent = onEvent
     }
 
@@ -177,7 +181,7 @@ public final class MockServer: @unchecked Sendable {
             connection.cancel()
             return
         }
-        let handler = MockConnection(connection: connection, server: self, queue: queue)
+        let handler = MockConnection(connection: connection, server: self, queue: queue, readSeconds: requestReadSeconds)
         connections[ObjectIdentifier(handler)] = handler
         handler.start()
     }
@@ -242,11 +246,15 @@ private final class MockConnection: @unchecked Sendable {
     private var peerClosed = false
     private var closed = false
     private var idleWork: DispatchWorkItem?
+    /// Yarım gelen isteğin süresi; parça geldikçe UZAMAZ.
+    private var readDeadline: DispatchWorkItem?
+    private let readSeconds: Double
 
-    init(connection: NWConnection, server: MockServer, queue: DispatchQueue) {
+    init(connection: NWConnection, server: MockServer, queue: DispatchQueue, readSeconds: Double) {
         self.connection = connection
         self.server = server
         self.queue = queue
+        self.readSeconds = readSeconds
     }
 
     func start() {
@@ -266,6 +274,8 @@ private final class MockConnection: @unchecked Sendable {
         closed = true
         idleWork?.cancel()
         idleWork = nil
+        readDeadline?.cancel()
+        readDeadline = nil
         connection.cancel()
         server?.remove(self)
     }
@@ -275,6 +285,12 @@ private final class MockConnection: @unchecked Sendable {
             guard let self, !self.closed else { return }
             if let data, !data.isEmpty {
                 self.reader.append(data)
+                // Sınırsız birikme yok: yanıt beklerken (ör. gecikme) gelen
+                // veri de sayılır.
+                if self.reader.bufferedBytes > self.reader.maxBufferedBytes {
+                    self.close()
+                    return
+                }
                 self.process()
             }
             if isComplete || error != nil {
@@ -291,13 +307,24 @@ private final class MockConnection: @unchecked Sendable {
         let started = ContinuousClock.now
         switch reader.next() {
         case .needMore:
-            if peerClosed { close() } else { scheduleIdle() }
+            if peerClosed {
+                close()
+            } else if reader.bufferedBytes == 0 {
+                readDeadline?.cancel()
+                readDeadline = nil
+                scheduleIdle()
+            } else {
+                // Yarım istek: boşta süresi değil, sabit okuma süresi.
+                idleWork?.cancel()
+                armReadDeadline()
+            }
         case .continueExpected:
             connection.send(content: MockHTTPWriter.continueResponse, completion: .contentProcessed { _ in })
             process()
         case .failure(let status):
             busy = true
             idleWork?.cancel()
+            readDeadline?.cancel()
             connection.send(content: MockHTTPWriter.error(status), completion: .contentProcessed { [weak self] _ in
                 self?.close()
             })
@@ -305,6 +332,8 @@ private final class MockConnection: @unchecked Sendable {
         case .request(let request, let keepAlive):
             busy = true
             idleWork?.cancel()
+            readDeadline?.cancel()
+            readDeadline = nil
             server?.route(request) { [weak self] route in
                 self?.respond(request, route: route, keepAlive: keepAlive, started: started)
             }
@@ -330,6 +359,20 @@ private final class MockConnection: @unchecked Sendable {
         } else {
             send()
         }
+    }
+
+    /// İlk parçadan itibaren `readSeconds`: dolarsa 408 ve kapanır.
+    private func armReadDeadline() {
+        guard readDeadline == nil else { return }
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, !self.busy, !self.closed else { return }
+            self.busy = true
+            self.connection.send(content: MockHTTPWriter.error(408), completion: .contentProcessed { [weak self] _ in
+                self?.close()
+            })
+        }
+        readDeadline = work
+        queue.asyncAfter(deadline: .now() + readSeconds, execute: work)
     }
 
     /// Boşta (istek beklerken) kalan bağlantı süre dolunca kapanır.

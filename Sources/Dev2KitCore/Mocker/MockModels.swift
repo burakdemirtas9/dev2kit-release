@@ -267,6 +267,9 @@ public enum MockerLimits {
     public static let statusRange = 200...599
     /// Aynı anda açık bağlantı; fazlası hemen kapatılır.
     public static let maxConnections = 64
+    /// Bir isteğin tamamı (başlık + gövde) en geç bu sürede gelmeli; yarım
+    /// istek her parçada süreyi uzatamaz (yavaş damlatma, güvenlik incelemesi M3).
+    public static let requestReadSeconds: Double = 30
     /// Boşta bekleyen (keep-alive) bağlantı bu süre sonra kapanır.
     public static let idleConnectionSeconds: Double = 15
     /// Bu süre hiç istek gelmezse Mocker kendini durdurur (kullanıcı isteği,
