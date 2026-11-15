@@ -12,8 +12,63 @@ import Foundation
 /// kimliği belgedekiyse korunur, yoksa (uzak kimlik + sıra) türetilir. Böylece
 /// her yenilemede açık sekmeler ve seçim yerinde kalır.
 public enum TeamCollectionCodec {
-    /// Servisin sınırı (rehber: content en çok 5 MB).
+    /// Okunabilecek en büyük belge (servisin eski sınırı 5 MB; o dönemde
+    /// kaydedilmiş belgeler açılmaya devam eder).
     public static let maxContentBytes = 5_000_000
+
+    /// Sunucuya kaydedilebilecek en büyük belge (gönderilen sıkışık JSON).
+    /// Sunucu her kayıtta önceki belgeyi geçmiş tablosuna da yazdığı için
+    /// düşük tutuldu (kullanıcı kararı, 2026-11-15). Servisin varsayılanı
+    /// (`COLLECTION_MAX_SIZE` = 1 MB, 1024 tabanlı) bundan biraz büyük:
+    /// istemci önce engeller, mesajda net bir sınır görünür.
+    public static let maxSaveBytes = 1_000_000
+
+    /// Kurum belgesi kimsenin elinden geçmeden herkesin workspace'ine girer:
+    /// 5 MB içinde arayüzü donduran belgeler (tek satırlık alanda megabaytlık
+    /// değer, on binlerce istek, binlerce başlık satırı) açılmaz. Sınırı aşan
+    /// istek atlanıp sayılır; atlanan varsa collection salt okunur açılır
+    /// (`TeamCollectionInfo.canEdit`), kayıt sunucudaki isteği silemez.
+    public enum Limits {
+        /// Collection başına istek (HangProbeTests 2000 istekle ölçüldü).
+        public static let maxRequests = 2_000
+        /// Ham gövde dışındaki her metin: en geniş metin alanının sınırı.
+        public static let maxFieldCharacters = InputLimits.Field.formValue.maxCharacters
+        /// Ham gövde: kod editörünün girdi sınırı.
+        public static let maxBodyBytes = WorkbenchLimits.maxInputBytes
+        /// Başlık, parametre, form satırı gibi her liste.
+        public static let maxRows = InputLimits.maxRows
+        /// İstek belgesinin derinliği (model ~6 düzey).
+        public static let maxDepth = 16
+    }
+
+    /// İstek belgesi sınırları aşıyor mu (`decode` öncesi, ham JSON üzerinde).
+    /// Ham gövde (`body.raw.content`) kod editöründe açılır, onun sınırı ayrı;
+    /// geri kalan her metin (form alanları dahil) tek satırlık alanlarda.
+    public static func exceedsLimits(_ request: [String: Any]) -> Bool {
+        var rest = request
+        if var body = request["body"] as? [String: Any], var raw = body["raw"] as? [String: Any],
+           let content = raw["content"] as? String {
+            guard content.utf8.count <= Limits.maxBodyBytes else { return true }
+            raw["content"] = ""
+            body["raw"] = raw
+            rest["body"] = body
+        }
+        return exceeds(rest, depth: 0)
+    }
+
+    private static func exceeds(_ value: Any, depth: Int) -> Bool {
+        guard depth <= Limits.maxDepth else { return true }
+        switch value {
+        case let text as String:
+            return text.count > Limits.maxFieldCharacters
+        case let list as [Any]:
+            return list.count > Limits.maxRows || list.contains { exceeds($0, depth: depth + 1) }
+        case let object as [String: Any]:
+            return object.count > Limits.maxRows || object.values.contains { exceeds($0, depth: depth + 1) }
+        default:
+            return false
+        }
+    }
 
     public struct Decoded: Sendable {
         public let collection: CollectionModel
@@ -41,7 +96,14 @@ public enum TeamCollectionCodec {
         var skipped = 0
         let decoder = JSONDecoder()
         for (index, raw) in rawRequests.enumerated() {
+            guard index < Limits.maxRequests else {
+                skipped += rawRequests.count - index
+                break
+            }
             guard var item = raw as? [String: Any] else { skipped += 1; continue }
+            // Örnekler zaten alınmaz; sınıra sayılmasınlar.
+            item["examples"] = nil
+            guard !exceedsLimits(item) else { skipped += 1; continue }
             if (item["id"] as? String).flatMap(UUID.init(uuidString:)) == nil {
                 item["id"] = stableID(remoteID, "request#\(index)").uuidString
             }
@@ -77,9 +139,9 @@ public enum TeamCollectionCodec {
             copy.examples = []
             return copy
         }
-        let data = try CollectionPorting.exportData(clean)
-        guard data.count <= maxContentBytes else { throw TeamError.contentTooLarge }
-        return data
+        // Boyut, gönderilen (sıkışık) biçimde `TeamDataClient.body`'de denetlenir;
+        // buradaki belge girintili olduğu için daha büyük görünür.
+        return try CollectionPorting.exportData(clean)
     }
 
     /// Başka bir collection'da zaten kullanılan istek kimliklerini kararlı

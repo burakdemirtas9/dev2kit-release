@@ -137,7 +137,7 @@ public enum TeamError: Error, Equatable, LocalizedError, Sendable {
         case .versionConflict: return L10n.t("team.error.versionConflict")
         case .nameTaken: return L10n.t("team.error.nameTaken")
         case .invalidName: return L10n.t("team.error.invalidName")
-        case .contentTooLarge: return L10n.t("team.error.contentTooLarge")
+        case .contentTooLarge: return L10n.t("team.error.contentTooLarge", TextStats.size(TeamCollectionCodec.maxSaveBytes))
         case .plaintextCredentials(let places): return L10n.t("team.error.plaintextCredentials", places.joined(separator: ", "))
         case .unsupportedContent: return L10n.t("team.error.unsupportedContent")
         case .invalidRequest: return L10n.t("team.error.invalidRequest")

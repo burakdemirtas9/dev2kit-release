@@ -180,4 +180,85 @@ final class TeamCollectionCodecTests: XCTestCase {
         XCTAssertEqual(saved.collections.map(\.id), [mine.id])
         XCTAssertTrue(saved.sentBaselines.isEmpty, "kurum isteklerinin son gönderilenleri de yazılmaz")
     }
+
+    // MARK: Sınırlar (bulgu 10)
+
+    private func decode(_ requests: [[String: Any]]) throws -> TeamCollectionCodec.Decoded {
+        let data = try JSONSerialization.data(withJSONObject: ["requests": requests])
+        return try TeamCollectionCodec.decode(data, remoteID: "r1", name: "T")
+    }
+
+    /// Tek satırlık alanda megabaytlık değer, binlerce satır, aşırı derinlik:
+    /// istek atlanır (collection salt okunur açılır), diğerleri açılır.
+    func testRequestsOverTheLimitsAreSkipped() throws {
+        let tooLong = String(repeating: "a", count: TeamCollectionCodec.Limits.maxFieldCharacters + 1)
+        let manyRows = (0...TeamCollectionCodec.Limits.maxRows).map { ["key": "k\($0)", "value": "v"] }
+        var deep: Any = "x"
+        for _ in 0...TeamCollectionCodec.Limits.maxDepth { deep = ["n": deep] }
+        let decoded = try decode([
+            ["name": "ok", "method": "GET", "url": "https://a.test"],
+            ["name": "header", "headers": [["key": "X", "value": tooLong]]],
+            ["name": "rows", "headers": manyRows],
+            ["name": "url", "url": tooLong],
+            ["name": "deep", "extra": deep],
+            ["name": "form", "body": ["formURLEncoded": ["fields": [["key": "a", "value": tooLong]]]]],
+        ])
+        XCTAssertEqual(decoded.collection.requests.map(\.name), ["ok"])
+        XCTAssertEqual(decoded.skippedRequests, 5)
+    }
+
+    /// Ham gövde kod editöründe açılır: alan sınırına değil editör sınırına tabi.
+    func testRawBodyUsesTheEditorLimit() throws {
+        let large = String(repeating: "b", count: TeamCollectionCodec.Limits.maxFieldCharacters * 10)
+        let decoded = try decode([["name": "big body", "body": ["raw": ["content": large, "contentType": "text/plain"]]]])
+        XCTAssertEqual(decoded.collection.requests.count, 1)
+        XCTAssertEqual(decoded.skippedRequests, 0)
+        XCTAssertFalse(TeamCollectionCodec.exceedsLimits(["body": ["raw": ["content": large]]]))
+        let tooLarge = String(repeating: "b", count: TeamCollectionCodec.Limits.maxBodyBytes + 1)
+        XCTAssertTrue(TeamCollectionCodec.exceedsLimits(["body": ["raw": ["content": tooLarge]]]))
+    }
+
+    /// İstek sayısı sınırı: fazlası atlanıp sayılır.
+    func testRequestCountIsCapped() throws {
+        let count = TeamCollectionCodec.Limits.maxRequests + 3
+        let decoded = try decode((0..<count).map { ["name": "r\($0)"] })
+        XCTAssertEqual(decoded.collection.requests.count, TeamCollectionCodec.Limits.maxRequests)
+        XCTAssertEqual(decoded.skippedRequests, 3)
+    }
+
+    /// Örnekler sınıra sayılmaz (zaten alınmazlar).
+    func testExamplesDoNotCountTowardsTheLimits() throws {
+        let tooLong = String(repeating: "a", count: TeamCollectionCodec.Limits.maxFieldCharacters + 1)
+        let decoded = try decode([["name": "a", "examples": [["name": tooLong]]]])
+        XCTAssertEqual(decoded.collection.requests.count, 1)
+    }
+
+    // MARK: Kayıt sınırı (2026-11-15)
+
+    /// Sunucuya giden belge sıkışık biçimde ölçülür: girintili hali sınırı
+    /// aşsa da sıkışığı sığıyorsa gönderilir; sığmıyorsa hiç gönderilmez.
+    func testSaveLimitIsMeasuredOnTheCompactDocument() throws {
+        let limit = TeamCollectionCodec.maxSaveBytes
+        let body = String(repeating: "x", count: limit - 20_000)
+        var request = RequestModel(name: "big")
+        request.body = .raw(content: body, contentType: "text/plain")
+        let fits = try TeamCollectionCodec.encode(CollectionModel(name: "C", requests: [request]))
+        XCTAssertNoThrow(try TeamDataClient.body(name: "C", content: fits, version: 0))
+
+        request.body = .raw(content: body + String(repeating: "x", count: 40_000), contentType: "text/plain")
+        let tooLarge = try TeamCollectionCodec.encode(CollectionModel(name: "C", requests: [request]))
+        XCTAssertThrowsError(try TeamDataClient.body(name: "C", content: tooLarge, version: 0)) {
+            XCTAssertEqual($0 as? TeamError, .contentTooLarge)
+        }
+        XCTAssertTrue(TeamError.contentTooLarge.localizedDescription.contains(TextStats.size(limit)),
+                      "mesaj sınırı söyler")
+    }
+
+    /// Okuma sınırı ayrı: eski 5 MB sınırıyla kaydedilmiş belgeler açılmaya devam eder.
+    func testDocumentsLargerThanTheSaveLimitStillOpen() throws {
+        let body = String(repeating: "y", count: TeamCollectionCodec.maxSaveBytes * 2)
+        let data = try JSONSerialization.data(withJSONObject: ["requests": [["name": "a", "body": ["raw": ["content": body, "contentType": "text/plain"]]]]])
+        let decoded = try TeamCollectionCodec.decode(data, remoteID: "r1", name: "T")
+        XCTAssertEqual(decoded.collection.requests.count, 1)
+    }
 }

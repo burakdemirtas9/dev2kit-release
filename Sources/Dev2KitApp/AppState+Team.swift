@@ -49,7 +49,7 @@ extension AppState {
         // Kurum collection'ları workspace kaydına girmez: kaydedilmemiş
         // düzenleme önbelleğe yazılmazsa uygulama kapanınca sessizce kaybolur.
         // Yazım burada değil (her tuşta çalışır), workspace kaydıyla birlikte.
-        if !result.dirtied.isEmpty { teamCacheNeedsSave = true }
+        if !result.dirtied.isEmpty || !result.localChanged.isEmpty { teamCacheNeedsSave = true }
     }
 
     /// Kurum yerleşimini korumadan geçirmeden uygular (servisten gelen hal).

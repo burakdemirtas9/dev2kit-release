@@ -65,9 +65,14 @@ public struct TeamDataClient: Sendable {
 
     static func body(name: String, content: Data, version: Int?) throws -> Data {
         guard isValidName(name) else { throw TeamError.invalidName }
-        guard content.count <= TeamCollectionCodec.maxContentBytes else { throw TeamError.contentTooLarge }
-        guard let object = try? JSONSerialization.jsonObject(with: content), object is [String: Any] else {
-            throw TeamError.invalidRequest
+        guard content.count <= TeamCollectionCodec.maxContentBytes,
+              let object = try? JSONSerialization.jsonObject(with: content), object is [String: Any] else {
+            throw content.count > TeamCollectionCodec.maxContentBytes ? TeamError.contentTooLarge : TeamError.invalidRequest
+        }
+        // Sunucunun ölçtüğü biçim: sıkışık JSON. Sınırı aşan belge hiç gönderilmez.
+        guard let compact = try? JSONSerialization.data(withJSONObject: object),
+              compact.count <= TeamCollectionCodec.maxSaveBytes else {
+            throw TeamError.contentTooLarge
         }
         var payload: [String: Any] = ["name": name, "content": object]
         if let version { payload["version"] = version }

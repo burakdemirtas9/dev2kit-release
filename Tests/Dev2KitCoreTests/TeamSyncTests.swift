@@ -206,4 +206,51 @@ final class TeamSyncTests: XCTestCase {
         TeamCache.delete(root: root)
         XCTAssertNil(TeamCache.load(root: root))
     }
+
+    // MARK: Yanıt örnekleri yereldir (bulgu 7)
+
+    /// Örnek kaydetmek collection'ı kirletmez; salt okunurda da geri alınmaz.
+    func testSavingAnExampleIsLocalAndNeverBlocked() {
+        for canUpdate in [true, false] {
+            let (team, mine, catalog) = setup(canUpdate: canUpdate)
+            var withExample = team
+            withExample.requests[0].examples = [ResponseExample(name: "200", statusCode: 200, body: "{}")]
+            let result = TeamSync.enforce(old: [team, mine], new: [withExample, mine], catalog: catalog)
+            XCTAssertFalse(result.blocked)
+            XCTAssertTrue(result.dirtied.isEmpty, "örnek sunucuya gitmez, kayıt gerektirmez")
+            XCTAssertEqual(result.localChanged, [team.id])
+            XCTAssertEqual(result.collections[0], withExample)
+        }
+    }
+
+    /// İçerik ve örnek birlikte değişirse kirli sayılır (içerik kaydedilmeli).
+    func testContentChangeWithExampleIsStillDirty() {
+        let (team, mine, catalog) = setup(canUpdate: true)
+        var edited = team
+        edited.requests[0].url = "/yeni"
+        edited.requests[0].examples = [ResponseExample(name: "200", statusCode: 200)]
+        let result = TeamSync.enforce(old: [team, mine], new: [edited, mine], catalog: catalog)
+        XCTAssertEqual(result.dirtied, [team.id])
+        XCTAssertTrue(result.localChanged.isEmpty)
+    }
+
+    /// Yenileme ve kayıt dönüşü yerel örnekleri silmez; isteği silinenin örneği gider.
+    func testApplyKeepsLocalExamplesByRequestID() throws {
+        let requestID = UUID()
+        let removedID = UUID()
+        let example = ResponseExample(name: "200", statusCode: 200, body: "{\"ok\":true}")
+        let id = TeamCollectionCodec.stableID("r1", "collection")
+        let local = CollectionModel(id: id, name: "T", requests: [
+            RequestModel(id: requestID, name: "a", examples: [example]),
+            RequestModel(id: removedID, name: "b", examples: [example]),
+        ])
+        let catalog = TeamCatalog(entries: [id: TeamCollectionInfo(summary: summary("r1", version: 1, canUpdate: true), isLoaded: true)])
+        let content = #"{"requests":[{"id":"\#(requestID.uuidString)","name":"a2","method":"GET"},{"name":"c","method":"GET"}]}"#
+        let detail = TeamCollectionDetail(summary: summary("r1", version: 2, canUpdate: true), content: Data(content.utf8))
+        let applied = try TeamSync.apply(detail, to: [local], catalog: catalog)
+        let requests = applied.collections[0].requests
+        XCTAssertEqual(requests.map(\.name), ["a2", "c"], "içerik sunucudan")
+        XCTAssertEqual(requests[0].examples, [example], "örnek istek kimliğiyle korunur")
+        XCTAssertTrue(requests[1].examples.isEmpty)
+    }
 }

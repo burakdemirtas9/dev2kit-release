@@ -469,7 +469,7 @@ final class AppState {
         if let notice = secrets.1 {
             startupMessage = Self.merging(notice, into: startupMessage)
             // Çakışma uyarısında depo Keychain'dir; "kullanılamıyor" yalnızca düşüşte.
-            if !(secretStore is KeychainSecretStore) {
+            if !(self.secretStore is KeychainSecretStore) {
                 DiagnosticLog.shared.record(DiagnosticEvent(kind: .secretStoreUnavailable))
             }
         }

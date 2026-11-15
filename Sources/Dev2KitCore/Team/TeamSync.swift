@@ -13,6 +13,9 @@ public enum TeamSync {
         public var blocked: Bool
         /// Düzenleme yetkisi olan ve değişen kurum collection'ları (kaydedilmedi).
         public var dirtied: Set<UUID>
+        /// Yalnızca yanıt örnekleri değişen kurum collection'ları: örnekler
+        /// yereldir (sunucuya gitmez), kirletmez ama önbelleğe yazılmalı.
+        public var localChanged: Set<UUID> = []
     }
 
     /// - Düzenlenemeyen kurum collection'ı değiştiyse ya da kaybolduysa eski hali
@@ -20,15 +23,22 @@ public enum TeamSync {
     ///   (taşıma kopyaya dönüşmez, kimlik çakışmaz).
     /// - Düzenlenebilen değiştiyse `dirtied`'a girer. Silinmesi yalnızca katalogdan
     ///   önce çıkarılarak (sunucuda silindikten sonra) olur.
+    /// - Yalnızca yanıt örnekleri değiştiyse (salt okunur olsa da) serbesttir:
+    ///   örnekler bu Mac'te kalır, `localChanged`'e girer.
     public static func enforce(old: [CollectionModel], new: [CollectionModel], catalog: TeamCatalog) -> Enforced {
         guard !catalog.entries.isEmpty else { return Enforced(collections: new, blocked: false, dirtied: []) }
         var result = new
         var blocked = false
         var dirtied: Set<UUID> = []
+        var localChanged: Set<UUID> = []
         let newByID = Dictionary(new.enumerated().map { ($0.element.id, $0.offset) }, uniquingKeysWith: { first, _ in first })
         for (oldIndex, previous) in old.enumerated() where catalog.isTeam(previous.id) {
             let current = newByID[previous.id].map { new[$0] }
             if current == previous { continue }
+            if let current, withoutExamples(current) == withoutExamples(previous) {
+                localChanged.insert(current.id)
+                continue
+            }
             if let current, catalog.canEdit(previous.id) {
                 dirtied.insert(current.id)
                 continue
@@ -56,7 +66,7 @@ public enum TeamSync {
                 if result[index].requests.count != before { blocked = true }
             }
         }
-        return Enforced(collections: result, blocked: blocked, dirtied: dirtied)
+        return Enforced(collections: result, blocked: blocked, dirtied: dirtied, localChanged: localChanged)
     }
 
     /// Listeyi (`GET /collections`) workspace'e yerleştirir. Sürümü değişmeyen
@@ -122,15 +132,18 @@ public enum TeamSync {
     }
 
     /// Çekilen içeriği yerleştirir: sürüm ve izinler güncellenir, kaydedilmemiş
-    /// değişiklik silinir (çağıran yeniden yükleme kararı vermiştir).
+    /// değişiklik silinir (çağıran yeniden yükleme kararı vermiştir). Yanıt
+    /// örnekleri sunucudan gelmez; yerel örnekler istek kimliğine göre korunur
+    /// (yoksa her yenileme ve kayıt onları silerdi).
     public static func apply(_ detail: TeamCollectionDetail, to collections: [CollectionModel],
                              catalog: TeamCatalog) throws -> (collections: [CollectionModel], catalog: TeamCatalog, skipped: Int) {
         let decoded = try TeamCollectionCodec.decode(detail.content, remoteID: detail.summary.id, name: detail.summary.name)
         let id = decoded.collection.id
         let used = Set(collections.filter { $0.id != id }.flatMap { $0.requests.map(\.id) })
-        let collection = TeamCollectionCodec.resolvingCollisions(decoded.collection, used: used, remoteID: detail.summary.id)
+        var collection = TeamCollectionCodec.resolvingCollisions(decoded.collection, used: used, remoteID: detail.summary.id)
         var next = collections
         if let index = next.firstIndex(where: { $0.id == id }) {
+            keepExamples(of: next[index], in: &collection)
             next[index] = collection
         } else {
             next.insert(collection, at: 0)
@@ -139,6 +152,23 @@ public enum TeamSync {
         nextCatalog.entries[id] = TeamCollectionInfo(summary: detail.summary, isLoaded: true, isDirty: false,
                                                      skippedRequests: decoded.skippedRequests)
         return (next, nextCatalog, decoded.skippedRequests)
+    }
+
+    /// Kurum belgesinde örnek yoktur; karşılaştırma ve kayıt bu hale göre.
+    public static func withoutExamples(_ collection: CollectionModel) -> CollectionModel {
+        guard collection.requests.contains(where: { !$0.examples.isEmpty }) else { return collection }
+        var copy = collection
+        for index in copy.requests.indices { copy.requests[index].examples = [] }
+        return copy
+    }
+
+    private static func keepExamples(of previous: CollectionModel, in collection: inout CollectionModel) {
+        let kept = Dictionary(previous.requests.filter { !$0.examples.isEmpty }.map { ($0.id, $0.examples) },
+                              uniquingKeysWith: { first, _ in first })
+        guard !kept.isEmpty else { return }
+        for index in collection.requests.indices {
+            if let examples = kept[collection.requests[index].id] { collection.requests[index].examples = examples }
+        }
     }
 
     /// Atılmak üzere olan kurum collection'larından kaydedilmemiş değişikliği
