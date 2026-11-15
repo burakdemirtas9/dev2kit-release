@@ -42,7 +42,7 @@ extension AppState {
     /// zaman yeniden çizilir).
     func refreshSidebarSnapshot() {
         sidebarSnapshotScheduled = false
-        let snapshot = SidebarSnapshot(workspace: workspace)
+        let snapshot = SidebarSnapshot(workspace: workspace, team: teamCatalog)
         if snapshot != sidebarSnapshot { sidebarSnapshot = snapshot }
     }
 

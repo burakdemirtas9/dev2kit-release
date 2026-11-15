@@ -115,13 +115,27 @@ public enum HistoryRedactor {
         return "\(base)?\(maskedQuery)"
     }
 
+    /// `"alan": değer` kalıbı; değer metin ya da sayı: kimlik alanındaki sayı da
+    /// (`"pin": 1234`) maskelenir. Maskeleme ve paylaşım denetimi
+    /// (`ImportReviewer`) aynı kalıbı kullanır; ikisi ayrışmasın.
+    private static var fieldPattern: Regex<(Substring, Substring, Substring?, Substring?)> {
+        #/"([A-Za-z0-9_\-]+)"\s*:\s*(?:"((?:\\.|[^"\\])*)"|(-?\d+(?:\.\d+)?))/#
+    }
+
+    /// Metindeki `"alan": değer` çiftleri (değer metin ya da sayı, ham haliyle).
+    static func structuredFields(in text: String) -> [(key: String, value: String)] {
+        guard text.contains(":") else { return [] }
+        return text.matches(of: fieldPattern).map { match in
+            (String(match.1), String(match.2 ?? match.3 ?? ""))
+        }
+    }
+
     /// JSON benzeri metinde kimlik taşıyan alanların DEĞERLERİNİ maskeler.
     /// Tam bir parser değil: `"alan": "değer"` kalıbını hedefler, bozuk JSON'da
     /// da çalışır ve yapıyı bozmaz.
     public static func redactStructuredText(_ text: String) -> String {
         guard text.contains(":") else { return text }
-        // Değer metin ya da sayı: kimlik alanındaki sayı da (`"pin": 1234`) maskelenir.
-        let pattern = #/"([A-Za-z0-9_\-]+)"\s*:\s*(?:"((?:\\.|[^"\\])*)"|(-?\d+(?:\.\d+)?))/#
+        let pattern = fieldPattern
         var output = ""
         var lastIndex = text.startIndex
         for match in text.matches(of: pattern) {

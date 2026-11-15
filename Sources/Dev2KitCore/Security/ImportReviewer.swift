@@ -223,10 +223,24 @@ public enum ImportReviewer {
     // MARK: - Düz metin kimlik bilgisi
 
     /// Şablon (`{{…}}`) içermeyen kimlik bilgilerinin nerede olduğu.
-    static func plaintextCredentials(in request: RequestModel) -> [String] {
+    ///
+    /// `forSharing`: belge başkalarına gidecek (kurum collection'ı kaydı: bulgu
+    /// kaydı ENGELLER; dışa aktarılan dosya: bulgu uyarır). Bu yüzden belgeye
+    /// yazılan her şeye bakılır:
+    /// - kapalı satırlar da (gönderilmezler ama belgede dururlar),
+    /// - ham gövdede token biçimi yoksa alan adına göre (`"password": "…"`).
+    /// İçe aktarma incelemesi eski kuralla kalır.
+    static func plaintextCredentials(in request: RequestModel, forSharing: Bool = false) -> [String] {
         var places: [String] = []
         func isLiteral(_ value: String) -> Bool {
             !value.trimmingCharacters(in: .whitespaces).isEmpty && !value.contains("{{")
+        }
+        func counts(_ entry: KeyValueEntry) -> Bool {
+            (forSharing || entry.enabled) && isLiteral(entry.value)
+        }
+        // Kapalı satır arayüzde soluk durur; kullanıcı yerini bulabilsin.
+        func place(_ text: String, _ entry: KeyValueEntry) -> String {
+            entry.enabled ? text : L10n.t("review.place.disabled", text)
         }
         switch request.auth {
         case .basic(_, let password) where isLiteral(password): places.append(L10n.t("review.place.basic"))
@@ -235,20 +249,27 @@ public enum ImportReviewer {
         case .oauth2(let config) where isLiteral(config.clientSecret): places.append("OAuth2 client secret")
         default: break
         }
-        for entry in request.headers where entry.enabled && isLiteral(entry.value) {
+        for entry in request.headers where counts(entry) {
             if HeaderClassifier.classify(name: entry.key, value: entry.value).sensitiveKind == .credential {
-                places.append(L10n.t("review.place.header", entry.key))
+                places.append(place(L10n.t("review.place.header", entry.key), entry))
             }
         }
-        for entry in request.queryParams where entry.enabled && isLiteral(entry.value) {
-            if looksLikeSecretField(entry.key, value: entry.value) { places.append(L10n.t("review.place.query", entry.key)) }
+        for entry in request.queryParams where counts(entry) {
+            if looksLikeSecretField(entry.key, value: entry.value) {
+                places.append(place(L10n.t("review.place.query", entry.key), entry))
+            }
         }
         switch request.body {
         case .raw(let content, _):
-            if containsTokenPattern(content) { places.append(L10n.t("review.place.body")) }
+            if containsTokenPattern(content) {
+                places.append(L10n.t("review.place.body"))
+            } else if forSharing {
+                let fields = secretBodyFields(in: content)
+                if !fields.isEmpty { places.append(L10n.t("review.place.bodyField", fields.joined(separator: ", "))) }
+            }
         case .formURLEncoded(let fields), .multipartForm(let fields):
-            for field in fields where field.enabled && isLiteral(field.value) && looksLikeSecretField(field.key, value: field.value) {
-                places.append(L10n.t("review.place.form", field.key))
+            for field in fields where counts(field) && looksLikeSecretField(field.key, value: field.value) {
+                places.append(place(L10n.t("review.place.form", field.key), field))
             }
         case .none:
             break
@@ -258,10 +279,35 @@ public enum ImportReviewer {
     }
 
     private static func looksLikeSecretField(_ name: String, value: String) -> Bool {
+        containsTokenPattern(value) || hasSecretName(name, value: value)
+    }
+
+    /// Ada göre: parola adında her değer, token/secret/api key adında opak değer.
+    private static func hasSecretName(_ name: String, value: String) -> Bool {
         let lower = name.lowercased()
-        if containsTokenPattern(value) { return true }
         let keywords = ["token", "secret", "password", "passwd", "apikey", "api_key", "api-key", "access_key", "client_secret"]
         return keywords.contains(where: lower.contains) && (HeaderClassifier.looksOpaque(value) || lower.contains("pass"))
+    }
+
+    /// Ham gövdedeki (JSON benzeri) düz metin değerli gizli alanların adları.
+    ///
+    /// Çiftleri geçmiş maskelemesinin kalıbı çıkarır (`HistoryRedactor`); alanın
+    /// gizli olup olmadığına form alanlarıyla AYNI ad kuralı karar verir
+    /// (`hasSecretName`). Token biçimi burada aranmaz: gövdenin tamamında
+    /// çağıran zaten aradı, alan başına yinelemek büyük gövdede pahalı.
+    /// Geçmişin geniş ad listesi (`key`, `session`, `pin`) kullanılmaz:
+    /// maskelemede fazlası zararsız, engelde `"key": "ad"` gibi sıradan
+    /// alanlar kaydı kilitlerdi. `pwd` kısaltması ayrıca sayılır.
+    static func secretBodyFields(in text: String) -> [String] {
+        var names: [String] = []
+        for field in HistoryRedactor.structuredFields(in: text) {
+            let value = field.value.trimmingCharacters(in: .whitespaces)
+            guard !value.isEmpty, !value.contains("{{"), !names.contains(field.key) else { continue }
+            if hasSecretName(field.key, value: value) || field.key.lowercased() == "pwd" {
+                names.append(field.key)
+            }
+        }
+        return names
     }
 
     /// Bilinen token biçimleri: JWT, AWS erişim anahtarı, özel anahtar bloğu,

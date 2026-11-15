@@ -20,6 +20,15 @@ extension AppState {
         guard !trimmed.isEmpty,
               let index = workspace.collections.firstIndex(id: id),
               workspace.collections[index].isRegular else { return }
+        // Kurum collection'ı: yalnızca düzenleme yetkisiyle ve sunucunun ad
+        // kuralıyla. Ad yerelde değişir; "Sunucuya kaydet" ile gider.
+        if teamCatalog.isTeam(id) {
+            guard teamCatalog.canEdit(id) else { return }
+            guard TeamDataClient.isValidName(trimmed) else {
+                teamNotice = TeamError.invalidName.localizedDescription
+                return
+            }
+        }
         workspace.collections[index].name = trimmed
         persist()
     }

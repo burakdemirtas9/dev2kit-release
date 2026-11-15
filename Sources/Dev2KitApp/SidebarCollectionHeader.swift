@@ -21,15 +21,39 @@ struct SidebarCollectionHeader: View {
     let isDimmed: Bool
     @Binding var draggingCollectionID: UUID?
     let onRename: () -> Void
+    /// Kurum collection'larından sonraki ilk kendi collection'ı: üstünde
+    /// "Collection'larım" başlığı durur.
+    var isFirstOwn: Bool = false
+    /// Bu collection'a istek eklenebilir mi (aramada ve salt okunur kurum
+    /// collection'ında hayır). Artı düğmesi ve menü satırı buna bakar.
+    var canAddRequest: Bool = false
     let onDelete: () -> Void
+    @State private var isHovered = false
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            if isFirstOwn {
+                Text(L10n.t("team.mine").uppercased())
+                    .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
+                    .tracking(0.8)
+                    .foregroundStyle(.tertiary)
+                    .padding(.top, 6)
+            }
+            header
+        }
+    }
+
+    private var header: some View {
         // Daralt/genişlet hedefi başlığın TAMAMI. Bunun Button olması
         // ŞART: List section header'ında düz .onTapGesture tıklama
         // almıyor (NSTableView olayı yutuyor), Button alıyor.
         Button {
             withAnimation(.easeInOut(duration: 0.15)) {
                 appState.toggleCollectionCollapsed(collection.id)
+            }
+            // Kurum collection'ının içeriği ilk açılışta çekilir.
+            if collection.team?.isLoaded == false, !appState.isCollectionCollapsed(collection.id) {
+                Task { await appState.teamLoad(collection.id) }
             }
         } label: {
             HStack(spacing: 4) {
@@ -44,6 +68,16 @@ struct SidebarCollectionHeader: View {
                         .foregroundStyle(.secondary)
                     Text(collection.displayName)
                         .foregroundStyle(.secondary)
+                } else if let team = collection.team {
+                    // Kurum collection'ı: sürüklenmez; kilit = salt okunur, kalem = düzenlenebilir.
+                    Image(systemName: team.canEdit ? "pencil" : "lock")
+                        .font(.tinyText)
+                        .foregroundStyle(.secondary)
+                    Text(collection.displayName)
+                    Text(team.ownerGroup)
+                        .font(.tinyMono)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
                 } else {
                     Image(systemName: "line.3.horizontal")
                         .font(.tinyText)
@@ -56,6 +90,12 @@ struct SidebarCollectionHeader: View {
                      : "\(collection.totalRequests)")
                     .font(.tinyText)
                     .foregroundStyle(.tertiary)
+                if collection.team?.isDirty == true {
+                    Image(systemName: "circle.fill")
+                        .font(.system(size: 6))
+                        .foregroundStyle(Theme.accent)
+                        .help(L10n.t("team.banner.dirty"))
+                }
                 if isCollapsed, containsDirtyRequest {
                     Image(systemName: "circle.fill")
                         .font(.system(size: 6))
@@ -77,13 +117,31 @@ struct SidebarCollectionHeader: View {
         .help(appState.isSearching
               ? L10n.t("collection.searchExpanded")
               : (appState.isCollectionCollapsed(collection.id) ? L10n.t("collection.expand") : L10n.t("collection.collapse")))
+        // Yeni istek: her collection'ın altındaki satırın yerine başlıkta artı.
+        // Üzerine gelince görünür; boş collection'da hep görünür (başka ipucu
+        // yok). Klavye yolu: ⌘N ve sağ tık menüsü.
+        .overlay(alignment: .trailing) {
+            if canAddRequest, isHovered || collection.totalRequests == 0 {
+                Button {
+                    appState.addRequest(to: collection.id)
+                } label: {
+                    Image(systemName: "plus").iconHitTarget()
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .help(L10n.t("collection.addRequest.help"))
+                .accessibilityLabel(L10n.t("menu.newRequest"))
+                .disabled(draggingCollectionID != nil)
+            }
+        }
+        .onHover { isHovered = $0 }
         .opacity(isDimmed ? 0.35 : 1)
         .onDrag {
             // Filtreliyken sıralama kapalı: görünen liste gerçek
             // sırayı temsil etmiyor. Boş sağlayıcı dönünce
             // `draggingCollectionID` set edilmez ve drop hedefleri
             // (bkz. CollectionReorderDelegate) hiçbir şey yapmaz.
-            guard !appState.isSearching, !collection.isUngrouped else { return NSItemProvider() }
+            guard !appState.isSearching, !collection.isUngrouped, collection.team == nil else { return NSItemProvider() }
             draggingCollectionID = collection.id
             return InternalDrag.provider(for: collection.id)
         }
@@ -96,7 +154,10 @@ struct SidebarCollectionHeader: View {
             )
         )
         .contextMenu {
-            if !collection.isUngrouped {
+            if let team = collection.team {
+                teamMenu(team)
+            } else if !collection.isUngrouped {
+                if canAddRequest { newRequestMenuItem; Divider() }
                 Button {
                     onRename()
                 } label: {
@@ -113,12 +174,67 @@ struct SidebarCollectionHeader: View {
                 } label: {
                     Label(L10n.t("collection.exportPostman"), systemImage: "square.and.arrow.up.on.square")
                 }
+                if appState.teamIdentity != nil, appState.teamCanCreate {
+                    Button {
+                        Task { await appState.teamPublish(collection.id) }
+                    } label: {
+                        Label(L10n.t("team.publish"), systemImage: "building.2")
+                    }
+                }
                 Divider()
                 Button(role: .destructive) {
                     onDelete()
                 } label: {
                     Label(L10n.t("common.deleteEllipsis"), systemImage: "trash")
                 }
+            }
+        }
+    }
+
+    private var newRequestMenuItem: some View {
+        Button {
+            appState.addRequest(to: collection.id)
+        } label: {
+            Label(L10n.t("menu.newRequest"), systemImage: "plus")
+        }
+    }
+
+    @ViewBuilder
+    private func teamMenu(_ team: SidebarSnapshot.Team) -> some View {
+        if canAddRequest { newRequestMenuItem }
+        if team.canEdit {
+            // Ad yerelde değişir; "Sunucuya kaydet" ile gider.
+            Button {
+                onRename()
+            } label: {
+                Label(L10n.t("collection.renameEllipsis"), systemImage: "pencil")
+            }
+            Divider()
+        }
+        if team.isDirty {
+            Button {
+                Task { await appState.teamSave(collection.id) }
+            } label: {
+                Label(L10n.t("team.save"), systemImage: "icloud.and.arrow.up")
+            }
+        }
+        Button {
+            Task { await appState.teamRefresh(reloadLoaded: true) }
+        } label: {
+            Label(L10n.t("team.refresh"), systemImage: "arrow.clockwise")
+        }
+        Button {
+            appState.teamCopyToMine(collection.id)
+        } label: {
+            Label(L10n.t("team.copyToMine"), systemImage: "doc.on.doc")
+        }
+        .disabled(!team.isLoaded)
+        if appState.teamCatalog.canDelete(collection.id) {
+            Divider()
+            Button(role: .destructive) {
+                onDelete()
+            } label: {
+                Label(L10n.t("common.deleteEllipsis"), systemImage: "trash")
             }
         }
     }
@@ -134,7 +250,8 @@ struct CollectionReorderDelegate: DropDelegate {
     let appState: AppState
 
     func dropEntered(info: DropInfo) {
-        guard let dragging, dragging != target else { return }
+        // Kurum collection'ları sunucu sırasıyla en üstte; araya girilmez.
+        guard let dragging, dragging != target, !appState.isTeamCollection(target) else { return }
         appState.moveCollection(dragging, before: target)
     }
 

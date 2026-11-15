@@ -282,7 +282,8 @@ extension AppState {
             case .postman:
                 let output = try PostmanExporter.export(collection)
                 try output.data.write(to: url)
-                portingMessage = Self.exportMessage(collection: collection, fileName: url.lastPathComponent, notes: output.notes)
+                portingMessage = Self.exportMessage(collection: collection, fileName: url.lastPathComponent,
+                                                    notes: output.notes, format: .postman)
             }
         } catch {
             portingMessage = ResultMessage(
@@ -295,9 +296,18 @@ extension AppState {
 
     /// Dışa aktarma sonucu, dosyanın gerçek içeriğine göre: düz metin kimlik
     /// bilgisi varsa uyarı ve yerleri; yoksa "yalnızca referans" bilgisi.
-    static func exportMessage(collection: CollectionModel, fileName: String, notes: [String] = []) -> ResultMessage {
+    static func exportMessage(collection: CollectionModel, fileName: String, notes: [String] = [],
+                              format: ExportFormat = .dev2kit) -> ResultMessage {
         let subtitle = "“\(collection.name)” · \(fileName)"
-        let found = CollectionPorting.plaintextCredentials(in: collection)
+        // Dosya başkasına gider: kurum kaydıyla aynı sıkı denetim (kapalı
+        // satırlar ve gövdedeki gizli alanlar da dosyaya yazılır). Yalnızca
+        // dosyaya GİREN şey için uyarılır: Postman biçimine kapalı query
+        // parametreleri yazılmaz (`PostmanExporter`).
+        var written = collection
+        if format == .postman {
+            for index in written.requests.indices { written.requests[index].queryParams.removeAll { !$0.enabled } }
+        }
+        let found = CollectionPorting.plaintextCredentials(in: written, forSharing: true)
         let exampleCount = collection.requests.reduce(0) { $0 + $1.examples.count }
         // Biçim dönüşümünde taşınamayanlar (Postman) uyarı satırı olarak.
         let exampleLines = (exampleCount > 0 ? [MessageLine(.info, L10n.plural("example.export.included", count: exampleCount))] : [])
@@ -332,6 +342,8 @@ extension AppState {
         collapsedCollectionIDs.remove(collectionID)
         var copy = request
         copy.id = UUID()
+        // Geçmişten ya da başka yerden gelen isteğin klasörü burada geçerli değil.
+        copy.folder = []
         let existing = workspace.collections[index].requests.map(\.name)
         copy.name = CollectionPorting.uniqueName(copy.name, suffix: "2", existingNames: existing)
         workspace.collections[index].requests.append(copy)

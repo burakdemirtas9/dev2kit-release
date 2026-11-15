@@ -124,7 +124,9 @@ final class CollectionPortingTests: XCTestCase {
         }
 
         let form = outcome.collection.requests[1]
-        XCTAssertEqual(form.name, "Klasörüm / Form")
+        XCTAssertEqual(form.name, "Form")
+        XCTAssertEqual(form.folder, ["Klasörüm"], "klasör korunur, ada düzleşmez")
+        XCTAssertEqual(login.folder, [])
         if case .multipartForm(let fields) = form.body {
             XCTAssertEqual(fields.map(\.key), ["ad"], "dosya alanı atlanmalı")
         } else {
@@ -132,7 +134,7 @@ final class CollectionPortingTests: XCTestCase {
         }
 
         XCTAssertTrue(outcome.warnings.contains { $0.contains("dosya") })
-        XCTAssertTrue(outcome.warnings.contains { $0.contains("Klasörler") })
+        XCTAssertFalse(outcome.warnings.contains { $0.contains("Klasör") }, "klasörler artık kayıp değil")
     }
 
     func testPostmanNameConflictAppendsFromPostman() throws {
@@ -155,27 +157,40 @@ final class CollectionPortingTests: XCTestCase {
         XCTAssertThrowsError(try CollectionPorting.importPostman(Data("[1,2]".utf8), existingNames: []))
     }
 
-    /// Klasör uyarısı bir kez (güvenlik taraması P7).
-    func testFolderWarningAppearsOnce() throws {
-        let folders = (0..<5).map { #"{"name": "K\#($0)", "item": [{"name": "R", "request": {"method": "GET", "url": "https://a.example.com"}}]}"# }
-        let json = #"{"info": {"name": "Klasörler"}, "item": [\#(folders.joined(separator: ","))]}"#
-        let outcome = try CollectionPorting.importPostman(Data(json.utf8), existingNames: [])
-        XCTAssertEqual(outcome.warnings.filter { $0 == L10n.t("porting.folders") }.count, 1)
-        XCTAssertEqual(outcome.collection.requests.count, 5)
+    /// İç içe klasörler yol olarak gelir; kökteki istekler önce, klasörler
+    /// ilk görüldükleri sırayla. Dışa aktarma aynı ağacı geri kurar.
+    func testNestedFoldersArePreservedAndRoundTripToPostman() throws {
+        func request(_ name: String) -> String { #"{"name": "\#(name)", "request": {"method": "GET", "url": "https://a.example.com/\#(name)"}}"# }
+        let json = #"""
+        {"info": {"name": "Ağaç"}, "item": [
+          {"name": "Kullanıcı", "item": [\#(request("liste")), {"name": "Yönetim", "item": [\#(request("sil"))]}]},
+          \#(request("kök")),
+          {"name": "Sipariş", "item": [\#(request("getir"))]}
+        ]}
+        """#
+        let collection = try CollectionPorting.importPostman(Data(json.utf8), existingNames: []).collection
+        XCTAssertEqual(collection.requests.map(\.name), ["kök", "liste", "sil", "getir"])
+        XCTAssertEqual(collection.requests.map(\.folder), [[], ["Kullanıcı"], ["Kullanıcı", "Yönetim"], ["Sipariş"]])
+
+        let exported = try PostmanExporter.export(collection).data
+        let again = try CollectionPorting.importPostman(exported, existingNames: []).collection
+        XCTAssertEqual(again.requests.map(\.name), collection.requests.map(\.name))
+        XCTAssertEqual(again.requests.map(\.folder), collection.requests.map(\.folder))
     }
 
-    /// Klasör öneki her istek adına kopyalanır; sınırsızken 277 KB dosya
-    /// 501 MB ad üretiyordu (yeniden tarama).
-    func testDeepFolderPrefixIsBounded() throws {
+    /// Klasör yolu her isteğe yazılır; ad ve derinlik sınırlıdır (sınırsızken
+    /// 277 KB dosya yüzlerce MB üretiyordu; yeniden tarama).
+    func testDeepFolderPathIsBounded() throws {
         var item = #"{"name": "R", "request": {"method": "GET", "url": "https://a.example.com"}}"#
         for level in 0..<50 {
             item = #"{"name": "\#(String(repeating: "k", count: 1000))\#(level)", "item": [\#(item)]}"#
         }
         let json = #"{"info": {"name": "Derin"}, "item": [\#(item)]}"#
         let outcome = try CollectionPorting.importPostman(Data(json.utf8), existingNames: [])
-        let name = try XCTUnwrap(outcome.collection.requests.first?.name)
-        XCTAssertLessThanOrEqual(name.count, CollectionPorting.maxFolderPrefixLength + 10)
-        XCTAssertTrue(name.hasSuffix("… / R"), name)
+        let request = try XCTUnwrap(outcome.collection.requests.first)
+        XCTAssertEqual(request.name, "R")
+        XCTAssertEqual(request.folder.count, RequestFolders.maxDepth)
+        XCTAssertTrue(request.folder.allSatisfy { $0.count <= RequestFolders.maxNameLength + 1 })
     }
 
     /// Postman uid'i doğrulanmadan adrese eklenmez (güvenlik taraması P9).

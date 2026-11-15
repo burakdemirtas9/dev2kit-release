@@ -55,6 +55,9 @@ struct RequestDetailView: View {
                     if isTokenFactory {
                         TokenFactoryBanner(variable: (request.tokenOutput ?? TokenOutput()).trimmedVariableName)
                     }
+                    if let teamID = appState.teamCollectionID(containing: request.id) {
+                        TeamRequestBanner(collectionID: teamID)
+                    }
                     requestBar
                     editorTabs
                 }

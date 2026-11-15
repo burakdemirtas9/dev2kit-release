@@ -2,6 +2,21 @@
 
 extension L10nTable {
     static let sidebar: [String: L10nEntry] = [
+        // Klasörler (2026-11-15)
+        "folder.moveTo": L10nEntry("Klasöre Taşı", "Move to Folder"),
+        "folder.new": L10nEntry("Yeni Klasör…", "New Folder…"),
+        "folder.removeFrom": L10nEntry("Klasörden Çıkar", "Remove from Folder"),
+        "folder.new.title": L10nEntry("Yeni Klasör", "New Folder"),
+        "folder.new.message": L10nEntry("Seçili request'ler bu klasöre taşınır. İç içe klasör için adları / ile ayır (ör. Kullanıcı/Yönetim).", "The selected requests are moved into this folder. Separate names with / for nested folders (e.g. Users/Admin)."),
+        "folder.new.confirm": L10nEntry("Oluştur ve Taşı", "Create and Move"),
+        "folder.name.placeholder": L10nEntry("Klasör adı", "Folder name"),
+        "folder.rename.title": L10nEntry("Klasörü Yeniden Adlandır", "Rename Folder"),
+        "folder.newRequest": L10nEntry("Bu Klasöre Yeni Request", "New Request in This Folder"),
+        "folder.remove": L10nEntry("Klasörü Kaldır (request'ler kalır)", "Remove Folder (Keep Requests)"),
+        "folder.expand": L10nEntry("Klasörü aç", "Expand folder"),
+        "folder.collapse": L10nEntry("Klasörü katla", "Collapse folder"),
+        "folder.accessibility": L10nEntry("%1$@ klasörü, %2$@ request", "Folder %1$@, %2$@ requests"),
+        "collection.addRequest.help": L10nEntry("Bu collection'a yeni request ekle", "Add a new request to this collection"),
         "sidebar.search.noMatch": L10nEntry("\"%1$@\" için eşleşme yok", "No matches for \"%1$@\""),
         "collection.rename.title": L10nEntry("Koleksiyonu Yeniden Adlandır", "Rename Collection"),
         "collection.name.placeholder": L10nEntry("Koleksiyon adı", "Collection name"),

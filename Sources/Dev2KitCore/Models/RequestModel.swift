@@ -102,6 +102,10 @@ public struct RequestModel: Codable, Identifiable, Hashable, Sendable {
     /// Eski dosyalarda yok; okunurken boş. Tele çıkan bir şey değil:
     /// `isFunctionallyEqual` kapsamında DEĞİL, geri dönüşte korunur.
     public var examples: [ResponseExample]
+    /// Collection içindeki klasör yolu (`RequestFolders`); boşsa kökte.
+    /// Eski dosyalarda yok. Tele çıkan bir şey değil: `isFunctionallyEqual`
+    /// kapsamında DEĞİL.
+    public var folder: [String]
 
     public init(
         id: UUID = UUID(),
@@ -114,7 +118,8 @@ public struct RequestModel: Codable, Identifiable, Hashable, Sendable {
         auth: AuthConfig = .none,
         options: RequestOptions = .default,
         tokenOutput: TokenOutput? = nil,
-        examples: [ResponseExample] = []
+        examples: [ResponseExample] = [],
+        folder: [String] = []
     ) {
         self.id = id
         self.name = name
@@ -127,6 +132,7 @@ public struct RequestModel: Codable, Identifiable, Hashable, Sendable {
         self.options = options
         self.tokenOutput = tokenOutput
         self.examples = examples
+        self.folder = folder
     }
 
     /// İki isteğin TELE ÇIKAN kısmı aynı mı.
@@ -182,12 +188,13 @@ public struct RequestModel: Codable, Identifiable, Hashable, Sendable {
             auth: try container.decodeIfPresent(AuthConfig.self, forKey: .auth) ?? .none,
             options: try container.decodeIfPresent(RequestOptions.self, forKey: .options) ?? .default,
             tokenOutput: try container.decodeIfPresent(TokenOutput.self, forKey: .tokenOutput),
-            examples: examples?.elements ?? []
+            examples: examples?.elements ?? [],
+            folder: RequestFolders.sanitized(try container.decodeIfPresent([String].self, forKey: .folder) ?? [])
         )
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, method, url, headers, queryParams, body, auth, options, tokenOutput, examples
+        case id, name, method, url, headers, queryParams, body, auth, options, tokenOutput, examples, folder
     }
 
     /// Örneği olmayan istekte `examples` alanı yazılmaz: mevcut koleksiyon
@@ -205,6 +212,8 @@ public struct RequestModel: Codable, Identifiable, Hashable, Sendable {
         try container.encode(options, forKey: .options)
         try container.encodeIfPresent(tokenOutput, forKey: .tokenOutput)
         if !examples.isEmpty { try container.encode(examples, forKey: .examples) }
+        // Klasörsüz istekte alan yazılmaz: mevcut dosyalar bayt bayt aynı kalır.
+        if !folder.isEmpty { try container.encode(folder, forKey: .folder) }
     }
 }
 

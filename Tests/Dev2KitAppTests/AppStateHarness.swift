@@ -18,7 +18,7 @@ final class AppStateHarness {
     /// Testler arasında sızmaması gereken arayüz tercihleri.
     private static let defaultsKeys = [
         "openTabs", "selectedTab", "pinnedTabs", "collapsedCollections", "appearanceMode",
-        "historySettings", "sidebarWidth", AppState.expandedExamplesKey,
+        "historySettings", "sidebarWidth", AppState.expandedExamplesKey, AppState.collapsedFoldersKey,
     ]
 
     init() {

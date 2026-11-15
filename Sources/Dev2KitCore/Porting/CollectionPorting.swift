@@ -93,12 +93,10 @@ public enum CollectionPorting {
 
         var warnings: [String] = []
         var requests: [RequestModel] = []
-        // Klasör uyarısı bir kez: eskiden her üst klasörde uyarı listesinin
-        // tamamı taranıyordu (güvenlik taraması P7).
-        if (postman.item ?? []).contains(where: { $0.item != nil }) {
-            warnings.append(L10n.t("porting.folders"))
-        }
-        flatten(items: postman.item ?? [], prefix: "", into: &requests, warnings: &warnings)
+        // Klasörler korunur (2026-11-15): her istek klasör yolunu taşır
+        // (`RequestFolders`). Eskiden "Klasör / Request" diye ada düzleşiyordu.
+        flatten(items: postman.item ?? [], path: [], into: &requests, warnings: &warnings)
+        requests = RequestFolders.canonical(requests)
 
         if requests.isEmpty {
             warnings.append(L10n.t("porting.noRequests"))
@@ -147,6 +145,11 @@ public enum CollectionPorting {
 
     /// İçe aktarılan koleksiyona yeni UUID'ler verir; mevcut workspace'teki
     /// kayıtlarla ID çakışması yaşanmaz.
+    /// Yeni kimlikli kopya (kurum collection'ını kendi collection'larına kopyalama, yayınlama).
+    public static func copyWithNewIDs(_ collection: CollectionModel, name: String) -> CollectionModel {
+        regenerateIDs(collection, name: name)
+    }
+
     private static func regenerateIDs(_ collection: CollectionModel, name: String) -> CollectionModel {
         var copy = collection
         copy.id = UUID()
@@ -163,34 +166,26 @@ public enum CollectionPorting {
         return copy
     }
 
-    /// Klasör önekinin üst sınırı (karakter). Önek her istek adına kopyalanır:
-    /// 1000 karakterlik 100 iç içe klasör × 5000 istek, 277 KB dosyadan
-    /// 501 MB ad üretiyordu (yeniden tarama, 2026-11-01).
-    static let maxFolderPrefixLength = 300
-
-    static func limitedPrefix(_ prefix: String) -> String {
-        guard prefix.count > maxFolderPrefixLength else { return prefix }
-        return String(prefix.prefix(maxFolderPrefixLength)) + "…"
-    }
-
+    /// Klasör yolu her isteğe yazılır; ad ve derinlik `RequestFolders.sanitized`
+    /// ile sınırlıdır (1000 karakterlik 100 iç içe klasör × 5000 istek, 277 KB
+    /// dosyadan yüzlerce MB üretiyordu; yeniden tarama, 2026-11-01).
     private static func flatten(
         items: [PostmanCollection.Item],
-        prefix: String,
+        path: [String],
         into requests: inout [RequestModel],
         warnings: inout [String]
     ) {
         for item in items {
             if let children = item.item {
-                // Klasörler düzleştirilir; isim "Klasör / İstek" olur.
                 let folder = item.name ?? L10n.t("porting.folder")
-                flatten(items: children, prefix: limitedPrefix(prefix.isEmpty ? folder : "\(prefix) / \(folder)"),
+                flatten(items: children, path: RequestFolders.sanitized(path + [folder]),
                         into: &requests, warnings: &warnings)
                 continue
             }
             guard let pmRequest = item.request else { continue }
-            let baseName = item.name ?? L10n.t("porting.unnamed")
-            let name = prefix.isEmpty ? baseName : "\(prefix) / \(baseName)"
+            let name = item.name ?? L10n.t("porting.unnamed")
             var request = convert(pmRequest, name: name, warnings: &warnings)
+            request.folder = path
             request.examples = convertExamples(item.response, requestName: name, warnings: &warnings)
             requests.append(request)
         }
@@ -524,9 +519,12 @@ extension CollectionPorting {
         public let places: [String]
     }
 
-    public static func plaintextCredentials(in collection: CollectionModel) -> [PlaintextCredential] {
+    /// `forSharing`: kurum collection'ı kaydı ve dışa aktarma mesajı için sıkı
+    /// denetim (kapalı satırlar ve gövde alanları; bkz.
+    /// `ImportReviewer.plaintextCredentials`).
+    public static func plaintextCredentials(in collection: CollectionModel, forSharing: Bool = false) -> [PlaintextCredential] {
         collection.requests.compactMap { request in
-            let places = ImportReviewer.plaintextCredentials(in: request)
+            let places = ImportReviewer.plaintextCredentials(in: request, forSharing: forSharing)
             return places.isEmpty ? nil : PlaintextCredential(requestName: request.name, places: places)
         }
     }

@@ -18,6 +18,12 @@ struct SidebarRequestRow: View {
     let collection: SidebarSnapshot.Collection
     let isDirty: Bool
     let examplesExpanded: Bool
+    /// Collection'daki klasör yolları; çağıran collection başına bir kez
+    /// hesaplar (satır başına tarama yok).
+    var folderPaths: [[String]] = []
+    /// Klasör işlemleri açık mı (aramada ve salt okunur collection'da hayır).
+    var canOrganize = false
+    var onNewFolder: (Set<UUID>) -> Void = { _ in }
     let onDelete: (Set<UUID>) -> Void
 
     /// Okun sütunu; örnek satırlarının girintisi buna göre (`SidebarExampleRow`).
@@ -128,6 +134,25 @@ struct SidebarRequestRow: View {
             } label: {
                 Label(isMultiple ? L10n.plural("request.moveMany", count: picked.count) : L10n.t("request.move"),
                       systemImage: "folder")
+            }
+        }
+        if canOrganize {
+            Menu {
+                ForEach(folderPaths, id: \.self) { path in
+                    Button(path.joined(separator: " / ")) {
+                        appState.placeRequests(picked, in: collection.id, folder: path)
+                    }
+                    .disabled(!isMultiple && path == request.folder)
+                }
+                if !folderPaths.isEmpty { Divider() }
+                Button(L10n.t("folder.new")) { onNewFolder(picked) }
+                if !request.folder.isEmpty {
+                    Button(L10n.t("folder.removeFrom")) {
+                        appState.placeRequests(picked, in: collection.id, folder: [])
+                    }
+                }
+            } label: {
+                Label(L10n.t("folder.moveTo"), systemImage: "folder.badge.plus")
             }
         }
         Button {

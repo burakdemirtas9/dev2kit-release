@@ -81,7 +81,10 @@ public enum RequestSearch {
     /// Bir isteğin aranabilir metni. Tek bir metin kuruluyor ki parça başına
     /// tek karşılaştırma yetsin: liste her tuş vuruşunda yeniden filtreleniyor.
     private static func haystack(_ request: RequestModel, collectionName: String) -> String {
-        "\(request.name) \(request.method.rawValue) \(request.url) \(collectionName)"
+        // Klasör adı da aranır: klasördeki her istek o adla bulunur.
+        request.folder.isEmpty
+            ? "\(request.name) \(request.method.rawValue) \(request.url) \(collectionName)"
+            : "\(request.name) \(request.method.rawValue) \(request.url) \(collectionName) \(request.folder.joined(separator: " "))"
     }
 
     /// `needles` ÖNCEDEN katlanmış olmalı (bkz. `fold`); sorgu parçaları

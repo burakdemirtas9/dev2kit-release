@@ -35,8 +35,47 @@ import Dev2KitCore
 @MainActor
 final class AppState {
     var workspace: WorkspaceModel {
+        didSet {
+            // Kurum collection'larının merkezi koruması (`TeamSync.enforce`).
+            if !teamCatalog.entries.isEmpty, !isApplyingTeam { enforceTeamRules(previous: oldValue) }
+            scheduleSidebarSnapshot()
+        }
+    }
+
+    // MARK: Kurum collection'ları (2026-11-11, AppState+Team)
+
+    enum TeamStatus: Equatable {
+        /// Açılış: önbellek gösteriliyor, oturum henüz doğrulanmadı.
+        case unknown
+        case restoring
+        case loggedOut
+        case loggedIn(TeamIdentity)
+    }
+
+    var teamStatus: TeamStatus = .unknown
+    /// Hangi yerel collection kurumun, sürüm ve izinler. Kenar çubuğu özetine girer.
+    var teamCatalog = TeamCatalog() {
         didSet { scheduleSidebarSnapshot() }
     }
+    var teamCanCreate = false
+    var teamIsRefreshing = false
+    /// İçeriği çekilen kurum collection'ları.
+    var teamLoadingIDs: Set<UUID> = []
+    /// Kullanıcıya kısa not (salt okunur koruması, hata).
+    var teamNotice: String?
+    /// 409: hangi collection'da çakışma var.
+    var teamConflictID: UUID?
+    /// Yenilemede sunucuda değiştiği görülen, kaydedilmemiş değişikliği olan
+    /// collection'lar: sırayla sorulur (sunucudakini yükle / benimkini koru).
+    var teamRemoteChangedIDs: [UUID] = []
+    /// 429 sonrası login düğmesi bu ana kadar kapalı.
+    var teamLoginRetryAt: Date?
+    var showingTeamLogin = false
+    @ObservationIgnored var isApplyingTeam = false
+    /// Kaydedilmemiş kurum düzenlemesi önbelleğe henüz yazılmadı; workspace
+    /// kaydıyla aynı tempoda yazılır (`writeWorkspace`).
+    @ObservationIgnored var teamCacheNeedsSave = false
+    @ObservationIgnored let teamSession: TeamSession
 
     /// Kenar çubuğunun gösterdiği kadarı (`SidebarSnapshot`, Core). Kenar
     /// çubuğu workspace'i DEĞİL bunu okur: yazarken (header, gövde, URL) bu
@@ -287,6 +326,17 @@ final class AppState {
 
     private static let collapsedKey = "collapsedCollections"
 
+    /// Kapalı klasörler (satır kimliğiyle, `RequestFolders.rowID`); UserDefaults'ta.
+    /// Silinen ya da adı değişen klasörün kimliği burada kalabilir; küçük ve
+    /// zararsız (yeniden aynı adla oluşursa kapalı başlar).
+    var collapsedFolderIDs: Set<UUID> = [] {
+        didSet {
+            UserDefaults.standard.set(collapsedFolderIDs.map(\.uuidString), forKey: Self.collapsedFoldersKey)
+        }
+    }
+
+    static let collapsedFoldersKey = "collapsedFolders"
+
     /// Örnekleri açık istekler; diğerlerinin örnekleri katlı (varsayılan,
     /// kullanıcı kararı 2026-10-28). UserDefaults'ta saklanır.
     var expandedExampleRequestIDs: Set<UUID> = [] {
@@ -378,8 +428,9 @@ final class AppState {
 
     /// `secretStore` verilmezse Keychain (bkz. `defaultSecretStore`). Testler
     /// her zaman kendi deposunu verir: kullanıcının Keychain'ine dokunulmaz.
-    init(store: WorkspaceStore = WorkspaceStore(), secretStore: SecretStore? = nil) {
+    init(store: WorkspaceStore = WorkspaceStore(), secretStore: SecretStore? = nil, teamConfig: TeamConfig = .default) {
         self.store = store
+        self.teamSession = TeamSession(config: teamConfig, refreshTokenStore: Self.teamRefreshTokenStore())
         self.saver = WorkspaceSaver(store: store, queue: PersistenceQueue.shared)
         let secrets = secretStore.map { ($0, nil as ResultMessage?, nil as String?) } ?? Self.defaultSecretStore()
         self.secretStore = secrets.0
@@ -387,6 +438,8 @@ final class AppState {
         self.historyStore = historyStore.0
         let collapsedStrings = UserDefaults.standard.stringArray(forKey: Self.collapsedKey) ?? []
         self.collapsedCollectionIDs = Set(collapsedStrings.compactMap(UUID.init(uuidString:)))
+        self.collapsedFolderIDs = Set((UserDefaults.standard.stringArray(forKey: Self.collapsedFoldersKey) ?? [])
+            .compactMap(UUID.init(uuidString:)))
         let savedSettings = UserDefaults.standard.data(forKey: Self.historySettingsKey)
             .flatMap { try? JSONDecoder().decode(HistorySettings.self, from: $0) }
         self.historySettings = savedSettings ?? .default
@@ -451,6 +504,8 @@ final class AppState {
         engine.trustStoreAllowsLongValidity = trustStoreAllowsLongValidity
         reloadTrustStore()
 
+        // Kurum önbelleği sekmelerden önce: açık kurum istekleri geri gelsin.
+        loadTeamCache()
         restoreTabs()
         // init içindeki atamalar didSet'i çağırmaz: ilk özet burada.
         refreshSidebarSnapshot()

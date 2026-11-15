@@ -51,12 +51,17 @@ extension AppState {
 
     private func writeWorkspace() {
         persistTask = nil
+        // Kaydedilmemiş kurum düzenlemeleri workspace'e girmez; önbelleğe aynı
+        // tempoda (yapısal değişiklikte hemen, yazarken 400 ms sonra) yazılır.
+        // Workspace kaydı kapalıyken de: önbellek ayrı dosya.
+        if teamCacheNeedsSave { saveTeamCache() }
         guard !persistenceBlocked else {
             saveState = .failed(L10n.t("save.blocked"))
             return
         }
         // Encode + disk yazımı arka planda; MainActor yalnızca sonucu işler.
-        saver.save(workspace) { error in
+        // Kurum collection'ları workspace kaydına girmez (kaynakları servis).
+        saver.save(workspace.excludingCollections(Set(teamCatalog.entries.keys))) { error in
             MainActor.assumeIsolated {
                 guard let error else {
                     self.saveError = nil
@@ -75,6 +80,8 @@ extension AppState {
     /// veri kaybı demektir. Normal akışta `flushPendingWrites()` yeterlidir.
     func waitForPendingWrites() {
         flushPendingWrites()
+        // Bekleyen workspace yazımı yoksa da kurum önbelleği geride kalmasın.
+        if teamCacheNeedsSave { saveTeamCache() }
         saver.waitForPendingWrites()
         historyStore.waitForPendingWrites()
     }

@@ -19,13 +19,23 @@ public struct SidebarSnapshot: Equatable, Sendable {
         public let statusCode: Int
     }
 
-    public struct Request: Equatable, Sendable, Identifiable, ExampleListing {
+    public struct Request: Equatable, Sendable, Identifiable, ExampleListing, FolderPlaced {
         public let id: UUID
         public let name: String
         public let method: HTTPMethod
         public let examples: [Example]
+        /// Klasör yolu (`RequestFolders`); boşsa kökte.
+        public var folder: [String] = []
 
         public var exampleIDs: [UUID] { examples.map(\.id) }
+    }
+
+    /// Kurum collection'ının kenar çubuğu bilgisi (2026-11-11).
+    public struct Team: Equatable, Sendable {
+        public let ownerGroup: String
+        public let canEdit: Bool
+        public let isLoaded: Bool
+        public let isDirty: Bool
     }
 
     public struct Collection: Equatable, Sendable, Identifiable {
@@ -33,6 +43,8 @@ public struct SidebarSnapshot: Equatable, Sendable {
         public let name: String
         public let isUngrouped: Bool
         public let isTokenFactory: Bool
+        /// Kurum collection'ıysa bilgisi; kendi collection'ında `nil`.
+        public var team: Team? = nil
         /// Gösterilen istekler: arama açıkken yalnızca eşleşenler.
         public let requests: [Request]
         /// Koleksiyondaki istek sayısı (aramadan bağımsız).
@@ -48,7 +60,7 @@ public struct SidebarSnapshot: Equatable, Sendable {
 
         func showing(_ requests: [Request]) -> Collection {
             Collection(id: id, name: name, isUngrouped: isUngrouped, isTokenFactory: isTokenFactory,
-                       requests: requests, totalRequests: totalRequests)
+                       team: team, requests: requests, totalRequests: totalRequests)
         }
     }
 
@@ -61,16 +73,22 @@ public struct SidebarSnapshot: Equatable, Sendable {
         dirty = []
     }
 
-    public init(workspace: WorkspaceModel) {
+    public init(workspace: WorkspaceModel, team: TeamCatalog = TeamCatalog()) {
         collections = workspace.collections.map { collection in
             Collection(
                 id: collection.id,
                 name: collection.name,
                 isUngrouped: collection.isUngrouped,
                 isTokenFactory: collection.isTokenFactory,
-                requests: collection.requests.map { request in
+                team: team.entries[collection.id].map {
+                    Team(ownerGroup: $0.summary.ownerGroup, canEdit: team.canEdit(collection.id),
+                         isLoaded: $0.isLoaded, isDirty: $0.isDirty)
+                },
+                // Gösterim sırasıyla (klasörler gruplanmış); klasör yoksa dizi sırası.
+                requests: RequestFolders.canonical(collection.requests).map { request in
                     Request(id: request.id, name: request.name, method: request.method,
-                            examples: request.examples.map { Example(id: $0.id, name: $0.name, statusCode: $0.statusCode) })
+                            examples: request.examples.map { Example(id: $0.id, name: $0.name, statusCode: $0.statusCode) },
+                            folder: request.folder)
                 },
                 totalRequests: collection.requests.count
             )
@@ -93,7 +111,7 @@ public struct SidebarSnapshot: Equatable, Sendable {
         return matches.compactMap { match in
             guard let collection = byID[match.collection.id] else { return nil }
             let requestsByID = Dictionary(collection.requests.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-            return collection.showing(match.requests.compactMap { requestsByID[$0.id] })
+            return collection.showing(RequestFolders.canonical(match.requests.compactMap { requestsByID[$0.id] }))
         }
     }
 }

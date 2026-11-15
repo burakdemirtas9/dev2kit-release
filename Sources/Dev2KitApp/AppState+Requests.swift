@@ -113,12 +113,14 @@ extension AppState {
         persist()
     }
 
-    func addRequest(to collectionID: UUID) {
+    /// `folder`: istek bu klasörde oluşur (klasör satırının menüsü); boşsa kökte.
+    func addRequest(to collectionID: UUID, folder: [String] = []) {
         guard let index = workspace.collections.firstIndex(id: collectionID) else { return }
-        let request = RequestModel()
+        let request = RequestModel(folder: RequestFolders.sanitized(folder))
         workspace.collections[index].requests.append(request)
-        // Kapalı koleksiyona eklenen istek seçili ama görünmez kalırdı.
+        // Kapalı koleksiyona (ya da klasöre) eklenen istek seçili ama görünmez kalırdı.
         collapsedCollectionIDs.remove(collectionID)
+        expandFolders(containing: request.folder, in: collectionID)
         showRequest(request.id)
         persist()
     }
@@ -231,6 +233,9 @@ extension AppState {
         }
         guard !moved.isEmpty else { return }
         for var request in moved {
+            // Klasör kaynağa aitti: hedefte köke gelir (hedefte aynı adlı
+            // klasör kendiliğinden oluşmasın).
+            request.folder = []
             let existing = workspace.collections[target].requests.map(\.name)
             request.name = CollectionPorting.uniqueName(request.name, suffix: L10n.t("name.movedSuffix"), existingNames: existing)
             workspace.collections[target].requests.append(request)
@@ -294,9 +299,47 @@ extension AppState {
         persist()
     }
 
-    func moveRequests(in collectionID: UUID, from source: IndexSet, to destination: Int) {
+    // MARK: - Klasörler (kurallar: `RequestFolders`, Core)
+
+    /// İstekleri collection içinde bir klasöre yerleştirir (sürükle-bırak ve
+    /// "Klasöre Taşı"). `anchor`: aynı klasördeki bu isteğin önüne; yoksa
+    /// klasörün sonuna. Boş `folder` kök demektir.
+    func placeRequests(_ ids: Set<UUID>, in collectionID: UUID, folder: [String], before anchor: UUID? = nil) {
         guard let index = workspace.collections.firstIndex(id: collectionID) else { return }
-        workspace.collections[index].requests.move(fromOffsets: source, toOffset: destination)
+        let placed = RequestFolders.placing(ids, in: folder, before: anchor, requests: workspace.collections[index].requests)
+        guard placed != workspace.collections[index].requests else { return }
+        workspace.collections[index].requests = placed
+        expandFolders(containing: RequestFolders.sanitized(folder), in: collectionID)
         persist()
+    }
+
+    func renameFolder(_ path: [String], to newName: String, in collectionID: UUID) {
+        guard let index = workspace.collections.firstIndex(id: collectionID) else { return }
+        let renamed = RequestFolders.renaming(path, to: newName, in: workspace.collections[index].requests)
+        guard renamed != workspace.collections[index].requests else { return }
+        workspace.collections[index].requests = RequestFolders.canonical(renamed)
+        persist()
+    }
+
+    /// Klasörü kaldırır; içindeki istekler ve alt klasörler bir üst düzeye çıkar.
+    func removeFolder(_ path: [String], in collectionID: UUID) {
+        guard let index = workspace.collections.firstIndex(id: collectionID) else { return }
+        workspace.collections[index].requests = RequestFolders.canonical(
+            RequestFolders.removing(path, in: workspace.collections[index].requests))
+        persist()
+    }
+
+    func isFolderCollapsed(_ id: UUID) -> Bool { collapsedFolderIDs.contains(id) }
+
+    func toggleFolderCollapsed(_ id: UUID) {
+        if collapsedFolderIDs.contains(id) { collapsedFolderIDs.remove(id) } else { collapsedFolderIDs.insert(id) }
+    }
+
+    /// Yolun kendisi ve üst klasörleri açılır: içine yerleşen istek görünsün.
+    private func expandFolders(containing path: [String], in collectionID: UUID) {
+        guard !path.isEmpty, !collapsedFolderIDs.isEmpty else { return }
+        for depth in 1...path.count {
+            collapsedFolderIDs.remove(RequestFolders.rowID(collection: collectionID, path: Array(path.prefix(depth))))
+        }
     }
 }

@@ -140,10 +140,13 @@ final class ExampleFoldingTests: XCTestCase {
 
         state.toggleExamples(withExamples.id)
         RunLoop.main.run(until: Date().addingTimeInterval(0.6))
-        // Satırlar: başlık, ilk istek, Örnekli, iki örnek, Örneksiz, "Yeni İstek".
+        // Satırlar: koleksiyon başlığı, ilk istek, Örnekli, iki örnek, Örneksiz;
+        // sonda Kurum başlığı ve giriş satırı (girişsizken altta, 2026-11-15).
+        // "Yeni İstek" satırı artık yok (başlıktaki artı).
         let expanded = (0..<table.numberOfRows).map { table.rect(ofRow: $0).height }
         XCTAssertEqual(expanded.count, folded.count + 2, "açınca iki örnek satırı eklenir")
-        let requestAndExampleRows = expanded.dropFirst().dropLast()
+        let requestAndExampleRows = expanded.dropFirst().dropLast(2)
+        XCTAssertEqual(requestAndExampleRows.count, 5)
         XCTAssertEqual(Set(requestAndExampleRows).count, 1,
                        "istek satırları (oklu/oksuz) ve örnek satırları aynı yükseklikte: \(expanded)")
     }

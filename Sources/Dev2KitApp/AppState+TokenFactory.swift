@@ -54,6 +54,8 @@ extension AppState {
         // Token Factory'de örnek yok (yanıtı token taşır, kaydedilmez).
         for var request in picked.map(\.withoutExamples) {
             request.id = UUID()
+            // Token Factory düz bir liste: klasör taşınmaz.
+            request.folder = []
             request.name = CollectionPorting.uniqueName(
                 request.name,
                 suffix: L10n.t("name.copySuffix"),

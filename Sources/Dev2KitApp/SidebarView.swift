@@ -6,6 +6,9 @@ struct SidebarView: View {
     @State private var renameTargetID: UUID?
     @State private var renameText = ""
     @State private var deleteTarget: SidebarSnapshot.Collection?
+    @State private var teamDeleteTarget: SidebarSnapshot.Collection?
+    @State private var folderPrompt: SidebarFolderPrompt?
+    @State private var folderText = ""
     @State private var deleteRequestTargets: Set<UUID> = []
     @State private var draggingCollectionID: UUID?
     @State private var tokenFactoryDropTargeted = false
@@ -53,7 +56,9 @@ struct SidebarView: View {
                     appState.openExample(AppState.ExampleRef(requestID: owner, exampleID: exampleID))
                     return
                 }
-                let requests = newValue.filter { exampleOwners[$0] == nil }
+                // Yalnızca görünen istekler: klasör satırının kimliği seçim sayılmaz.
+                let visible = Set(order)
+                let requests = newValue.filter { exampleOwners[$0] == nil && visible.contains($0) }
                 guard !requests.isEmpty else { return }
                 appState.applySelection(requests, order: order)
             }
@@ -113,8 +118,14 @@ struct SidebarView: View {
         // ⇧/⌘ ile seçilen aralığın hangi uçta bittiğini bilmek için görünen sıra.
         let visibleOrder = matches.flatMap { $0.requests.map(\.id) }
         let exampleOwners = RequestTreeRows.exampleOwners(in: matches.flatMap(\.requests))
+        let firstOwn = firstOwnID(in: matches)
         ScrollViewReader { proxy in
         List(selection: listSelection(order: visibleOrder, exampleOwners: exampleOwners)) {
+            // Kurum oturumu ve collection'ları (2026-11-11). Kurum collection'ları
+            // aşağıdaki listede kendilerinin önünde durur. Bölüm yalnızca
+            // kullanılırken üstte: girişsizken (kurum collection'ı, bildirim
+            // yokken) listenin sonuna iner, en değerli yeri tutmaz.
+            if !appState.isSearching, teamSectionOnTop { TeamSidebarSection() }
             if appState.isSearching, matches.isEmpty {
                 Text(L10n.t("sidebar.search.noMatch", appState.searchQuery))
                     .font(.callout)
@@ -123,71 +134,34 @@ struct SidebarView: View {
                     .padding(.vertical, 12)
             }
             ForEach(matches) { collection in
+                // Salt okunur kurum collection'ı: yeni istek, sıralama, taşıma yok.
+                let readOnly = collection.team.map { !$0.canEdit } ?? false
                 Section {
                     if !isCollapsedForDisplay(collection.id) {
-                        // İstek ve, örnekleri açıksa, hemen altında kayıtlı
-                        // örnekleri. Satır listesi koleksiyon başına bir kez kurulur.
-                        let requestsByID = Dictionary(collection.requests.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-                        let rows = RequestTreeRows.rows(for: collection.requests, expanded: appState.expandedExampleRequestIDs)
-                        ForEach(rows) { row in
-                            switch row {
-                            case .request(let id):
-                                if let request = requestsByID[id] {
-                                    SidebarRequestRow(
-                                        request: request,
-                                        collection: collection,
-                                        isDirty: dirty.contains(request.id),
-                                        examplesExpanded: appState.areExamplesExpanded(request.id),
-                                        onDelete: { deleteRequestTargets = $0 }
-                                    )
-                                    .tag(request.id)
-                                    .opacity(isDimmed(collection.id) ? 0.35 : 1)
-                                    .disabled(draggingCollectionID != nil)
-                                    .moveDisabled(appState.isSearching)
-                                    // Token Factory paneline bırakılınca kopyalanabilsin diye
-                                    // satır kimliğini taşır; liste içi sıralama (`onMove`)
-                                    // bundan etkilenmez.
-                                    .itemProvider { InternalDrag.provider(for: request.id) }
-                                }
-                            case .example(let requestID, let exampleID):
-                                if let example = requestsByID[requestID]?.examples.first(where: { $0.id == exampleID }) {
-                                    SidebarExampleRow(
-                                        ref: AppState.ExampleRef(requestID: requestID, exampleID: exampleID),
-                                        example: example
-                                    )
-                                    .tag(exampleID)
-                                    .opacity(isDimmed(collection.id) ? 0.35 : 1)
-                                    .disabled(draggingCollectionID != nil)
-                                    // Örnek isteğinden ayrılmaz; sürüklenmez.
-                                    .moveDisabled(true)
-                                }
+                        // Klasör başlıkları, istekler ve açık örnekleri (`SidebarCollectionRows`).
+                        SidebarCollectionRows(
+                            collection: collection,
+                            dirty: dirty,
+                            readOnly: readOnly,
+                            isDimmed: isDimmed(collection.id),
+                            isDraggingCollection: draggingCollectionID != nil,
+                            onDeleteRequests: { deleteRequestTargets = $0 },
+                            onFolderPrompt: { prompt in
+                                if case .rename(_, let path) = prompt { folderText = path.last ?? "" } else { folderText = "" }
+                                folderPrompt = prompt
                             }
-                        }
-                        .onMove { source, destination in
-                            // Filtreliyken indeksler GÖRÜNEN listeye göre gelir;
-                            // gerçek sıradaki konumlara karşılık gelmez, yanlış
-                            // isteği taşır. `moveDisabled` ile birlikte ikinci hat.
-                            guard !appState.isSearching,
-                                  // Satır indeksleri (örnekler araya giriyor) istek indeksine çevrilir.
-                                  let move = RequestTreeRows.requestMove(source: source, destination: destination, in: rows)
-                            else { return }
-                            appState.moveRequests(in: collection.id, from: move.source, to: move.destination)
-                        }
+                        )
                         // Filtreliyken gizlenir: arama sonucunun arasında duran
                         // "Yeni İstek" satırları sonucu okunmaz hale getiriyor.
-                        if !appState.isSearching {
-                            Button {
-                                appState.addRequest(to: collection.id)
-                            } label: {
-                                Label(L10n.t("menu.newRequest"), systemImage: "plus")
-                                    .font(.secondaryText)
-                                    .rowHitTarget(minHeight: 20)
+                        if appState.teamLoadingIDs.contains(collection.id) {
+                            HStack(spacing: 6) {
+                                ProgressView().controlSize(.mini)
+                                Text(L10n.t("team.loading")).font(.secondaryText).foregroundStyle(.secondary)
                             }
-                            .buttonStyle(.plain)
-                            .foregroundStyle(.secondary)
-                            .opacity(isDimmed(collection.id) ? 0.35 : 1)
-                            .disabled(draggingCollectionID != nil)
                         }
+                        // "Yeni Request" satırı yok (2026-11-15): her collection'ın
+                        // altında tekrar ediyordu. Başlıkta, üzerine gelince çıkan
+                        // artı ve sağ tık menüsü (`SidebarCollectionHeader`).
                     }
                 } header: {
                     SidebarCollectionHeader(
@@ -201,10 +175,15 @@ struct SidebarView: View {
                             renameText = collection.name
                             renameTargetID = collection.id
                         },
-                        onDelete: { deleteTarget = collection }
+                        isFirstOwn: collection.team == nil && collection.id == firstOwn,
+                        canAddRequest: !appState.isSearching && !readOnly,
+                        onDelete: {
+                            if collection.team != nil { teamDeleteTarget = collection } else { deleteTarget = collection }
+                        }
                     )
                 }
             }
+            if !appState.isSearching, !teamSectionOnTop { TeamSidebarSection() }
         }
         // Yeni oluşturulan istek listede görünür olsun.
         .onChange(of: appState.sidebarRevealID) { _, id in
@@ -241,6 +220,36 @@ struct SidebarView: View {
             searchFocused = true
         }
         .alert(
+            folderPromptTitle,
+            isPresented: Binding(
+                get: { folderPrompt != nil },
+                set: { if !$0 { folderPrompt = nil } }
+            ),
+            presenting: folderPrompt
+        ) { prompt in
+            TextField(L10n.t("folder.name.placeholder"), text: $folderText)
+                .inputLimit(.name)
+            switch prompt {
+            case .new(let collection, let ids):
+                Button(L10n.t("folder.new.confirm")) {
+                    // "A/B" iç içe klasör demektir.
+                    let path = folderText.split(separator: "/").map(String.init)
+                    if !RequestFolders.sanitized(path).isEmpty {
+                        appState.placeRequests(ids, in: collection, folder: path)
+                    }
+                    folderPrompt = nil
+                }
+            case .rename(let collection, let path):
+                Button(L10n.t("collection.rename.confirm")) {
+                    appState.renameFolder(path, to: folderText, in: collection)
+                    folderPrompt = nil
+                }
+            }
+            Button(L10n.t("common.cancel"), role: .cancel) { folderPrompt = nil }
+        } message: { prompt in
+            if case .new = prompt { Text(L10n.t("folder.new.message")) }
+        }
+        .alert(
             L10n.t("collection.rename.title"),
             isPresented: Binding(
                 get: { renameTargetID != nil },
@@ -275,6 +284,23 @@ struct SidebarView: View {
             Text(L10n.plural("collection.delete.message", count: deleteTarget?.totalRequests ?? 0))
         }
         .alert(
+            L10n.t("team.delete.title", teamDeleteTarget?.name ?? ""),
+            isPresented: Binding(
+                get: { teamDeleteTarget != nil },
+                set: { if !$0 { teamDeleteTarget = nil } }
+            )
+        ) {
+            Button(L10n.t("team.delete.confirm"), role: .destructive) {
+                if let target = teamDeleteTarget {
+                    Task { await appState.teamDelete(target.id) }
+                }
+                teamDeleteTarget = nil
+            }
+            Button(L10n.t("common.cancel"), role: .cancel) { teamDeleteTarget = nil }
+        } message: {
+            Text(L10n.t("team.delete.message"))
+        }
+        .alert(
             deleteRequestTitle,
             isPresented: Binding(
                 get: { !deleteRequestTargets.isEmpty },
@@ -289,7 +315,64 @@ struct SidebarView: View {
         } message: {
             Text(L10n.t("common.deletePermanent"))
         }
+        .sheet(isPresented: Bindable(appState).showingTeamLogin) {
+            TeamLoginSheet()
+        }
+        .alert(
+            L10n.t("team.conflict.title"),
+            isPresented: Binding(
+                get: { appState.teamConflictID != nil },
+                set: { if !$0 { appState.teamConflictID = nil } }
+            ),
+            presenting: appState.teamConflictID
+        ) { id in
+            Button(L10n.t("team.conflict.reload"), role: .destructive) {
+                Task { await appState.teamResolveConflictByReloading(id) }
+            }
+            Button(L10n.t("team.conflict.overwrite")) {
+                Task { await appState.teamResolveConflictByOverwriting(id) }
+            }
+            Button(L10n.t("common.cancel"), role: .cancel) { appState.teamConflictID = nil }
+        } message: { _ in
+            Text(L10n.t("team.conflict.message"))
+        }
+        .alert(
+            L10n.t("team.remoteChanged.title"),
+            isPresented: Binding(
+                get: { appState.teamRemoteChangedIDs.first != nil && appState.teamConflictID == nil },
+                set: { _ in }
+            ),
+            presenting: appState.teamRemoteChangedIDs.first
+        ) { id in
+            Button(L10n.t("team.conflict.reload"), role: .destructive) {
+                Task { await appState.teamResolveRemoteChange(id, loadServer: true) }
+            }
+            Button(L10n.t("team.remoteChanged.keep"), role: .cancel) {
+                Task { await appState.teamResolveRemoteChange(id, loadServer: false) }
+            }
+        } message: { id in
+            let info = appState.teamCatalog.entries[id]
+            Text(L10n.t("team.remoteChanged.message", info?.summary.name ?? "", info?.summary.updatedBy ?? "?"))
+        }
         .frame(minWidth: 220)
+    }
+
+    private var folderPromptTitle: String {
+        if case .rename = folderPrompt { return L10n.t("folder.rename.title") }
+        return L10n.t("folder.new.title")
+    }
+
+    /// Kurum bölümü üstte mi: oturum açıkken, önbellekten kurum collection'ı
+    /// gösterilirken ya da okunacak bir bildirim varken.
+    private var teamSectionOnTop: Bool {
+        appState.teamIdentity != nil || !appState.teamCatalog.entries.isEmpty || appState.teamNotice != nil
+    }
+
+    /// Kurum collection'ları varken kendi collection'larının ilki "Collection'larım"
+    /// başlığını taşır. Liste kurum collection'larıyla başladığı için ilk eşleşme.
+    private func firstOwnID(in collections: [SidebarSnapshot.Collection]) -> UUID? {
+        guard collections.first?.team != nil else { return nil }
+        return collections.first(where: { $0.team == nil })?.id
     }
 
     /// Silme onayının başlığı: tek istekte adı, çoklu seçimde sayısı.

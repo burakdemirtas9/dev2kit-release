@@ -63,8 +63,10 @@ struct KeyValueEditor: View {
                 Label {
                     Text(isBulk ? L10n.t("kv.validateFormat") : L10n.t("kv.validate"))
                 } icon: {
-                    Image(systemName: isBulk ? "wand.and.stars" : "checkmark.circle")
-                        .foregroundStyle(Theme.up)
+                    // Yeşil onay simgesi "zaten geçerli" durumu gibi okunuyordu;
+                    // bu bir eylem: satırları denetler, sonucu altta yazar.
+                    Image(systemName: isBulk ? "wand.and.stars" : "checklist")
+                        .foregroundStyle(.secondary)
                 }
                 .font(.secondaryText)
             }

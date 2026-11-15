@@ -241,28 +241,21 @@ final class ResponseExamplesTests: XCTestCase {
         XCTAssertEqual(RequestTreeRows.exampleOwners(in: [a, b])[a.examples[1].id], a.id)
     }
 
-    func testMoveIndicesAreTranslatedToRequestIndices() throws {
+    /// Sürükle-bırak görünen satır indeksleri verir; örnek satırları araya
+    /// girdiği için yerleşim kimlikle kurulur (`RequestTreeRows.placement`).
+    func testMoveRowsAreTranslatedToPlacement() throws {
         let a = RequestModel(name: "a", examples: [example("a1"), example("a2")])
         let b = RequestModel(name: "b")
         let c = RequestModel(name: "c", examples: [example("c1")])
         let rows = RequestTreeRows.rows(for: [a, b, c], expanded: [a.id, c.id])   // a a1 a2 b c c1
-
-        // b (satır 3) en başa.
-        var move = try XCTUnwrap(RequestTreeRows.requestMove(source: [3], destination: 0, in: rows))
-        XCTAssertEqual(move.source, [1]); XCTAssertEqual(move.destination, 0)
-        var requests = [a, b, c]
-        requests.applyListMove(fromOffsets: move.source, toOffset: move.destination)
-        XCTAssertEqual(requests.map(\.name), ["b", "a", "c"])
-
-        // a (satır 0) en sona.
-        move = try XCTUnwrap(RequestTreeRows.requestMove(source: [0], destination: rows.count, in: rows))
-        XCTAssertEqual(move.source, [0]); XCTAssertEqual(move.destination, 3)
-
-        // Hedef a'nın örnekleri arasında: b, a'nın ardına (yerinde kalır).
-        move = try XCTUnwrap(RequestTreeRows.requestMove(source: [3], destination: 2, in: rows))
-        XCTAssertEqual(move.destination, 1)
-
-        XCTAssertNil(RequestTreeRows.requestMove(source: [1], destination: 0, in: rows), "örnek satırı taşınmaz")
+        func moved(_ source: IndexSet, _ destination: Int) throws -> [String] {
+            let placement = try XCTUnwrap(RequestTreeRows.placement(source: source, destination: destination, in: rows, folderOf: { _ in [] }))
+            return RequestFolders.placing(placement.ids, in: placement.folder, before: placement.before, requests: [a, b, c]).map(\.name)
+        }
+        XCTAssertEqual(try moved([3], 0), ["b", "a", "c"], "b en başa")
+        XCTAssertEqual(try moved([0], rows.count), ["b", "c", "a"], "a en sona")
+        XCTAssertEqual(try moved([3], 2), ["a", "b", "c"], "hedef a'nın örnekleri arasında: b, a'nın ardında kalır")
+        XCTAssertNil(RequestTreeRows.placement(source: [1], destination: 0, in: rows, folderOf: { _ in [] }), "örnek satırı taşınmaz")
     }
 
     /// Örnekler varsayılan olarak katlı: listede yalnızca istek satırları.
@@ -281,11 +274,10 @@ final class ResponseExamplesTests: XCTestCase {
         let rows = RequestTreeRows.rows(for: [a, b, c], expanded: [b.id])   // a b b1 b2 c
 
         // c (satır 4) a'nın ardına.
-        let move = try XCTUnwrap(RequestTreeRows.requestMove(source: [4], destination: 1, in: rows))
-        var requests = [a, b, c]
-        requests.applyListMove(fromOffsets: move.source, toOffset: move.destination)
+        let placement = try XCTUnwrap(RequestTreeRows.placement(source: [4], destination: 1, in: rows, folderOf: { _ in [] }))
+        let requests = RequestFolders.placing(placement.ids, in: placement.folder, before: placement.before, requests: [a, b, c])
         XCTAssertEqual(requests.map(\.name), ["a", "c", "b"])
-        XCTAssertNil(RequestTreeRows.requestMove(source: [2], destination: 0, in: rows), "örnek satırı taşınmaz")
+        XCTAssertNil(RequestTreeRows.placement(source: [2], destination: 0, in: rows, folderOf: { _ in [] }), "örnek satırı taşınmaz")
     }
 
     // MARK: - Diskte kalıcılık

@@ -18,7 +18,10 @@ public enum PostmanExporter {
 
     public static func export(_ collection: CollectionModel) throws -> Output {
         var notes = Notes()
-        let items: [[String: Any]] = collection.requests.map { request in
+        // Klasörler Postman klasörü (`item` içinde `item`) olarak yazılır.
+        // İstekler gösterim sırasında: aynı klasörün istekleri art arda gelir.
+        let tree = FolderItems()
+        for request in RequestFolders.canonical(collection.requests) {
             var item: [String: Any] = [
                 "name": request.name,
                 "request": requestObject(
@@ -30,8 +33,9 @@ public enum PostmanExporter {
             let responses = request.examples.map { example(request: request, $0, notes: &notes) }
             item["response"] = responses
             if request.options != .default { notes.add(.options, request.name) }
-            return item
+            tree.add(item, at: request.folder)
         }
+        let items = tree.items
         let root: [String: Any] = [
             "info": [
                 "_postman_id": collection.id.uuidString.lowercased(),
@@ -190,6 +194,35 @@ public enum PostmanExporter {
                 case .options: return L10n.t("postmanExport.options", shown + more)
                 }
             }
+        }
+    }
+}
+
+/// Postman `item` ağacı: bir düzeyin istekleri, ardından alt klasörleri
+/// (`RequestFolders.canonical` ile aynı sıra).
+private final class FolderItems {
+    private var requests: [[String: Any]] = []
+    private var order: [String] = []
+    private var children: [String: FolderItems] = [:]
+
+    func add(_ item: [String: Any], at path: [String]) {
+        var node = self
+        for name in path {
+            if let child = node.children[name] {
+                node = child
+            } else {
+                let child = FolderItems()
+                node.children[name] = child
+                node.order.append(name)
+                node = child
+            }
+        }
+        node.requests.append(item)
+    }
+
+    var items: [[String: Any]] {
+        requests + order.compactMap { name in
+            children[name].map { ["name": name, "item": $0.items] }
         }
     }
 }
