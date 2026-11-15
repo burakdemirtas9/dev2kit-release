@@ -21,9 +21,6 @@ struct KeyValueEditor: View {
     @State private var isBulk = false
     @State private var bulkText = ""
     @State private var message: Message?
-    /// Toplu moda girerken yapılan ilk `bulkText` atamasının entries'i
-    /// gereksizce yeniden yazmasını engeller.
-    @State private var suppressCommit = false
 
     private struct Message: Identifiable {
         let id = UUID()
@@ -81,11 +78,19 @@ struct KeyValueEditor: View {
         .onChange(of: isBulk) { _, nowBulk in
             message = nil
             if nowBulk {
-                suppressCommit = true
                 bulkText = KeyValueBulkCoder.encode(entries)
-            } else {
+            } else if !KeyValueBulkCoder.represents(bulkText, entries) {
                 entries = KeyValueBulkCoder.decode(bulkText)
             }
+        }
+        // Satırlar dışarıdan değişti (başka isteğe/sekmeye geçiş, geri alma,
+        // adres eşitlemesi): toplu metin eskisini göstermeye devam ederse bir
+        // sonraki tuş ya da mod değişimi ESKİ isteğin satırlarını yenisine
+        // yazardı. Metin yeni satırlardan yeniden kurulur; mod korunur.
+        .onChange(of: entries) {
+            guard isBulk, !KeyValueBulkCoder.represents(bulkText, entries) else { return }
+            bulkText = KeyValueBulkCoder.encode(entries)
+            message = nil
         }
     }
 
@@ -112,10 +117,9 @@ struct KeyValueEditor: View {
                 }
             }
             .onChange(of: bulkText) {
-                guard !suppressCommit else {
-                    suppressCommit = false
-                    return
-                }
+                // Metin satırları zaten anlatıyorsa (moda giriş, dışarıdan
+                // yenileme, yalnızca boşluk yazımı) geri yazılmaz.
+                guard !KeyValueBulkCoder.represents(bulkText, entries) else { return }
                 // Canlı yazım: geçerli satırlar anında alanlara yansır,
                 // yarım kalan satırlar sessizce atlanır.
                 entries = KeyValueBulkCoder.decode(bulkText)
@@ -299,7 +303,6 @@ struct KeyValueEditor: View {
         if isBulk {
             do {
                 let formatted = try KeyValueBulkCoder.beautify(bulkText)
-                suppressCommit = true
                 bulkText = formatted
                 entries = KeyValueBulkCoder.decode(formatted)
                 let issues = KeyValueBulkCoder.validate(entries: entries)

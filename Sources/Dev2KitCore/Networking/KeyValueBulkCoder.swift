@@ -44,6 +44,17 @@ public enum KeyValueBulkCoder {
         }
     }
 
+    /// Metin bu satırları mı anlatıyor? Kimlikler ve boş satırlar sayılmaz;
+    /// yarım satır ve fazladan boşluk farkı da fark değildir. Toplu editör bunu
+    /// iki yönde kullanır: yazılan metin satırları değiştirmediyse geri yazmaz,
+    /// satırlar dışarıdan değiştiyse (başka isteğe geçiş, geri alma) metni yeniler.
+    public static func represents(_ text: String, _ entries: [KeyValueEntry]) -> Bool {
+        func content(_ list: [KeyValueEntry]) -> [[String]] {
+            list.map { [$0.key, $0.value, $0.enabled ? "1" : "0"] }
+        }
+        return content(decode(text)) == content(decode(encode(entries)))
+    }
+
     /// Toplu metni denetler: `:` içermeyen satırlar ve boş anahtarlar sorun sayılır.
     public static func validate(_ text: String) -> [Issue] {
         var issues: [Issue] = []

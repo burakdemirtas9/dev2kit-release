@@ -280,7 +280,10 @@ struct RequestDetailView: View {
                     }
                 )
             case .body:
+                // İsteğe özel görünüm durumu (tip başına taslaklar, arama, hata):
+                // kimlik olmazsa önceki isteğin taslağı bu isteğe geri yüklenirdi.
                 BodyEditor(body: $request.body)
+                    .id(request.id)
             case .auth:
                 AuthEditor(auth: $request.auth)
             case .params:

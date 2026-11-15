@@ -93,4 +93,28 @@ final class KeyValueBulkCoderTests: XCTestCase {
     func testEntryValidationIgnoresFullyEmptyRow() {
         XCTAssertTrue(KeyValueBulkCoder.validate(entries: [KeyValueEntry()]).isEmpty)
     }
+
+    func testRepresentsIgnoresIdentityBlankRowsAndSpacing() {
+        let entries = [
+            KeyValueEntry(key: "Accept", value: "application/json"),
+            KeyValueEntry(key: "X-Old", value: "1", enabled: false),
+            KeyValueEntry(),
+        ]
+        XCTAssertTrue(KeyValueBulkCoder.represents("Accept: application/json\n//X-Old: 1", entries))
+        XCTAssertTrue(KeyValueBulkCoder.represents("Accept:application/json  \n\n//X-Old: 1\nyarım", entries))
+        XCTAssertTrue(KeyValueBulkCoder.represents("", []))
+        XCTAssertTrue(KeyValueBulkCoder.represents("", [KeyValueEntry()]))
+    }
+
+    /// Başka isteğe geçince toplu metin eski isteği anlatıyorsa yenilenmeli.
+    func testRepresentsDetectsOtherRequestsEntries() {
+        let x = [KeyValueEntry(key: "X-Request", value: "x")]
+        let y = [KeyValueEntry(key: "X-Request", value: "y")]
+        let text = KeyValueBulkCoder.encode(x)
+        XCTAssertTrue(KeyValueBulkCoder.represents(text, x))
+        XCTAssertFalse(KeyValueBulkCoder.represents(text, y))
+        XCTAssertFalse(KeyValueBulkCoder.represents(text, []))
+        XCTAssertFalse(KeyValueBulkCoder.represents("//X-Request: x", x))
+        XCTAssertFalse(KeyValueBulkCoder.represents(text, x + [KeyValueEntry(key: "A", value: "b")]))
+    }
 }
