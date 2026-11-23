@@ -12,7 +12,7 @@ public enum Dev2KitIdentity {
     /// Sürüm (kullanıcı tanımı, 2026-10-19): ilk büyük iş v1 → "1", v2 → "2",
     /// v2 içindeki konum → "0". Arada elle güncellenir; `.app`'in sürümü de
     /// buradan okunur (scripts/make-app.sh).
-    public static let version = "1.2"
+    public static let version = "1.3"
     /// Derleme numarası (`CFBundleVersion`). Elle, sürümle birlikte artırılır:
     /// eskiden commit sayısından türetiliyordu; tek commit'lik release
     /// deposunda "1" çıkardı (2026-10-25, release 1.2 (177)).
@@ -33,7 +33,12 @@ public enum Dev2KitIdentity {
     /// kodlaması, başka kaynağa 307/308 gövdesi, geçmişte maskeleme, OAuth
     /// alıcısı, XML varlık genişlemesi, Keychain geçişinde çakışma) ve büyük
     /// yanıtta/içe aktarmada ana iş parçacığının donmaması.
-    public static let build = "183"
+    /// 201 (1.3): Mocker (yerel mock HTTP sunucusu, DNS rebinding ve bellek
+    /// korumalı), kurum collection'ları (AD girişi, klasörler, sürümlü
+    /// kaydetme, yerel örnekler, sürükleyerek kopyalama, tümünü kaydetme).
+    /// Numara 184 yerine 201: 1.3 ile yeni seri, yine de 183'ten büyük
+    /// (pkg Installer'ı kurulu daha yüksek derlemenin üzerine yazmayabilir).
+    public static let build = "201"
     /// `CFBundleIdentifier` (scripts/make-app.sh buradan okur). Keychain
     /// kayıtları ve ayarlar (UserDefaults) buna bağlı; değiştirmek taşıma
     /// gerektirir. 2026-10-25'e kadar `com.dev2kit.app` (alan adı bizim

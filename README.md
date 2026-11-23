@@ -2,7 +2,7 @@
 
 macOS için yerel çalışan, güvenlik öncelikli API istemcisi ve geliştirici araç kutusu.
 
-**Sürüm:** 1.2 (183) · **Platform:** macOS 14+ · **Dil:** Swift / SwiftUI · **Harici bağımlılık:** yok
+**Sürüm:** 1.3 (201) · **Platform:** macOS 14+ · **Dil:** Swift / SwiftUI · **Harici bağımlılık:** yok
 
 ---
 
