@@ -53,6 +53,7 @@ extension L10nTable {
         "team.banner.dirty": L10nEntry("Kaydedilmemiş değişiklik var.", "There are unsaved changes."),
         "team.save": L10nEntry("Sunucuya kaydet", "Save to server"),
         "team.save.help": L10nEntry("Değişiklikleri kurum collection'ına kaydet (yanıt örnekleri gönderilmez, bu Mac'te kalır)", "Save changes to the organization collection (response examples aren't sent; they stay on this Mac)"),
+        "team.saveAll.help": L10nEntry("Kaydedilmemiş değişiklikleri sunucuya kaydet (%1$@ collection; yanıt örnekleri gönderilmez)", "Save unsaved changes to the server (%1$@ collections; response examples aren't sent)"),
         "team.copyToMine": L10nEntry("Kendi collection'larıma kopyala", "Copy to my collections"),
         "team.copyToMine.help": L10nEntry("Düzenleyebileceğin yerel bir kopya oluştur", "Create a local copy you can edit"),
         "team.copySuffix": L10nEntry("kopya", "copy"),

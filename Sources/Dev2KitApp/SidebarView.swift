@@ -158,6 +158,7 @@ struct SidebarView: View {
                                 ProgressView().controlSize(.mini)
                                 Text(L10n.t("team.loading")).font(.secondaryText).foregroundStyle(.secondary)
                             }
+                            .teamRegionBackground()
                         }
                         // "Yeni Request" satırı yok (2026-11-15): her collection'ın
                         // altında tekrar ediyordu. Başlıkta, üzerine gelince çıkan
@@ -181,6 +182,9 @@ struct SidebarView: View {
                             if collection.team != nil { teamDeleteTarget = collection } else { deleteTarget = collection }
                         }
                     )
+                    // Kurum collection'ları mor bölgede: kendi collection'larından
+                    // ayırt edilsin (kullanıcı isteği, 2026-11-16).
+                    .teamRegionBackground(collection.team != nil)
                 }
             }
             if !appState.isSearching, !teamSectionOnTop { TeamSidebarSection() }

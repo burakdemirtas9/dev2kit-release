@@ -59,6 +59,8 @@ final class AppState {
     }
     var teamCanCreate = false
     var teamIsRefreshing = false
+    /// "Tümünü sunucuya kaydet" sürüyor (çift basış iki kez göndermesin).
+    var teamIsSavingAll = false
     /// İçeriği çekilen kurum collection'ları.
     var teamLoadingIDs: Set<UUID> = []
     /// Kullanıcıya kısa not (salt okunur koruması, hata).
@@ -72,6 +74,12 @@ final class AppState {
     var teamLoginRetryAt: Date?
     var showingTeamLogin = false
     @ObservationIgnored var isApplyingTeam = false
+    /// Kenar çubuğunda sürüklenen istekler; satır sürüklemeye başlarken
+    /// yazılır, collection başlığına bırakınca okunur. Bırakılan yükten
+    /// okumak (`InternalDrag.loadID`) liste satırı sürüklemesinde boş dönüyor
+    /// ve bırakmayı ~0,3 sn bekletiyordu (ölçüldü, 2026-11-16). Görünüm
+    /// çizimini etkilemez: gözlenmez.
+    @ObservationIgnored var draggedRequestIDs: Set<UUID> = []
     /// Kaydedilmemiş kurum düzenlemesi önbelleğe henüz yazılmadı; workspace
     /// kaydıyla aynı tempoda yazılır (`writeWorkspace`).
     @ObservationIgnored var teamCacheNeedsSave = false

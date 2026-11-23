@@ -78,6 +78,10 @@ enum Theme {
     static let down = Color(nsColor: NSColor(hex: "#e23737"))
     static let warning = Color(nsColor: dynamicColor(light: "#e3bd49", dark: "#ffd300"))
     static let purple = Color(nsColor: dynamicColor(light: "#5d3ebc", dark: "#aa9cd5"))
+    /// Kenar çubuğunda kurum bölgesinin zemini (2026-11-16): marka moru,
+    /// yarı saydam; kenar çubuğunun camı altından görünmeye devam eder.
+    /// `teamRegionBackground` ile verilir.
+    static let teamRegion = purple.opacity(0.16)
     static let muted = Color(nsColor: dynamicColor(light: "#606a7c", dark: "#aa9cd5"))
     static let editorBackground = Color(nsColor: editorBackgroundNS)
     /// Yalnızca HTTP metodu renkleri (Postman dağılımı, 2026-10-19): paletin
@@ -231,4 +235,24 @@ struct SidebarMaterial: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: NSVisualEffectView, context: Context) {}
+}
+
+extension View {
+    /// Kurum bölgesi zemini (`Theme.teamRegion`), satırı kenardan kenara
+    /// kaplar. `listRowBackground` değil: kenar çubuğu listesi onu neredeyse
+    /// göstermiyor, bölüm başlıklarına hiç uygulamıyor (ölçüldü, 2026-11-16).
+    /// Taşma payı satırın girintisini ve satır arasını örter; liste hücresi
+    /// kendi sınırına kırpar. `leading`: hücresi kenardan başlayan bölüm
+    /// başlığında soldaki taşma, zemin satırlarla aynı hizada başlasın diye.
+    @ViewBuilder
+    func teamRegionBackground(_ isOn: Bool = true, leading: CGFloat = 40) -> some View {
+        if isOn {
+            background {
+                Theme.teamRegion
+                    .padding(.leading, -leading).padding(.trailing, -40).padding(.vertical, -4)
+            }
+        } else {
+            self
+        }
+    }
 }

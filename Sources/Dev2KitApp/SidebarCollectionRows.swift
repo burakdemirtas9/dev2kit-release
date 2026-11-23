@@ -78,7 +78,17 @@ struct SidebarCollectionRows: View {
                 .moveDisabled(appState.isSearching || readOnly)
                 // Token Factory paneline bırakılınca kopyalanabilsin diye satır
                 // kimliğini taşır; liste içi sıralama (`onMove`) bundan etkilenmez.
-                .itemProvider { InternalDrag.provider(for: request.id) }
+                // Sürüklenenler (seçimdeyse tüm seçim) başlığa bırakma için
+                // AppState'e de yazılır (`draggedRequestIDs`).
+                .teamRegionBackground(collection.team != nil)
+                .itemProvider {
+                    let id = request.id
+                    MainActor.assumeIsolated {
+                        appState.draggedRequestIDs = MultiSelection.targets(
+                            forContextMenuOn: id, selection: appState.selectedRequestIDs)
+                    }
+                    return InternalDrag.provider(for: id)
+                }
             }
         case .example(let requestID, let exampleID):
             if let owner = requestsByID[requestID], let example = owner.examples.first(where: { $0.id == exampleID }) {
@@ -88,6 +98,7 @@ struct SidebarCollectionRows: View {
                 )
                 .padding(.leading, CGFloat(owner.folder.count) * Self.indent)
                 .tag(exampleID)
+                .teamRegionBackground(collection.team != nil)
                 // Örnek isteğinden ayrılmaz; sürüklenmez.
                 .moveDisabled(true)
             }
@@ -100,6 +111,7 @@ struct SidebarCollectionRows: View {
             )
             .padding(.leading, CGFloat(path.count - 1) * Self.indent)
             .tag(id)
+            .teamRegionBackground(collection.team != nil)
             // Klasör satırı seçilmez ve sürüklenmez; yalnızca açar/katlar.
             .selectionDisabled(true)
             .moveDisabled(true)

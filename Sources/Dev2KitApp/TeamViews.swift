@@ -13,14 +13,24 @@ struct TeamSidebarSection: View {
 
     var body: some View {
         Section {
+            // Kurum bölümü mor (`Theme.teamRegion`), altındaki kurum
+            // collection'larıyla aynı bölge (2026-11-16).
             status
+                .teamRegionBackground()
             if let notice = appState.teamNotice {
                 HStack(alignment: .top, spacing: 4) {
                     Image(systemName: "info.circle").foregroundStyle(.secondary)
+                    // Kenar çubuğu listesi satır metnini tek satıra kesiyor;
+                    // bildirim (ör. düz metin kimlik bilgisi uyarısı) ne
+                    // yapılacağını sonda söylüyor, tamamı görünmeli (2026-11-16).
                     Text(notice)
                         .font(.secondaryText)
                         .foregroundStyle(.secondary)
+                        .lineLimit(nil)
+                        .multilineTextAlignment(.leading)
                         .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
+                        .help(notice)
                     Spacer(minLength: 0)
                     Button {
                         appState.teamNotice = nil
@@ -31,15 +41,32 @@ struct TeamSidebarSection: View {
                     .foregroundStyle(.tertiary)
                     .accessibilityLabel(L10n.t("team.notice.dismiss"))
                 }
+                .teamRegionBackground()
             }
         } header: {
             HStack(spacing: 4) {
                 Text(L10n.t("team.section").uppercased())
                     .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
                     .tracking(0.8)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(Theme.purple)
                 Spacer(minLength: 0)
                 if appState.teamIdentity != nil {
+                    // Kaydedilmemiş değişiklik varken: tek tıkla hepsini kaydet
+                    // (kullanıcı isteği, 2026-11-16; önceden collection başına
+                    // sağ tık ya da sekme bandı gerekiyordu).
+                    let savable = appState.teamCatalog.savableIDs(in: appState.workspace.collections.map(\.id))
+                    if !savable.isEmpty {
+                        Button {
+                            Task { await appState.teamSaveAll() }
+                        } label: {
+                            Image(systemName: "icloud.and.arrow.up").iconHitTarget()
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(Theme.accent)
+                        .disabled(appState.teamIsSavingAll)
+                        .help(L10n.t("team.saveAll.help", String(savable.count)))
+                        .accessibilityLabel(L10n.t("team.save"))
+                    }
                     if appState.teamCanCreate {
                         Button {
                             newName = ""
@@ -65,6 +92,7 @@ struct TeamSidebarSection: View {
                     .accessibilityLabel(L10n.t("team.refresh"))
                 }
             }
+            .teamRegionBackground(leading: 4)
         }
         .task { await appState.teamStart() }
         .alert(L10n.t("team.new.title"), isPresented: $creating) {

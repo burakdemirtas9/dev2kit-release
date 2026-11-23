@@ -2,7 +2,7 @@ import SwiftUI
 import Dev2KitCore
 
 /// Kenar çubuğundaki koleksiyon başlığı: daralt/genişlet, sürükleyerek
-/// sıralama, sağ tık menüsü.
+/// sıralama, üzerine bırakılan istekleri taşıma, sağ tık menüsü.
 ///
 /// Daralt/genişlet hedefi başlığın TAMAMI ve bir `Button`: List section
 /// header'ında düz `.onTapGesture` tıklama almıyor (NSTableView olayı
@@ -29,6 +29,8 @@ struct SidebarCollectionHeader: View {
     var canAddRequest: Bool = false
     let onDelete: () -> Void
     @State private var isHovered = false
+    /// Üzerinde kabul edilebilecek istekler sürükleniyor.
+    @State private var isRequestDropTarget = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -72,7 +74,7 @@ struct SidebarCollectionHeader: View {
                     // Kurum collection'ı: sürüklenmez; kilit = salt okunur, kalem = düzenlenebilir.
                     Image(systemName: team.canEdit ? "pencil" : "lock")
                         .font(.tinyText)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.purple)
                     Text(collection.displayName)
                     Text(team.ownerGroup)
                         .font(.tinyMono)
@@ -111,6 +113,14 @@ struct SidebarCollectionHeader: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .background {
+            if isRequestDropTarget {
+                RoundedRectangle(cornerRadius: 5)
+                    .fill(Theme.accent.opacity(0.12))
+                    .strokeBorder(Theme.accent, lineWidth: 1.5)
+                    .padding(.horizontal, -4)
+            }
+        }
         // Aramada gösterim zorla açık olduğu için daraltma yanıltıcı
         // olurdu: basınca hiçbir şey değişmiyormuş gibi görünür.
         .disabled(appState.isSearching)
@@ -149,7 +159,9 @@ struct SidebarCollectionHeader: View {
             of: [InternalDrag.type],
             delegate: CollectionReorderDelegate(
                 target: collection.id,
+                acceptsRequests: collection.acceptsRequestDrop,
                 dragging: $draggingCollectionID,
+                isRequestTarget: $isRequestDropTarget,
                 appState: appState
             )
         )
@@ -244,23 +256,49 @@ struct SidebarCollectionHeader: View {
 /// başlığın üzerine gelince yer değiştirir, bırakınca konum sabitlenir.
 /// Drop hedefi yalnızca başlıklar olduğu için bir koleksiyon başka bir
 /// koleksiyonun İÇİNE bırakılamaz.
+/// Başlığa bırakma: sürüklenen bir collection'sa sıralama (hover sırasında
+/// canlı), istek(ler)se bu collection'a taşıma ya da kurum collection'ına
+/// kopyalama (`AppState.dropRequests`, 2026-11-16). İstek sürüklemesi
+/// `dragging`'i set etmez; ayrım buradan yapılır. Kabul etmeyen başlık
+/// (salt okunur kurum collection'ı, Token Factory) yasak imleci gösterir.
 struct CollectionReorderDelegate: DropDelegate {
     let target: UUID
+    let acceptsRequests: Bool
     @Binding var dragging: UUID?
+    @Binding var isRequestTarget: Bool
     let appState: AppState
 
+    private var isDraggingRequests: Bool { dragging == nil }
+
     func dropEntered(info: DropInfo) {
+        if isDraggingRequests {
+            isRequestTarget = acceptsRequests
+            return
+        }
         // Kurum collection'ları sunucu sırasıyla en üstte; araya girilmez.
         guard let dragging, dragging != target, !appState.isTeamCollection(target) else { return }
         appState.moveCollection(dragging, before: target)
     }
 
+    func dropExited(info: DropInfo) {
+        isRequestTarget = false
+    }
+
     func dropUpdated(info: DropInfo) -> DropProposal? {
-        DropProposal(operation: .move)
+        DropProposal(operation: isDraggingRequests && !acceptsRequests ? .forbidden : .move)
     }
 
     func performDrop(info: DropInfo) -> Bool {
+        let wasReordering = !isDraggingRequests
         dragging = nil
+        isRequestTarget = false
+        guard !wasReordering else { return true }
+        // Kimlikler sürükleme başlarken yazıldı (`draggedRequestIDs`): yükten
+        // okumak liste satırında boş dönüyor ve bekletiyordu.
+        let ids = appState.draggedRequestIDs
+        appState.draggedRequestIDs = []
+        guard acceptsRequests, !ids.isEmpty else { return false }
+        appState.dropRequests(ids, on: target)
         return true
     }
 }

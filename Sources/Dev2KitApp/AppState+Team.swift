@@ -320,6 +320,20 @@ extension AppState {
         }
     }
 
+    /// Kurum bölümünün başlığındaki "Sunucuya kaydet": kaydedilmemiş tüm
+    /// düzenlenebilen collection'ları sırayla kaydeder (`TeamCatalog.savableIDs`).
+    /// İlk çakışma ya da hatada durur: çakışma kutusu tek collection için, hata
+    /// bildirimi de o collection'ı anlatır; kalanlar kaydedilmedi olarak kalır.
+    func teamSaveAll() async {
+        guard !teamIsSavingAll else { return }
+        teamIsSavingAll = true
+        defer { teamIsSavingAll = false }
+        for id in teamCatalog.savableIDs(in: workspace.collections.map(\.id)) {
+            await teamSave(id)
+            if teamConflictID != nil || teamCatalog.entries[id]?.isDirty == true { break }
+        }
+    }
+
     /// Çakışma: sunucudaki hali yükle (yerel değişiklik gider).
     func teamResolveConflictByReloading(_ id: UUID) async {
         teamConflictID = nil

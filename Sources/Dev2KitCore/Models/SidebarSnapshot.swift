@@ -52,6 +52,15 @@ public struct SidebarSnapshot: Equatable, Sendable {
 
         public var isRegular: Bool { !isUngrouped && !isTokenFactory }
 
+        /// Başlığına sürüklenen istek bırakılabilir mi (taşınır ya da
+        /// kopyalanır: `TeamCatalog.dropCopies`).
+        /// Token Factory taşımayla girilmez (`AppState.moveRequests`); kurum
+        /// collection'ı yalnızca düzenlenebiliyorsa (yetki, içerik çekilmiş,
+        /// eksiksiz) kabul eder, yoksa taşıma geri alınırdı (`TeamSync.enforce`).
+        public var acceptsRequestDrop: Bool {
+            !isTokenFactory && (team?.canEdit ?? true)
+        }
+
         /// `CollectionModel.displayName` ile aynı; dil anında değişebildiği
         /// için özete yazılmaz, okunurken çevrilir.
         public var displayName: String {

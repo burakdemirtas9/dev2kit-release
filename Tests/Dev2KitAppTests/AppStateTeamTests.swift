@@ -213,4 +213,62 @@ final class AppStateTeamTests: XCTestCase {
         state.workspace.collections[index].requests[0].url = "https://changed.example.com"
         XCTAssertEqual(state.workspace.collections[index].requests[0].url, "https://changed.example.com")
     }
+
+    // MARK: Sürükle-bırak ile kurum collection'ına taşıma (2026-11-15)
+
+    /// Kurum collection'ına bırakılan KOPYALANIR; yerel asıl yerinde kalır.
+    func testDroppingALocalRequestOnAnEditableTeamCollectionCopiesIt() throws {
+        let local = harness.addRequest(named: "Yerel istek")
+        let team = installTeam(canUpdate: true)
+        let source = try XCTUnwrap(state.workspace.collections.first { $0.requests.contains { $0.id == local.id } })
+        state.collapsedCollectionIDs.insert(team.id)
+
+        state.dropRequests([local.id], on: team.id)
+
+        let target = try XCTUnwrap(state.workspace.collections.first { $0.id == team.id })
+        XCTAssertEqual(target.requests.map(\.name), ["Ödeme", "Yerel istek"], "hedefin sonuna eklenir")
+        let copy = try XCTUnwrap(target.requests.last)
+        XCTAssertNotEqual(copy.id, local.id, "kopya yeni kimlikle")
+        XCTAssertEqual(copy.url, local.url)
+        XCTAssertEqual(state.workspace.collections.first { $0.id == source.id }?.requests.contains { $0.id == local.id }, true,
+                       "yerel asıl yerinde kalır")
+        XCTAssertEqual(state.teamCatalog.entries[team.id]?.isDirty, true, "sunucuya kaydedilene kadar kaydedilmedi")
+        XCTAssertFalse(state.collapsedCollectionIDs.contains(team.id), "hedef açılır")
+        XCTAssertEqual(state.selectedRequestID, copy.id, "kopya seçili")
+    }
+
+    func testDroppingOnAReadOnlyOrUnloadedTeamCollectionDoesNothing() throws {
+        for loaded in [true, false] {
+            harness.tearDown()
+            harness = AppStateHarness()
+            let local = harness.addRequest(named: "Yerel istek")
+            let team = installTeam(canUpdate: !loaded, loaded: loaded)
+            let before = state.workspace.collections
+
+            state.dropRequests([local.id], on: team.id)
+
+            XCTAssertEqual(state.workspace.collections, before)
+            XCTAssertNil(state.teamNotice, "bırakma reddedildi; geri alma bildirimi gerekmez")
+        }
+    }
+
+    func testDroppingOnAnotherLocalCollectionMovesIt() throws {
+        let local = harness.addRequest(named: "Yerel istek")
+        state.addCollection()
+        let other = try XCTUnwrap(state.workspace.collections.last)
+
+        state.dropRequests([local.id], on: other.id)
+
+        let moved = try XCTUnwrap(state.workspace.collections.last?.requests.first)
+        XCTAssertEqual(moved.id, local.id)
+        XCTAssertEqual(state.workspace.collections.flatMap(\.requests).filter { $0.id == local.id }.count, 1, "kopya değil taşıma")
+    }
+
+    func testDroppingOnTheSameCollectionIsANoOp() throws {
+        let local = harness.addRequest(named: "Yerel istek")
+        let source = try XCTUnwrap(state.workspace.collections.first { $0.requests.contains { $0.id == local.id } })
+        let before = state.workspace.collections
+        state.dropRequests([local.id], on: source.id)
+        XCTAssertEqual(state.workspace.collections, before, "aynı yere bırakmak adı değiştirmez")
+    }
 }

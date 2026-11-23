@@ -246,6 +246,55 @@ extension AppState {
         persist()
     }
 
+    /// Kenar çubuğunda bir collection başlığına bırakılan istekler: kurala
+    /// göre (`TeamCatalog.dropCopies`) kopyalanır ya da taşınır, hedef açılır.
+    /// Kabul kuralı `SidebarSnapshot.Collection.acceptsRequestDrop` ile aynı;
+    /// bırakma anında modelden yeniden denetlenir (sürükleme sürerken yetki
+    /// değişmiş olabilir). Kurum collection'ına giren istek orada
+    /// "kaydedilmedi" olur, sunucuya açık "Sunucuya kaydet" ile gider.
+    func dropRequests(_ ids: Set<UUID>, on collectionID: UUID) {
+        guard let target = workspace.collections.first(where: { $0.id == collectionID }),
+              !target.isTokenFactory, teamCatalog.canEdit(collectionID) else { return }
+        let dropping = ids.subtracting(target.requests.map(\.id))
+        guard !dropping.isEmpty else { return }
+        let sources = workspace.collections
+            .filter { collection in collection.requests.contains { dropping.contains($0.id) } }
+            .map(\.id)
+        collapsedCollectionIDs.remove(collectionID)
+        if teamCatalog.dropCopies(from: sources, to: collectionID) {
+            copyRequests(dropping, toCollection: collectionID)
+        } else {
+            moveRequests(dropping, toCollection: collectionID)
+        }
+    }
+
+    /// İsteklerin kopyaları hedefin sonuna; asılları yerinde kalır. Örnekler
+    /// kendi kimlikleriyle kopyalanır (`duplicateRequest` gibi), klasör köke
+    /// gelir (`moveRequests` gibi). Kopyalar seçili olur.
+    func copyRequests(_ ids: Set<UUID>, toCollection targetID: UUID) {
+        guard let target = workspace.collections.firstIndex(id: targetID),
+              !workspace.collections[target].isTokenFactory else { return }
+        let picked = workspace.collections
+            .filter { !$0.isTokenFactory }
+            .flatMap(\.requests)
+            .filter { ids.contains($0.id) }
+        guard !picked.isEmpty else { return }
+        var copies: [UUID] = []
+        for original in picked {
+            var copy = original.regeneratingExampleIDs()
+            copy.id = UUID()
+            copy.folder = []
+            copy.name = CollectionPorting.uniqueName(
+                copy.name, suffix: L10n.t("name.copySuffix"),
+                existingNames: workspace.collections[target].requests.map(\.name))
+            workspace.collections[target].requests.append(copy)
+            copies.append(copy.id)
+        }
+        selectedRequestIDs = Set(copies)
+        selectedRequestID = copies.last
+        persist()
+    }
+
     /// İsteği koleksiyonsuz bölüme taşır.
     func removeFromCollection(_ id: UUID) {
         removeFromCollection([id])

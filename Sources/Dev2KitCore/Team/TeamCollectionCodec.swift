@@ -217,6 +217,15 @@ public struct TeamCatalog: Codable, Equatable, Sendable {
         return info.summary.canUpdate && info.isLoaded && info.skippedRequests == 0
     }
 
+    /// Kenar çubuğunda başlığa bırakılan istekler kopyalanır mı (yoksa taşınır).
+    /// Kurum collection'ına bırakılan kopyalanır: yerel asıl yerinde kalır
+    /// (kullanıcı kararı, 2026-11-16). Düzenlenemeyen kurum collection'ından
+    /// sürüklenen de kopyalanır: oradan istek çıkarılamaz (`TeamSync.enforce`
+    /// geri alırdı). Geri kalan her durumda taşıma.
+    public func dropCopies(from sources: [UUID], to target: UUID) -> Bool {
+        isTeam(target) || sources.contains { isTeam($0) && !canEdit($0) }
+    }
+
     public func canDelete(_ collectionID: UUID) -> Bool {
         guard let info = entries[collectionID] else { return true }
         return info.summary.canDelete
@@ -224,6 +233,13 @@ public struct TeamCatalog: Codable, Equatable, Sendable {
 
     /// Kaydedilmemiş değişikliği olan kurum collection'ları.
     public var dirtyIDs: [UUID] { entries.filter(\.value.isDirty).map(\.key) }
+
+    /// "Tümünü sunucuya kaydet"in kaydedeceği collection'lar, kenar
+    /// çubuğundaki sırayla: kaydedilmemiş ve hâlâ düzenlenebilen (yetkisi
+    /// düşmüş olan atlanır; sunucu zaten reddederdi).
+    public func savableIDs(in order: [UUID]) -> [UUID] {
+        order.filter { entries[$0]?.isDirty == true && canEdit($0) }
+    }
 }
 
 extension WorkspaceModel {

@@ -75,6 +75,15 @@ final class AppStateTeamLiveTests: XCTestCase {
         XCTAssertEqual(state.teamCatalog.entries[id]?.isDirty, false)
         XCTAssertTrue(state.teamRemoteChangedIDs.isEmpty)
 
+        // Başlıktaki "Sunucuya kaydet": kaydedilmemiş collection'ı kaydeder.
+        let reloaded = try XCTUnwrap(state.workspace.collections.firstIndex { $0.id == id })
+        state.workspace.collections[reloaded].requests[0].url = "https://api.example.com/hepsi"
+        await state.teamSaveAll()
+        XCTAssertEqual(state.teamCatalog.entries[id]?.isDirty, false)
+        XCTAssertFalse(state.teamIsSavingAll)
+        await state.teamRefresh(reloadLoaded: true)
+        XCTAssertEqual(localURL(), "https://api.example.com/hepsi", "sunucuya gitti")
+
         await state.teamLogout()
     }
 }
